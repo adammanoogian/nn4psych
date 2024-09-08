@@ -289,3 +289,44 @@ for a in range(len(ax)):
 
 f.tight_layout()
 # %%
+
+
+gammaPlot = 0.5
+prediction_errors = []
+
+for t in range(len(history) - 1):
+    reward_t = history[t][0]
+    reward_t_plus_1 = history[t + 1][0]
+    prediction_error = reward_t + gammaPlot * (reward_t_plus_1 - reward_t)
+    prediction_errors.append(prediction_error)
+
+f,ax = plt.subplots(5,1, figsize=(8,12))
+
+
+ax[0].plot(prediction_errors, label='PE', zorder=2, color='k')
+ax[0].set_xlabel('Trial')
+ax[0].set_ylabel('Reward')
+ax[0].set_title('Reward over Trials')
+
+colors = ['r','b','g', 'y']
+for a in range(3):
+    i = 1
+    for epoch in range(num_epochs):
+        for context in range(num_contexts):
+            ax[a].axvline(num_trials*i,color=colors[context], zorder=1)
+            i+=1
+
+
+inf_vol = np.var(prediction_errors)
+window_size = 50
+volatility_over_time = np.array([
+    np.var(prediction_errors[i:i + window_size]) 
+    for i in range(len(prediction_errors) - window_size + 1)
+])
+
+ax[1].plot(volatility_over_time, label='PE', zorder=2, color='k')
+ax[1].set_xlabel('Trial')
+ax[1].set_ylabel('var(reward)')
+ax[1].set_title('estimated volatility over time')
+
+# %%
