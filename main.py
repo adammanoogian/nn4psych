@@ -1,5 +1,6 @@
 # code to run model
 # Ganesh, Adam
+#two arm bandit no context given
 
 #%%
 import jax

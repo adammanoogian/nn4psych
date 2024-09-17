@@ -1,5 +1,6 @@
 # code to run model
 # Ganesh, Adam
+#same as 
 
 #%%
 import jax
@@ -141,7 +142,7 @@ def train(params, context, reward_prob,opt_state, prev_h, history, train_var):
         rprob = reward_prob[np.argmax(action)]
         reward = np.random.choice([0, 1], p=[1 - rprob, rprob])
 
-        # update state
+        # update state (inputs into the RNN)
         next_state = np.array([0.0])
         if reward_feedback:
             next_state = np.concatenate([next_state, np.array([reward])])

@@ -19,7 +19,7 @@ num_trials = 200
 epoch_stop_training = 490
 num_context = 1
 obs_size = 3
-num_actions = 2
+num_actions = 10
 hidden_units = 64
 gamma = 0.95  # play around with different gamma between 0.0 to 0.99
 seed = 2024
@@ -40,7 +40,7 @@ def initialize_params(key):
 
     print('Input dimensions: ',n_input)
 
-    Wxh =random.normal(k1, (n_input, hidden_units)) /jnp.sqrt(n_input)
+    Wxh = random.normal(k1, (n_input, hidden_units)) /jnp.sqrt(n_input)
     Whh = random.normal(k2, (hidden_units, hidden_units)) /jnp.sqrt(hidden_units)
     Wha = random.normal(k3, (hidden_units, num_actions)) *1e-3
     Whc = random.normal(k4, (hidden_units, 1)) * 1e-3
@@ -107,7 +107,7 @@ def train(params, task_type,opt_state, prev_h, history, train_var):
     done = False
     reward = 0.0
     total_reward = 0
-    action = np.random.choice([0,1])
+    action = np.random.choice(range(num_actions))
     
     store_states = []
     store_h = []
@@ -171,6 +171,8 @@ def train(params, task_type,opt_state, prev_h, history, train_var):
 
     return params, history, prev_h, opt_state, total_reward, store_states, store_h
 
+print('Model initialized')
+
 #%%
 # Helicopter task
 # Initialize parameters & optimizer
@@ -187,11 +189,12 @@ store_states = []
 
 # Train the model
 for epoch in range(num_epochs):
-    if epoch < epoch_stop_training:
+    if epoch < epoch_stop_training: #to test no training non model
         train_var = True
     else:
         train_var = False
 
+    #switch for task_type in / alternating epochs
     for task_type in ["change-point"]:
 
         params, history, prev_h, opt_state, total_reward, store_s, store_h = train(params, task_type, opt_state, prev_h, history,train_var)
@@ -203,8 +206,12 @@ for epoch in range(num_epochs):
         store_states.append(store_s)
         store_rnn.append(store_h)
 
-np.save('data/activity_helicopter.npy', np.array(store_rnn)) # (400, 50, 64) 
-np.save('data/history_helicopter.npy', np.array(history)) # (20000, 3)
+
+np.save('data/activity_helicopter.npy', np.array(store_rnn)) # (400, 50, 64) #store_h
+np.save('data/history_helicopter.npy', np.array(history)) # (20000, 3) #reward, action, loss
+np.save('data/states_helicopter.npy'  , np.array(store_states)) # (400, 200, 4) #bucket, bag pos, PE, context, (reward, action) if feedback
+#np.save('data/params_helicopter.npy', np.array(store_params)) # (400, 4)
+print('Model trained and data saved')
 
 #%%
 window = 1
