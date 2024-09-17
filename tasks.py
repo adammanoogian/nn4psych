@@ -68,7 +68,7 @@ class DiscretePredictiveInferenceEnv(gym.Env):
         self.helicopter_positions.append(self.helicopter_pos)
 
         # Calculate reward
-        reward = 1-abs(self.bag_pos - self.bucket_pos)
+        reward = -abs(self.bag_pos - self.bucket_pos) #max reward is 0
         
         # Increment trial count
         self.trial += 1
@@ -161,18 +161,19 @@ class ContinuousPredictiveInferenceEnv(gym.Env):
 
     def step(self, action):
         #Update bucket position based on action (incrementally move left or right)
-        # if action == 0:  # Move left
-        #     self.bucket_pos = max(0, self.bucket_pos - 30)
-        # elif action == 1:  # Move right
-        #     self.bucket_pos = min(300, self.bucket_pos + 30)
-        #or update bucket position independently on action
-        self.bucket_pos = (action / 10 ) * 300
+        if action == 0:  # Move left
+            self.bucket_pos = max(0, self.bucket_pos - 30)
+        elif action == 1:  # Move right
+            self.bucket_pos = min(300, self.bucket_pos + 30)
+        # or update bucket position independently on action
+        # self.bucket_pos = (action / 10 ) * 300
         
         # Determine bag position based on task type
         if self.task_type == "change-point":
             if np.random.rand() < self.change_point_hazard:
-                self.rand_int = np.random.randint(0, 10)
-                self.helicopter_pos = self.rand_int / 10 * 300
+                # self.rand_int = np.random.randint(0, 10)
+                # self.helicopter_pos = self.rand_int / 10 * 300
+                self.helicopter_pos = np.random.randint(0, 300)
             self.bag_pos = self._generate_bag_position()  # Bag follows the stable helicopter position
         else:  # "oddball"
             if np.random.rand() < self.oddball_hazard:
@@ -187,15 +188,15 @@ class ContinuousPredictiveInferenceEnv(gym.Env):
         self.helicopter_positions.append(self.helicopter_pos)
 
         # Calculate reward
-        reward = 1-abs(self.bag_pos - self.bucket_pos) #is this supposed to be "1 - PE"
+        reward = -abs(self.bag_pos - self.bucket_pos) #is this supposed to be "1 - PE"
         # calc PE 
-        self.pred_error = abs(self.bag_pos - self.bucket_pos)
-
+        self.pred_error = 1 - abs(self.bag_pos - self.bucket_pos)
+        self.error = self.bag_pos - self.bucket_pos
         # Increment trial count
         self.trial += 1
         
         # Compute the new observation
-        observation = np.array([self.bucket_pos, self.bag_pos, self.pred_error], dtype=np.float32)
+        observation = np.array([self.bucket_pos, self.bag_pos, self.error], dtype=np.float32)
         
         # Determine if the episode should end (e.g., after 100 trials)
         done = self.trial >= self.total_trials
