@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 import matplotlib.pyplot as plt
-from jax import grad, jit, vmap, random, lax
+from jax import grad, jit, vmap, random, lax, value_and_grad
 from jax.nn import softmax, relu, tanh
 from jax.nn.initializers import glorot_uniform, normal
 from copy import deepcopy
@@ -24,27 +24,23 @@ To model the task in Nasser et al. 2021
 '''
 
 # Define network training cycles
-num_epochs = 10  # for training
-test_epochs = [0,num_epochs//2, num_epochs]  # epochs during which neural network parameters are not updated but we let the network decide what to do.
+num_epochs = 50  # for training
+test_epochs = []  # epochs during which neural network parameters are not updated but we let the network decide what to do.
 
 # Define experiment params
 num_context = 2 # context 0 is COP, context 1 is OB
 num_trials = 100  # for each condition from Fig. 1
-max_time = 50
+max_time = 300  # max time given to agent to move bucket and confirm the position before bag drop
 
 # network params
 obs_size = 3  # network input, what variables do we pass to the network as observations: bucket pos, bag pos, error
 num_actions = 3 # move 0 - left, 1- right, 2- confirm location & begin ball drop
 
 
-
 hidden_units = 64
 gamma = 0.95  # play around with different gamma between 0.0 to 0.99
 seed = 2024
-learning_rate = 5e-4
-
-reward_feedback = False
-action_feedback = False
+eta = 0.00
 
 # Initialize model parameters
 def initialize_params(key):
@@ -52,18 +48,11 @@ def initialize_params(key):
 
     n_input = obs_size+num_context
 
-    if reward_feedback:
-        n_input +=1
-    if action_feedback:
-        n_input +=num_actions
-
-    print('Input dimensions: ',n_input)
-
     Wxh =random.normal(k1, (n_input, hidden_units)) /jnp.sqrt(n_input)  # input to RNN weights
     Whh = random.normal(k2, (hidden_units, hidden_units)) /jnp.sqrt(hidden_units)  # RNN recurrent weights
-    Wha = random.normal(k3, (hidden_units, num_actions)) *1e-3  # RNN to actor output weights
-    Whc = random.normal(k4, (hidden_units, 1)) * 1e-3 # RNN to critic
-    return Wxh, Whh, Wha, Whc
+    Wha = random.normal(k3, (hidden_units, num_actions)) /hidden_units  # RNN to actor output weights
+    Whc = random.normal(k4, (hidden_units, 1)) /hidden_units # RNN to critic
+    return [Wxh, Whh, Wha, Whc]
 
 # Recurrent Neural Network forward pass
 def rnn_forward(params, inputs, h):
@@ -85,22 +74,37 @@ def get_onehot_action(policy_prob):
     onehotg[A] = 1
     return onehotg
 
-# Loss function
-@jit
-def loss_fn(params, state, next_value, prev_h, action, reward):
-    # IMPORTANT: Need to re-run these functions within the loss_function to get the gradients with respect to these weights
+def compute_aprobs_and_values(params, state, prev_h):
     h = rnn_forward(params, state, prev_h)
-    policy_prob, value = policy_and_value(params, h)
+    aprob, value = policy_and_value(params, h)
+    return aprob, value
 
-    # compute temporal difference error
-    td_errors = reward + gamma * lax.stop_gradient(next_value) - value
+vmap_prob_val = vmap(compute_aprobs_and_values, in_axes=(None, 0, 0))
 
-    policy_losses = -jnp.log(policy_prob) * action * td_errors
-    value_losses = td_errors ** 2
+def td_loss(params, states, prev_hs, actions, rewards, gamma):
+    aprobs, values = vmap_prob_val(params, jnp.array(states), jnp.array(prev_hs))
+    log_likelihood = jnp.sum(jnp.log(aprobs)[:-1] * jnp.array(actions),axis=1)  # log probability of action as policy
+    tde = jnp.array(compute_reward_prediction_error(jnp.array(rewards), jnp.array(values).reshape(-1), gamma))
 
-    # combine loss
-    loss = jnp.mean(policy_losses) + 0.5 * jnp.mean(value_losses)
-    return loss
+    actor_loss = jnp.sum(log_likelihood * lax.stop_gradient(tde))  # maximize log policy * discounted reward
+    critic_loss = -jnp.sum(tde ** 2) # minimize TD error
+    tot_loss = actor_loss + 0.5 * critic_loss
+    return tot_loss
+
+@jit
+def update_td_params(params, coords,prev_hs, actions, rewards, eta, gamma):
+    loss, grads = value_and_grad(td_loss)(params, coords,prev_hs,actions, rewards, gamma)
+
+    newparams = []
+    for p,g in zip(params, grads):
+        w = p + eta * g
+        newparams.append(w)
+    return newparams, grads, loss
+
+def compute_reward_prediction_error(rewards, values, gamma=0.9):
+    td = rewards + gamma * values[1:] - values[:-1]
+    assert len(td.shape) == 1
+    return td
 
 def moving_average(signal, window_size):
     # Pad the signal to handle edges properly
@@ -119,250 +123,128 @@ def int_to_onehot(index, size):
 
 
 # Training loop
-def train(params, task_type,opt_state, prev_h, history, train_var):
+def train(params, task_type, epoch):
 
     env = PIE_CP_OB(condition=task_type)
-    
-    done = False
-    reward = 0.0
     total_reward = 0
-    action = np.random.choice([0,1])
-    
-    store_states = []
-    store_h = []
 
     obs = env.reset()
-    state = np.array(obs/150) -1 # to keep state to be between -1 to 1
+    state = env.normalize_states(obs) # to keep state to be between -1 to 1
+    prev_h = random.normal(jax.random.PRNGKey(seed), (hidden_units,))*0.1
 
+    # to explicitly tell the network what context it is in.
     if task_type == "change-point":
-        context =  np.array([0])
+        context =  np.array([1,0])
     elif task_type == "oddball":
-        context =  np.array([1])
+        context =  np.array([0,1])
     state = np.concatenate([state,context])
 
-    # not necessary, set to False
-    if reward_feedback:
-        state = np.concatenate([state, np.array([reward])])
-    if action_feedback:
-        action_onehot = int_to_onehot(action, num_actions)
-        state = np.concatenate([state, action_onehot])
+    perf = []
+    store_states = []
+    store_rnns = []
+    store_actions = []
+    store_values = []
+    store_tde = []
 
 
     for trial in range(num_trials):
 
+        states = []
+        actions = []
+        values = []
+        rewards = []
+        rnns = []
+        prev_hs = []
+
+        # give the agent time to move the bucket and press confirm, action == 2
         for time in range(max_time):
+
             # pass states and contex to RNN
             h = rnn_forward(params, state, prev_h)
 
             # pass RNN activity to actor and critic to choose action
-            policy, _ = policy_and_value(params, h)
+            policy, value = policy_and_value(params, h)
             action = get_onehot_action(policy)
 
             # pass action to environment
-            next_obs, unnorm_reward, done, _ = env.step(np.argmax(action))
+            next_obs, reward, done, _ = env.step(np.argmax(action))
 
             # normalize 
-            next_state = next_obs/300
+            next_state = env.normalize_states(next_obs)
             next_state = np.concatenate([next_state,context])
-            reward = (unnorm_reward/300)
-            total_reward += reward
 
+            # print(trial, time, action, next_obs, reward, done)
 
-            # not necessary
-            if reward_feedback:
-                next_state = np.concatenate([next_state, np.array([reward])])
-            if action_feedback:
-                next_state = np.concatenate([next_state, action])
+            # store states, action, reward for training
+            states.append(state)
+            actions.append(action)
+            rewards.append(reward)
+            rnns.append(h)
+            values.append(value)
+            prev_hs.append(prev_h)
 
+            # make sure you assign the state and rnn state correctly for the next trial
+            state = next_state.copy()
+            prev_h = h.copy()
 
-            # get next state value prediction to compute TD error
-            new_h = rnn_forward(params, next_state, h)
-            _, next_value = policy_and_value(params, new_h)
+            if np.argmax(action)==2:
+                break
 
+        # penalize agent for not confirming bucket position
+        if time == max_time-1:
+            reward = -1
 
-        if train_var:
-            # compute the loss with respect to the state, action, reward and newstate
-            loss, grads = jax.value_and_grad(loss_fn)(params, state, next_value, prev_h, action, reward)
-            #update the weights
-            updates, opt_state = optimizer.update(grads, opt_state, params)
-            params = optax.apply_updates(params, updates)
-        else:
-            print('no learning')
-            loss = 0
+        if epoch == 0 or epoch == num_epochs-1: 
+            print(f"Trial: {trial}, Time to confirm: {time}, Last obs: {next_obs}, Reward: {reward:.3f}")
 
-        # if env.trial % 100 == 0:
-        #     print(np.round(state,1),np.argmax(action), reward)
-        
-        history.append([reward, np.argmax(action), loss])
-        store_states.append(state)
-        store_h.append(h)
+        #update params after each trial
+        states.append(next_state) # predict value of next state in TD update.
+        prev_hs.append(h)
 
-        # make sure you assign the state and rnn state correctly for the next trial
-        state = next_state
-        prev_h = h
+        # print(np.array(states).shape, np.array(prev_hs).shape, np.array(actions).shape, np.array(rewards).shape, np.array(values).shape)
 
-    return params, history, prev_h, opt_state, total_reward, store_states, store_h
+        if epoch not in test_epochs:
+            params, grads, loss = update_td_params(params, states, prev_hs, actions, rewards, eta, gamma)
 
-#%%
+        total_reward += reward
+        perf.append(np.array([reward, time, loss]))
+        store_states.append(np.array(states)[:-1])
+        store_rnns.append(np.array(rnns))
+        store_actions.append(np.argmax(np.array(actions),axis=0))
+        # store_values.append(np.array(values))
+        # store_tde.append(np.array(compute_reward_prediction_error(rewards, np.array(values).reshape(-1), gamma)))  # reward prediction error, similar to Dopamine activity
+
+    if epoch == 0 or epoch == num_epochs-1:
+        env.render()
+
+    return params, perf, store_states, store_rnns, store_actions, store_values, store_tde
+
 # Helicopter task
 # Initialize parameters & optimizer
 params = initialize_params(jax.random.PRNGKey(seed))
 initparams = deepcopy(params)
-optimizer = optax.adam(learning_rate)
-opt_state = optimizer.init(params)
-prev_h = random.normal(jax.random.PRNGKey(seed), (hidden_units,))*0.1
 
-history = []
-store_rnn = []
-store_params = []
-store_states = []
+all_perfs = []
 
 # Train the model
 for epoch in range(num_epochs):
-    if epoch < epoch_stop_training:
-        train_var = True
-    else:
-        train_var = False
 
-    for task_type in ["change-point"]:
+    perfs = []
 
-        params, history, prev_h, opt_state, total_reward, store_s, store_h = train(params, task_type, opt_state, prev_h, history,train_var)
+    for task_type in ["change-point", "oddball"]:
 
-        print(f'### Epoch {epoch}, R: {total_reward}')
+        params, perf, store_states, store_rnns, store_actions, store_values, store_tde = train(params, task_type, epoch)
 
-        store_h.append(prev_h)
-        store_params.append(params)
-        store_states.append(store_s)
-        store_rnn.append(store_h)
+        print(f'### Epoch: {epoch}, Task: {task_type.capitalize()}, R: {np.round(np.sum(perf,axis=0))}')
+        perfs.append(perf)
+
+    all_perfs.append(np.mean(np.array(perfs),axis=1))
 
 
-#%%
-window = 1
-view_epochs = 1
-initial_learning_trials = view_epochs * num_trials
-after_learning_trials = (num_epochs-view_epochs) * num_trials
-
-print(f"Avg rewards before: {np.mean(np.array(history)[:initial_learning_trials,0]):.1f}, after {np.mean(np.array(history)[after_learning_trials:,0]):.1f}")
-
-f,ax = plt.subplots(8,1, figsize=(8,15))
-cumr = moving_average(np.array(history)[:initial_learning_trials,0], window_size=window)
-ax[0].plot(cumr, zorder=2, color='k')
-ax[0].set_xlabel('Trial')
-ax[0].set_ylabel('Error')
-ax[0].set_title('Rewards over Trials, Before learning')
-
-cumr = moving_average(np.array(history)[after_learning_trials:,0], window_size=window)
-ax[1].plot(cumr, zorder=2, color='k')
-ax[1].set_xlabel('Trial')
-ax[1].set_ylabel('Error')
-ax[1].set_title('Rewards over Trials, After learning')
-
-ax[2].plot(np.array(history)[:initial_learning_trials,1], zorder=2, color='k')
-ax[2].set_xlabel('Trial')
-ax[2].set_ylabel('Action')
-ax[2].set_title('Actions sampled over contexts, Before learning')
-
-ax[3].plot(np.array(history)[after_learning_trials:,1], zorder=2, color='k')
-ax[3].set_xlabel('Trial')
-ax[3].set_ylabel('Action')
-ax[3].set_title('Actions sampled over contexts, After learning')
-
-ax[4].plot(np.array(history)[:initial_learning_trials,2], zorder=2, color='k')
-ax[4].set_xlabel('Trial')
-ax[4].set_ylabel('Loss')
-ax[4].set_title('Loss over contexts, Before learning')
-
-ax[5].plot(np.array(history)[after_learning_trials:,2], zorder=2, color='k')
-ax[5].set_xlabel('Trial')
-ax[5].set_ylabel('Loss')
-ax[5].set_title('Loss over contexts, After learning')
-
-before_states = np.array(store_states[0])
-ax[6].plot(before_states[:,0], zorder=2, color='g', label='Model')
-ax[6].scatter(np.arange(200), before_states[:,1], zorder=1, color='r', label='Ball')
-ax[6].set_xlabel('Trial')
-ax[6].set_ylabel('Location')
-ax[6].set_title('Before learning')
-ax[6].legend()
-
-after_states = np.array(store_states[-1])
-ax[7].plot(after_states[:,0], zorder=2, color='g', label='Model')
-ax[7].scatter(np.arange(200),after_states[:,1], zorder=1, color='r', label='Ball')
-ax[7].set_xlabel('Trial')
-ax[7].set_ylabel('Location')
-ax[7].set_title('After learning')
-ax[7].legend()
-
-f.tight_layout()
-
-#%%
-# save
-import pickle
-with open("heli_trained_rnn.pkl", "wb") as f:
-    pickle.dump((store_params, store_rnn, store_states, history), f)
-
-#%%
-from scipy.optimize import curve_fit
-plt.figure(figsize=(3, 3))
-labels = ['Before', 'After']
-colors=['b', 'r']
-# Define the logistic function
-def logistic_function(x, L ,x0, k, b):
-    return L / (1 + np.exp(-k * (x - x0))) + b
-
-# save trained model
-t=0
-x = np.array(store_states[0])[:,2]
-y = np.array(history)[:200,1]
-
-initial_guess = [1, 5, 1, 0]
-
-# Fit the curve
-params, covariance = curve_fit(logistic_function, x, y, p0=initial_guess)
-x_fit = np.linspace(np.min(x), np.max(x), 500)
-y_fit = logistic_function(x_fit, *params)
-
-plt.scatter(x, y, color=colors[t])
-plt.plot(x_fit, y_fit, color=colors[t], label=labels[t])
-
-t=1
-x = np.array(store_states[-1])[:,2]
-y = np.array(history)[-200:,1]
-
-# Initial guess for the parameters: L, x0, k, and b
-initial_guess = [1, 5, 1, 0]
-
-# Fit the curve
-params, covariance = curve_fit(logistic_function, x, y, p0=initial_guess)
-x_fit = np.linspace(np.min(x), np.max(x), 500)
-y_fit = logistic_function(x_fit, *params)
-
-plt.scatter(x, y, color=colors[t])
-plt.plot(x_fit, y_fit, color=colors[t], label=labels[t])
-plt.legend()
-plt.xlabel('Relative Error')
-plt.ylabel('Action')
-plt.title('Psychometric Curve')
+f,axs = plt.subplots(3,1,figsize=(3,2*3))
+ylabels = ['Reward','Time to confirm','Loss']  # increase, increase, decrease
+for i in range(3):
+    axs[i].plot(np.mean(np.array(all_perfs),axis=1)[:,i])
+    axs[i].set_xlabel('Epoch')
+    axs[i].set_ylabel(ylabels[i])
 plt.tight_layout()
-
-# %%
-f,ax = plt.subplots(2,1,figsize=(8,4))
-before_states = np.array(store_states[0])
-ax[0].plot(before_states[:,0], zorder=2, color='g', label='Model')
-ax[0].scatter(np.arange(200), before_states[:,1], zorder=1, color='r', label='Ball')
-ax[0].plot(np.arange(200),before_states[:,1], zorder=1, color='r', label='Ball',alpha=0.5)
-ax[0].set_xlabel('Trial')
-ax[0].set_ylabel('Location')
-ax[0].set_title('Before learning Change-Point')
-ax[0].legend()
-
-after_states = np.array(store_states[-1])
-ax[1].plot(after_states[:,0], zorder=2, color='g', label='Model')
-ax[1].scatter(np.arange(200),after_states[:,1], zorder=1, color='r', label='Ball')
-ax[1].plot(np.arange(200),after_states[:,1], zorder=1, color='r', label='Ball',alpha=0.5)
-ax[1].set_xlabel('Trial')
-ax[1].set_ylabel('Location')
-ax[1].set_title('After learning Change-Point')
-ax[1].legend()
-f.tight_layout()
-# %%

@@ -235,14 +235,16 @@ class PIE_CP_OB(gym.Env):
         
         # Observation: currentCurrent bucket position, last bag position, and prediction error
         self.action_space = spaces.Discrete(3)
-        self.observation_space = spaces.Box(low=np.array([0, 0, 0]), 
-                                            high=np.array([300, 300, 300]), dtype=np.float32)
+        self.observation_space = spaces.Box(low=np.array([0.0, 0.0, 0.0], dtype=np.float32), 
+                                            high=np.array([300.0, 300.0, 300.0], dtype=np.float32), 
+                                            dtype=np.float32)
+        self.maxobs = 300
         self.total_trials = total_trials
         # Initialize variables
         self.helicopter_pos = 150
         self.bucket_pos = 150
         self.bag_pos = self._generate_bag_position()
-        self.state = np.zeros(3)
+        self.obs = np.zeros(3)
         
         # Task type: "change-point" or "oddball"
         self.task_type = condition
@@ -259,7 +261,8 @@ class PIE_CP_OB(gym.Env):
     
     def normalize_states(self,x):
         # normalize states to be between -1 to 1 to feed to network
-        return np.array([x[:2]/(np.max(self.observation_space)/2) -1 , x/(np.max(self.observation_space)/2)])
+        # return np.array([x[0]/self.maxobs, x[1]/self.maxobs , x[2]/(self.maxobs/2)])
+        return x/(self.maxobs/2) -1
 
     def reset(self):
         self.helicopter_pos = 150
@@ -272,9 +275,9 @@ class PIE_CP_OB(gym.Env):
         self.bucket_positions = []
         self.bag_positions = []
         self.helicopter_positions = []
-        self.state = np.array([self.bucket_pos, 150, 0], dtype=np.float32)  # initialize initial observation
+        self.obs = np.array([self.bucket_pos, 150, 150], dtype=np.float32)  # initialize initial observation. assume bag = bucket
         self.done = False
-        return self.state
+        return self.obs
     
     def step(self, action):
         # idea is to have 2 separate phases within each trial. Phase 1: allow the agent to move the bucket to a desired position. Phase 2: press confirmation button to start bag drop
@@ -286,7 +289,7 @@ class PIE_CP_OB(gym.Env):
         elif action == 1:  # Move right
             self.bucket_pos += 1
         self.bucket_pos = np.clip(self.bucket_pos, a_min=0,a_max=300)
-        self.state[0] = self.bucket_pos
+        self.obs[0] = self.bucket_pos
 
         # no reward for moving bucket
         reward = 0
@@ -316,18 +319,19 @@ class PIE_CP_OB(gym.Env):
             self.helicopter_positions.append(self.helicopter_pos)
 
             # Calculate reward/negative prediction error that the agent maximizes for
-            reward = -abs(self.bag_pos - self.bucket_pos)
+            reward = 1*(abs(self.bag_pos - self.bucket_pos) <3)  # reward = 1 if bucket is close to bag pos for 10 units. Slower to train agent
+            # reward = -abs(self.bag_pos - self.bucket_pos)/self.maxobs  # reward is negative scalar, proportional to distance between bucket and bag. Faster to train agent
             
             # Increment trial count
             self.trial += 1
         
             # Compute the new observation
-            self.state = np.array([self.bucket_pos, self.bag_pos, self.bag_pos - self.bucket_pos], dtype=np.float32)
+            self.obs = np.array([self.bucket_pos, self.bag_pos, self.bag_pos - self.bucket_pos], dtype=np.float32)
             
             # Determine if the episode should end (e.g., after 100 trials)
             self.done = self.trial >= self.total_trials
         
-        return self.state, reward, self.done, {}
+        return self.obs, reward, self.done, {}
     
     def _generate_bag_position(self):
         """Generate a new bag position around the current helicopter location within bounds."""
