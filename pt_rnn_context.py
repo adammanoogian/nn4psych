@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 # from your_environment_file import PIE_CP_OB
 
 # task parameters
-n_epochs = 500
+n_epochs = 100
 n_trials = 100
 train_cond = False
 max_time = 300
@@ -136,3 +136,5 @@ ax[2].plot(epoch_G[-1,0], color='b')
 ax[2].plot(epoch_G[-1,1],color='r')
 ax[2].set_xlabel(f'Epoch {n_epochs}: Trial')
 f.tight_layout()
+
+print(np.max(np.mean(epoch_G,axis=2),axis=0))

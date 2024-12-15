@@ -366,7 +366,7 @@ class PIE_CP_OB:
                 self.reward = -abs(self.prev_bag_pos - self.bucket_pos)/self.max_obs_size  # reward is negative scalar, proportional to distance between bucket and bag. Faster to train agent
             else:
                 # randomly reward for catching bag
-                df = ((self.prev_bag_pos - self.bucket_pos)/(self.max_disp))**2
+                df = ((self.prev_bag_pos - self.bucket_pos)/(self.max_disp*2))**2
 
                 self.reward = np.exp(-0.5*df)
 
