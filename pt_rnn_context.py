@@ -11,11 +11,11 @@ import matplotlib.pyplot as plt
 # from your_environment_file import PIE_CP_OB
 
 # task parameters
-n_epochs = 500
+n_epochs = 100
 n_trials = 100
 max_time = 300
 train_epochs = n_epochs*0.5
-no_train_epochs = [0, n_epochs//2, n_epochs]
+no_train_epochs = []
 contexts = ["change-point","oddball"] #"change-point","oddball"
 num_contexts = len(contexts)
 
