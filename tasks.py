@@ -251,7 +251,7 @@ class PIE_CP_OB:
         self.prev_pred_error = copy.copy(self.hide_variable)
         self.sample_bag_pos = self._generate_bag_position(self.helicopter_pos)
         self.reward = 0
-        self.max_disp = 30
+        self.max_disp = 30 #changed to 1 from 30
 
         # Task type: "change-point" or "oddball"
         self.task_type = condition
@@ -397,7 +397,7 @@ class PIE_CP_OB:
         # Ensure the bag position is within the 0-300 range
         return np.clip(bag_pos, 0,self.max_obs_size)
 
-    def render(self, mode='human'):
+    def render(self, epoch):
         plt.figure(figsize=(10, 6))
         # plt.plot(self.trials, self.bucket_positions, label='Bucket Position', color='blue')
         plt.plot(self.trials, self.bag_positions, label='Bag Position', color='red', marker='o', linestyle='-.', alpha=0.5)
@@ -407,9 +407,11 @@ class PIE_CP_OB:
         plt.ylim(-10, 310)  # Set y-axis limit from 0 to 300
         plt.xlabel('Trial')
         plt.ylabel('Position')
-        plt.title(f"Task: {self.task_type.capitalize()} Condition")
+        plt.title(f"Task: {self.task_type.capitalize()} Condition - Epoch: {epoch}")
         plt.legend()
         plt.show()
+
+        return [self.trials, self.bucket_positions, self.bag_positions, self.helicopter_positions]
 
 
 # Run

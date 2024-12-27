@@ -69,7 +69,7 @@ def train(env, model, optimizer, n_trials=500, gamma=0.99):
             next_state = np.concatenate([norm_next_obs,env.context])
             rewards.append(reward)
 
-            # print(env.trial, env.time, obs,actor_logits, action, reward, next_obs)
+            print("trial:", env.trial, "time:", env.time, "obs:", obs, "actor_logits:", actor_logits, "action:", action, "reward:", reward, "next_obs:", next_obs)
 
             state = torch.FloatTensor(next_state).unsqueeze(0).unsqueeze(0)
 
@@ -121,8 +121,11 @@ for epoch in range(n_epochs):
         print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG)}")
 
         if epoch == 0 or epoch == n_epochs-1:
-            env.render()
+            #save last epochs behav data
+            env_data = env.render(epoch)
 
+np.save(f'data/pt_rnn_context/epoch_G.npy', epoch_G)
+np.save(f'data/pt_rnn_context/env_data.npy', env_data)
 
 f,ax = plt.subplots(3,1,figsize=(3,2*3))
 ax[0].plot(np.mean(epoch_G[:,0],axis=1), color='b', label='CP')
