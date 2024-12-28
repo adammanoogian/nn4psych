@@ -269,6 +269,7 @@ class PIE_CP_OB:
         self.bucket_positions = []
         self.bag_positions = []
         self.helicopter_positions = []
+        self.hazard_triggers = []
 
         # Hazard rates for the different conditions
         self.change_point_hazard = 0.125
@@ -285,10 +286,12 @@ class PIE_CP_OB:
 
     def reset(self):
         # reset at the start of every trial. Observation inclues: helicopter 
+        self.hazard_trigger = 0
 
         if self.task_type == "change-point":
             if np.random.rand() < self.change_point_hazard:
                 self.helicopter_pos = np.random.randint(30, 270)  # change helicopter position based on hazard rate
+                self.hazard_trigger = 1
             self.sample_bag_pos = self._generate_bag_position(self.helicopter_pos)  # Bag follows the stable helicopter position
 
         else:  # "oddball"
@@ -300,9 +303,9 @@ class PIE_CP_OB:
 
             if np.random.rand() < self.oddball_hazard:
                 self.sample_bag_pos = np.random.randint(0, 300)  # Oddball event
+                self.hazard_trigger = 1
             else:
                 self.sample_bag_pos = self._generate_bag_position(self.helicopter_pos)
-
         self.time = 0
 
         if self.train_cond:
@@ -385,6 +388,7 @@ class PIE_CP_OB:
             self.bucket_positions.append(self.bucket_pos)
             self.bag_positions.append(self.prev_bag_pos)
             self.helicopter_positions.append(self.helicopter_pos)
+            self.hazard_triggers.append(self.hazard_trigger)
             self.bag_dropped = True
 
         self.time += 1
@@ -411,7 +415,7 @@ class PIE_CP_OB:
         plt.legend()
         plt.show()
 
-        return [self.trials, self.bucket_positions, self.bag_positions, self.helicopter_positions]
+        return [self.trials, self.bucket_positions, self.bag_positions, self.helicopter_positions, self.hazard_triggers]
 
 
 # Run

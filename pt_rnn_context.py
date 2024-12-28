@@ -55,7 +55,7 @@ def train(env, model, optimizer, n_trials=500, gamma=0.99):
         values = []
         rewards = []
 
-        while not done:
+        while not done: #allows multiple actions in one trial (incrementally moving bag_position)
             # Forward pass
             actor_logits, critic_value, hx = model(state, hx)
             probs = Categorical(logits=actor_logits)
@@ -123,6 +123,7 @@ for epoch in range(n_epochs):
         if epoch == 0 or epoch == n_epochs-1:
             #save last epochs behav data
             env_data = env.render(epoch)
+            print(env_data)
 
 np.save(f'data/pt_rnn_context/epoch_G.npy', epoch_G)
 np.save(f'data/pt_rnn_context/env_data.npy', env_data)

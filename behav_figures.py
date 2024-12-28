@@ -18,6 +18,16 @@ learning_rate = np.where(prediction_error[:-1] != 0, update / prediction_error[:
 # Calculate the slope of the learning rate
 slope, intercept = np.polyfit(prediction_error[:-1], learning_rate, 1)
 
+hazard_trials = states[4]
+hazard_indexes = np.where(states[4] == 1)[0]
+hazard_distance = np.zeros(len(states[0]), dtype=int)
+current = 0
+for i in range(len(states[0])):
+    if i in hazard_indexes:
+        current = 0
+    hazard_distance[i] = current
+    current += 1
+
 #%%
 #Plots
 
@@ -72,10 +82,75 @@ def plot_states_and_learning_rate(true_state, predicted_state, learning_rate):
     plt.show()
     plt.savefig('plots/states_and_learning_rate_over_trials.png')
 
+def plot_learning_rate_histogram(learning_rate):
+    bins = np.arange(0, 1.1, 0.1)
+    plt.figure(figsize=(10, 6))
+    plt.hist(learning_rate, bins=bins, edgecolor='black')
+    plt.xlabel('Learning Rate')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Learning Rate')
+    plt.grid(True)
+    plt.show()
+    plt.savefig('plots/learning_rate_histogram.png')
+
+
+def plot_lr_after_hazard(learning_rate, hazard_distance):
+
+    bins = np.arange(0, 1.1, 0.1)
+    bin_indices = np.digitize(learning_rate, bins) - 1
+    bin_indices = np.clip(bin_indices, 0, len(bins) - 2)
+    update_size_indices = np.where(bin_indices == 0, 0, np.where((bin_indices >= 1) & (bin_indices <= 8), 1, 2))
+    # Count intersections between hazard_distance and update_size_indices
+    interaction_counts = {
+        "small": {},
+        "medium": {},
+        "large": {}
+    }
+
+    for hd, usi in zip(hazard_distance, update_size_indices):
+        if usi == 0:
+            category = "small"
+        elif usi == 1:
+            category = "medium"
+        else:
+            category = "large"
+        
+        if hd in interaction_counts[category]:
+            interaction_counts[category][hd] += 1
+        else:
+            interaction_counts[category][hd] = 1
+
+
+    # Prepare data for plotting
+    categories = ["small", "medium", "large"]
+    colors = ["blue", "green", "red"]
+    x = sorted({hd for counts in interaction_counts.values() for hd in counts.keys()})
+
+    plt.figure(figsize=(10, 6))
+
+    for category, color in zip(categories, colors):
+        counts = [interaction_counts[category].get(hd, 0) for hd in x]
+        plt.plot(x, counts, label=category.capitalize(), color=color)
+
+    plt.xlabel('Hazard Distance')
+    plt.ylabel('Count')
+    plt.title('Interactions by Hazard Distance and Size')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+    plt.savefig('plots/interactions_line_graph.png')
 # %%
 
+
+
+
+
+
+# %%
 
 # Call the functions to generate the plots
 plot_update_by_prediction_error(prediction_error, update, slope, intercept)
 plot_learning_rate_by_prediction_error(prediction_error, learning_rate, slope, intercept)
 plot_states_and_learning_rate(true_state, predicted_state, learning_rate)
+plot_learning_rate_histogram(learning_rate)
+plot_lr_after_hazard(learning_rate, hazard_trials)
