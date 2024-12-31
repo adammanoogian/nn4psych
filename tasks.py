@@ -251,7 +251,7 @@ class PIE_CP_OB:
         self.prev_pred_error = copy.copy(self.hide_variable)
         self.sample_bag_pos = self._generate_bag_position(self.helicopter_pos)
         self.reward = 0
-        self.max_disp = 10
+        self.max_disp = 30 #changed to 1 from 30
 
         # Task type: "change-point" or "oddball"
         self.task_type = condition
@@ -269,6 +269,7 @@ class PIE_CP_OB:
         self.bucket_positions = []
         self.bag_positions = []
         self.helicopter_positions = []
+        self.hazard_triggers = []
 
         # Hazard rates for the different conditions
         self.change_point_hazard = 0.125
@@ -285,10 +286,12 @@ class PIE_CP_OB:
 
     def reset(self):
         # reset at the start of every trial. Observation inclues: helicopter 
+        self.hazard_trigger = 0
 
         if self.task_type == "change-point":
             if np.random.rand() < self.change_point_hazard:
                 self.helicopter_pos = np.random.randint(30, 270)  # change helicopter position based on hazard rate
+                self.hazard_trigger = 1
             self.sample_bag_pos = self._generate_bag_position(self.helicopter_pos)  # Bag follows the stable helicopter position
 
         else:  # "oddball"
@@ -300,9 +303,9 @@ class PIE_CP_OB:
 
             if np.random.rand() < self.oddball_hazard:
                 self.sample_bag_pos = np.random.randint(0, 300)  # Oddball event
+                self.hazard_trigger = 1
             else:
                 self.sample_bag_pos = self._generate_bag_position(self.helicopter_pos)
-
         self.time = 0
 
         if self.train_cond:
@@ -383,6 +386,7 @@ class PIE_CP_OB:
             self.bucket_positions.append(self.bucket_pos)
             self.bag_positions.append(self.prev_bag_pos)
             self.helicopter_positions.append(self.helicopter_pos)
+            self.hazard_triggers.append(self.hazard_trigger)
             self.bag_dropped = True
 
         self.time += 1
@@ -395,7 +399,7 @@ class PIE_CP_OB:
         # Ensure the bag position is within the 0-300 range
         return np.clip(bag_pos, 0,self.max_obs_size)
 
-    def render(self, mode='human'):
+    def render(self, epoch):
         plt.figure(figsize=(10, 6))
         # plt.plot(self.trials, self.bucket_positions, label='Bucket Position', color='blue')
         plt.plot(self.trials, self.bag_positions, label='Bag Position', color='red', marker='o', linestyle='-.', alpha=0.5)
@@ -405,9 +409,11 @@ class PIE_CP_OB:
         plt.ylim(-10, 310)  # Set y-axis limit from 0 to 300
         plt.xlabel('Trial')
         plt.ylabel('Position')
-        plt.title(f"Task: {self.task_type.capitalize()} Condition")
+        plt.title(f"Task: {self.task_type.capitalize()} Condition - Epoch: {epoch}")
         plt.legend()
         plt.show()
+
+        return [self.trials, self.bucket_positions, self.bag_positions, self.helicopter_positions, self.hazard_triggers]
 
 
 # Run

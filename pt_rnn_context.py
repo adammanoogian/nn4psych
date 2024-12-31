@@ -71,7 +71,7 @@ def train(env, model, optimizer,epoch, n_trials, gamma):
         store_a = []
         store_v = []
 
-        while not done:
+        while not done: #allows multiple actions in one trial (incrementally moving bag_position)
             # Forward pass
             actor_logits, critic_value, hx = model(state, hx)
             probs = Categorical(logits=actor_logits)
@@ -91,7 +91,7 @@ def train(env, model, optimizer,epoch, n_trials, gamma):
             rewards.append(reward)
             totR += reward
 
-            # print(env.trial, env.time, obs,actor_logits, action, reward, next_obs)
+            print("trial:", env.trial, "time:", env.time, "obs:", obs, "actor_logits:", actor_logits, "action:", action, "reward:", reward, "next_obs:", next_obs)
 
             state = torch.FloatTensor(next_state).unsqueeze(0).unsqueeze(0)
 
@@ -153,8 +153,12 @@ for epoch in range(n_epochs):
         print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG)}")
 
         if epoch == 0 or epoch == n_epochs-1:
-            env.render()
+            #save last epochs behav data
+            env_data = env.render(epoch)
+            print(env_data)
 
+np.save(f'data/pt_rnn_context/epoch_G.npy', epoch_G)
+np.save(f'data/pt_rnn_context/env_data.npy', env_data)
 
 f,ax = plt.subplots(3,1,figsize=(3,2*3))
 ax[0].plot(np.mean(epoch_G[:,0],axis=1), color='b', label='CP')
