@@ -230,7 +230,7 @@ class ContinuousPredictiveInferenceEnv(gym.Env):
 
 
 class PIE_CP_OB:
-    def __init__(self, condition="change-point", total_trials=100,max_time=300, train_cond=False):
+    def __init__(self, condition="change-point", total_trials=100,max_time=300, train_cond=False, max_displacement=30):
         super(PIE_CP_OB, self).__init__()
         
         # Observation: currentCurrent bucket position, last bag position, and prediction error
@@ -251,7 +251,7 @@ class PIE_CP_OB:
         self.prev_pred_error = copy.copy(self.hide_variable)
         self.sample_bag_pos = self._generate_bag_position(self.helicopter_pos)
         self.reward = 0
-        self.max_disp = 30 #changed to 1 from 30
+        self.max_disp = max_displacement #changed to 1 from 30
 
         # Task type: "change-point" or "oddball"
         self.task_type = condition
@@ -278,11 +278,13 @@ class PIE_CP_OB:
     def normalize_states_(self,x):
         # normalize states to be between -1 to 1 to feed to network
         # return np.array([x[0]/self.maxobs, x[1]/self.maxobs , x[2]/(self.maxobs/2)])
-        return x/(self.maxobs/2) -1
+        ranges = np.array([[0, 300], [0, 300], [0, 300], [-300, 300]])
+        normalized_vector = np.array([2 * (x[i] - ranges[i, 0]) / (ranges[i, 1] - ranges[i, 0]) - 1 for i in range(len(x))])
+        return normalized_vector
     
     def normalize_states(self,x):
         # normalize states to be between 0 to 1 to feed to network
-        return x/100
+        return x/300
 
     def reset(self):
         # reset at the start of every trial. Observation inclues: helicopter 
@@ -368,14 +370,15 @@ class PIE_CP_OB:
                 # randomly punish for not catching bag
                 self.reward = -abs(self.prev_bag_pos - self.bucket_pos)/self.max_obs_size  # reward is negative scalar, proportional to distance between bucket and bag. Faster to train agent
             else:
-                # randomly reward for catching bag
-                df = ((self.prev_bag_pos - self.bucket_pos)/(self.max_disp*2))**2
+                # reward follows gaussian distribution. the closer the bucket is to the bag positin, the higher the reward.
+                df = ((self.prev_bag_pos - self.bucket_pos)/30)**2
                 self.reward = np.exp(-0.5*df)
                 # self.reward = np.random.randint(1,4)*(abs(self.prev_bag_pos - self.bucket_pos) <20)  # reward = 1 if bucket is close to bag pos for 10 units. Slower to train agent
 
             # penalize if agent doesnt choose to confirm
             if self.time >= self.max_time-1:
                 self.reward -= 1
+                # self.reward =0
                 # print(f'T {self.trial}, t {self.time}, -- Penalize')
 
             self.trial += 1
@@ -399,7 +402,7 @@ class PIE_CP_OB:
         # Ensure the bag position is within the 0-300 range
         return np.clip(bag_pos, 0,self.max_obs_size)
 
-    def render(self, epoch):
+    def render(self, epoch=0):
         plt.figure(figsize=(10, 6))
         # plt.plot(self.trials, self.bucket_positions, label='Bucket Position', color='blue')
         plt.plot(self.trials, self.bag_positions, label='Bag Position', color='red', marker='o', linestyle='-.', alpha=0.5)
@@ -413,7 +416,7 @@ class PIE_CP_OB:
         plt.legend()
         plt.show()
 
-        return [self.trials, self.bucket_positions, self.bag_positions, self.helicopter_positions, self.hazard_triggers]
+        return np.array([self.trials, self.bucket_positions, self.bag_positions, self.helicopter_positions, self.hazard_triggers])
 
 
 # Run
@@ -440,10 +443,11 @@ if __name__ == "__main__":
     #     env.close()
 
 
-
-    trials = 5
-    train_cond = False
-    max_time = 30
+    store_obs = []
+    store_obs_ = []
+    trials = 100
+    train_cond = True
+    max_time = 300
     for task_type in ["change-point"]:
         env = PIE_CP_OB(condition=task_type,max_time=max_time, total_trials=trials, train_cond=train_cond) #DiscretePredictiveInferenceEnv(condition=task_type)
         
@@ -459,5 +463,16 @@ if __name__ == "__main__":
                 print(env.trial, env.time, obs, action, next_obs, reward, done)
 
                 obs = copy.copy(next_obs)
+
+                store_obs.append(env.normalize_states(obs))
+                store_obs_.append(env.normalize_states_(obs))
             
         env.render()
+
+    store_obs = np.array(store_obs)
+    store_obs_ = np.array(store_obs_)
+    plt.figure()
+    plt.hist(store_obs.reshape(-1), alpha=0.2, bins=100)
+    plt.hist(store_obs_.reshape(-1), alpha=0.2, bins=100)
+    plt.title(f'Max {np.max(store_obs):.3f}, Min {np.min(store_obs):.3f} \n Max {np.max(store_obs_):.3f}, Min {np.min(store_obs_):.3f}')
+# %%
