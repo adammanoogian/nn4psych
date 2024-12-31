@@ -371,7 +371,7 @@ class PIE_CP_OB:
                 self.reward = -abs(self.prev_bag_pos - self.bucket_pos)/self.max_obs_size  # reward is negative scalar, proportional to distance between bucket and bag. Faster to train agent
             else:
                 # reward follows gaussian distribution. the closer the bucket is to the bag positin, the higher the reward.
-                df = ((self.prev_bag_pos - self.bucket_pos)/30)**2
+                df = ((self.prev_bag_pos - self.bucket_pos)/50)**2
                 self.reward = np.exp(-0.5*df)
                 # self.reward = np.random.randint(1,4)*(abs(self.prev_bag_pos - self.bucket_pos) <20)  # reward = 1 if bucket is close to bag pos for 10 units. Slower to train agent
 
