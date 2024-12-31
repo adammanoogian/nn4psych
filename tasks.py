@@ -370,9 +370,7 @@ class PIE_CP_OB:
             else:
                 # randomly reward for catching bag
                 df = ((self.prev_bag_pos - self.bucket_pos)/(self.max_disp*2))**2
-
                 self.reward = np.exp(-0.5*df)
-
                 # self.reward = np.random.randint(1,4)*(abs(self.prev_bag_pos - self.bucket_pos) <20)  # reward = 1 if bucket is close to bag pos for 10 units. Slower to train agent
 
             # penalize if agent doesnt choose to confirm
