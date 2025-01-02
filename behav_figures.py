@@ -4,16 +4,126 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import linregress
+from scipy.ndimage import uniform_filter1d
+
+def plot_metric_subplots(epoch_G, epoch_loss, epoch_time):
+    """Plots mean metrics over epochs."""
+    
+    plt.figure(figsize=(9, 6))
+    
+    def plot_subplot(data, subplot_index, ylabel, colors=('b', 'r'), labels=('CP', 'OB')):
+        plt.subplot(3, 3, subplot_index)
+        for i, (color, label) in enumerate(zip(colors, labels)):
+            plt.plot(np.mean(data[:, i], axis=1), color=color, label=label)
+        plt.xlabel('Epoch')
+        plt.ylabel(ylabel)
+        plt.legend()
+    
+    plot_subplot(epoch_G, 1, 'G')
+    plot_subplot(epoch_loss, 2, 'Loss')
+    plot_subplot(epoch_time, 3, 'Time to Confirm')
+
+def plot_context_analysis(contexts, states_list):
+    """Plots prediction errors and updates for different contexts."""
+    
+    pes = []
+    updates = []
+    lrs = []
+    
+    for i, (context, states) in enumerate(zip(contexts, states_list), start=4):
+        true_state = states[2]  # bag position
+        predicted_state = states[1]  # bucket position
+        prediction_error = abs((true_state - predicted_state))[:-1]
+        update = abs(np.diff(predicted_state))
+        learning_rate = np.where(prediction_error != 0, update / prediction_error, 0)
+        
+        slope, intercept, r_value, p_value, std_err = linregress(prediction_error, update)
+        slope_lr, intercept_lr, r_value_lr, p_value_lr, std_err_lr = linregress(prediction_error, learning_rate)
+
+        sorted_indices = np.argsort(prediction_error)
+        prediction_error_sorted = prediction_error[sorted_indices]
+        update_sorted = update[sorted_indices]
+        learning_rate_sorted = learning_rate[sorted_indices]
+
+        window_size = 10
+        smoothed_update = uniform_filter1d(update_sorted, size=window_size)
+        smoothed_learning_rate = uniform_filter1d(learning_rate_sorted, size=window_size)
+
+        # Plot update vs prediction error
+        plt.subplot(3, 3, i)
+        plt.scatter(prediction_error, update, alpha=0.5)
+        plt.plot(prediction_error_sorted, smoothed_update, color='red')
+        plt.plot(prediction_error, slope * prediction_error + intercept, color='k',
+                 label=f'm={slope:.3f}, c={intercept:.2f}, r={r_value:.3f}, p={p_value:.3f}')
+        plt.xlabel('Prediction Error')
+        plt.ylabel('Update')
+        plt.title(context)
+        plt.legend(fontsize=7)
+
+        pes.append(prediction_error_sorted)
+        updates.append(smoothed_update)
+        lrs.append(smoothed_learning_rate)
+
+        # Plot learning rate vs prediction error
+        plt.subplot(3, 3, i+3)
+        plt.scatter(prediction_error, learning_rate, alpha=0.5)
+        plt.plot(prediction_error_sorted, smoothed_learning_rate, color='red')
+        plt.plot(prediction_error, slope_lr * prediction_error + intercept_lr, color='k',
+                 label=f'm={slope_lr:.3f}, c={intercept_lr:.2f}, r={r_value_lr:.3f}, p={p_value_lr:.3f}')
+        plt.xlabel('Prediction Error')
+        plt.ylabel('Learning Rate')
+        plt.title(context)
+        plt.legend(fontsize=7)
+
+    return pes, updates, lrs
+
+def plot_combined_analysis(pes, updates, lrs):
+    """Plots combined analysis for CP and OB."""
+    
+    plt.subplot(3, 3, 6)
+    plt.plot(pes[0], updates[0], color='orange', label='CP')
+    plt.plot(pes[1], updates[1], color='brown', label='OB')
+    plt.xlabel('Prediction Error')
+    plt.ylabel('Update')
+
+    plt.subplot(3, 3, 9)
+    plt.plot(pes[0], lrs[0], color='orange', label='CP')
+    plt.plot(pes[1], lrs[1], color='brown', label='OB')
+    plt.xlabel('Prediction Error')
+    plt.ylabel('Learning Rate')
+
+def plot_analysis(epoch_G, epoch_loss, epoch_time, all_states):
+    """Performs the full analysis and visualization."""
+    
+    # Prepare contexts and states
+    cp_states, ob_states = all_states
+    contexts = ['CP Context', 'OB Context']
+    states_list = [cp_states, ob_states]
+    
+    # Plot individual subplots
+    plot_metric_subplots(epoch_G, epoch_loss, epoch_time)
+    
+    # Plot context analysis and get predictions and updates for combined plots
+    pes, updates, lrs = plot_context_analysis(contexts, states_list)
+    
+    # Plot combined analysis
+    plot_combined_analysis(pes, updates, lrs)
+    
+    plt.tight_layout()
+    return lrs
+
 
 def extract_states(states):
+    # originally by Adam
     # Extract prediction error (PE) and state (s) and predicted state (s_hat)
     true_state = states[2]  # bag position
     predicted_state = states[1]  # bucket position
     prediction_error = abs(true_state - predicted_state)
-    # prediction_error = np.minimum(prediction_error, 100)
+    prediction_error = np.minimum(prediction_error, 100)
+    prediction_error = prediction_error[:-1] 
 
     update = abs(np.diff(predicted_state))
-    learning_rate = np.where(prediction_error[:-1] != 0, update / prediction_error[:-1], 0)
+    learning_rate = np.where(prediction_error != 0, update / prediction_error, 0)
 
     hazard_trials = states[4]
     hazard_indexes = np.where(states[4] == 1)[0]
@@ -30,12 +140,20 @@ def extract_states(states):
 
 def plot_update_by_prediction_error(prediction_error, update, condition):
     # Plot update x pe
-    plt.figure(figsize=(10, 6))
-    plt.scatter(prediction_error[:-1], update, alpha=0.5, color='blue', label='Data Points')
+    plt.figure(figsize=(3, 2))
+    plt.scatter(prediction_error, update, alpha=0.5, color='blue', label='Data Points')
 
-    slope, intercept, r_value, p_value, std_err = linregress(prediction_error[:-1], update)
+    slope, intercept, r_value, p_value, std_err = linregress(prediction_error, update)
+    plt.plot(prediction_error, slope * prediction_error + intercept, color='k', label=f'm={slope:.3f}, c={intercept:.2f},r={r_value:.3f}, p={p_value:.3f}')
 
-    plt.plot(prediction_error[:-1], slope * prediction_error[:-1] + intercept, color='red', label=f'm={slope:.3f}, c={intercept:.2f},r={r_value:.3f}, p={p_value:.3f}')
+    sorted_indices = np.argsort(prediction_error)
+    prediction_error_sorted = prediction_error[sorted_indices]
+    update_sorted = update[sorted_indices]
+
+    window_size = 10
+    smoothed_update = uniform_filter1d(update_sorted, size=window_size)
+    plt.plot(prediction_error_sorted, smoothed_update, color='red', label='Smooth')
+
     plt.xlabel('Prediction Error')
     plt.ylabel('Update (Predicted State at t+1 - State at t)')
     plt.title(f'{condition}: Update by prediction error')
@@ -47,12 +165,21 @@ def plot_update_by_prediction_error(prediction_error, update, condition):
 
 def plot_learning_rate_by_prediction_error(prediction_error, learning_rate, condition):
     # Plot learning rate by prediction error
-    plt.figure(figsize=(10, 6))
-    plt.scatter(prediction_error[:-1], learning_rate, alpha=0.5, color='green', label='Data Points')
+    plt.figure(figsize=(3, 2))
+    plt.scatter(prediction_error, learning_rate, alpha=0.5, color='green', label='Data Points')
     
-    slope, intercept, r_value, p_value, std_err = linregress(prediction_error[:-1], learning_rate)
+    slope, intercept, r_value, p_value, std_err = linregress(prediction_error, learning_rate)
     # Plot the regression line
-    plt.plot(prediction_error[:-1], slope * prediction_error[:-1] + intercept, color='orange', label=f'm={slope:.3f}, c={intercept:.2f},r={r_value:.3f}, p={p_value:.3f}')
+    plt.plot(prediction_error, slope * prediction_error + intercept, color='orange', label=f'm={slope:.3f}, c={intercept:.2f},r={r_value:.3f}, p={p_value:.3f}')
+
+    sorted_indices = np.argsort(prediction_error)
+    prediction_error_sorted = prediction_error[sorted_indices]
+    learning_rate_sorted = learning_rate[sorted_indices]
+
+    window_size = 10
+    smoothed_learning_rate = uniform_filter1d(learning_rate_sorted, size=window_size)
+    plt.plot(prediction_error_sorted, smoothed_learning_rate, color='red', label='Smooth')
+
     plt.xlabel('Prediction Error')
     plt.ylabel('Learning Rate')
     plt.title(f'{condition}: Learning Rate by Prediction Error')

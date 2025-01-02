@@ -230,7 +230,8 @@ class ContinuousPredictiveInferenceEnv(gym.Env):
 
 
 class PIE_CP_OB:
-    def __init__(self, condition="change-point", total_trials=100,max_time=300, train_cond=False, max_displacement=30):
+    def __init__(self, condition="change-point", total_trials=100,max_time=300, train_cond=False, 
+                 max_displacement=30, reward_size=10, step_cost=0.0):
         super(PIE_CP_OB, self).__init__()
         
         # Observation: currentCurrent bucket position, last bag position, and prediction error
@@ -252,6 +253,8 @@ class PIE_CP_OB:
         self.sample_bag_pos = self._generate_bag_position(self.helicopter_pos)
         self.reward = 0
         self.max_disp = max_displacement #changed to 1 from 30
+        self.reward_size = reward_size
+        self.step_cost = step_cost
 
         # Task type: "change-point" or "oddball"
         self.task_type = condition
@@ -283,8 +286,8 @@ class PIE_CP_OB:
         return normalized_vector
     
     def normalize_states(self,x):
-        # normalize states to be between 0 to 1 to feed to network
-        return x/300
+        # normalize states to be between -1 to 1 to feed to network
+        return x/100
 
     def reset(self):
         # reset at the start of every trial. Observation inclues: helicopter 
@@ -349,7 +352,8 @@ class PIE_CP_OB:
             self.done = True
 
         # Phase 2:
-        self.reward = 0# -1/self.max_obs_size # punish for every timestep
+        self.reward = self.step_cost # either 0 to -1/self.max_obs_size # punish for every timestep
+
         # confirm bucket position to start bag drop
         if action == 2 or self.time >= self.max_time-1:
             self.prev_bag_pos = copy.copy(self.sample_bag_pos)
@@ -371,13 +375,13 @@ class PIE_CP_OB:
                 self.reward = -abs(self.prev_bag_pos - self.bucket_pos)/self.max_obs_size  # reward is negative scalar, proportional to distance between bucket and bag. Faster to train agent
             else:
                 # reward follows gaussian distribution. the closer the bucket is to the bag positin, the higher the reward.
-                df = ((self.prev_bag_pos - self.bucket_pos)/50)**2
+                df = ((self.prev_bag_pos - self.bucket_pos)/self.reward_size)**2
                 self.reward = np.exp(-0.5*df)
                 # self.reward = np.random.randint(1,4)*(abs(self.prev_bag_pos - self.bucket_pos) <20)  # reward = 1 if bucket is close to bag pos for 10 units. Slower to train agent
 
             # penalize if agent doesnt choose to confirm
             if self.time >= self.max_time-1:
-                self.reward -= 1
+                self.reward -= 0
                 # self.reward =0
                 # print(f'T {self.trial}, t {self.time}, -- Penalize')
 

@@ -17,6 +17,11 @@ from behav_figures import plot_update_by_prediction_error, plot_learning_rate_by
 # Assuming that PIE_CP_OB is a gym-like environment
 # from your_environment_file import PIE_CP_OB
 
+# load pretrained model
+max_displacement = 30
+model_path = f'./model_params/model_params_{max_displacement}.pth'
+
+
 # task parameters
 n_trials = 100  # number of trials per epoch for each condition.
 max_time = 300  # number of time steps available for each trial. After max_time, the bag is dropped and the next trial begins after.
@@ -29,7 +34,7 @@ input_dim = 4+2  # set this based on your observation space. observation vector 
 hidden_dim = 128  # size of RNN
 action_dim = 3  # set this based on your action space. 0 is left, 1 is right, 2 is confirm.
 learning_rate = 0.0001  # set learning rate to 0, or 0.0001. The model should have learned the task and doesnt need synaptic plasticty.
-gamma = 0.99
+gamma = 0.95
 reset_memory = 20  # reset RNN activity after T trials
 
 # Actor-Critic Network with RNN
@@ -150,7 +155,6 @@ def train(env, model, optimizer, n_trials, gamma):
 
 
 model = ActorCritic(input_dim, hidden_dim, action_dim)
-model_path = './model_params/model_params_30.pth'
 model.load_state_dict(torch.load(model_path))
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -161,7 +165,7 @@ all_states = np.zeros([num_contexts, 5, n_trials])
 
 for tt, task_type in enumerate(contexts):
 
-    env = PIE_CP_OB(condition=task_type, max_time=max_time, total_trials=n_trials, train_cond=False)
+    env = PIE_CP_OB(condition=task_type, max_time=max_time, total_trials=n_trials, train_cond=False, max_displacement=max_displacement)
 
     totG, totloss = train(env, model, optimizer, n_trials=n_trials, gamma=gamma)
 
@@ -196,7 +200,7 @@ for context, states in zip(contexts, [cp_states, ob_states]):
 
     # Call the functions to generate the plots
     plot_update_by_prediction_error(prediction_error, update,context)
-    plot_learning_rate_by_prediction_error(prediction_error, learning_rate, context)
-    plot_states_and_learning_rate(true_state, predicted_state, learning_rate,context)
-    plot_learning_rate_histogram(learning_rate,context)
-    plot_lr_after_hazard(learning_rate, hazard_trials,context)
+    # plot_learning_rate_by_prediction_error(prediction_error, learning_rate, context)
+    # plot_states_and_learning_rate(true_state, predicted_state, learning_rate,context)
+    # plot_learning_rate_histogram(learning_rate,context)
+    # plot_lr_after_hazard(learning_rate, hazard_trials,context)
