@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from torch.distributions import Categorical
-from tasks import PIE_CP_OB
+from tasks import PIE_CP_OB_
 import matplotlib.pyplot as plt
 from torch.nn import init
 from behav_figures import plot_analysis
@@ -20,7 +20,7 @@ from behav_figures import plot_analysis
 # from your_environment_file import PIE_CP_OB
 
 # Env parameters
-n_epochs = 500  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_epochs = 100  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
 n_trials = 100  # number of trials per epoch for each condition.
 max_time = 300  # number of time steps available for each trial. After max_time, the bag is dropped and the next trial begins after.
 
@@ -30,16 +30,16 @@ contexts = ["change-point","oddball"] #"change-point","oddball"
 num_contexts = len(contexts)
 
 # Task parameters
-max_displacement = 30 # number of units each left or right moves.
-step_cost = 0.0
-reward_size = 15
+max_displacement = 20 # number of units each left or right moves.
+step_cost = 0#-1/300  # penalize every additional step that the agent does not confirm. 
+reward_size = max_displacement/2 # smaller value means a tighter margin to get reward.
 
 # Model Parameters
 input_dim = 4+2  # set this based on your observation space. observation vector is length 4 [helicopter pos, bucket pos, bag pos, bag-bucket pos], context vector is length 2.  
 hidden_dim = 128  # size of RNN
 action_dim = 3  # set this based on your action space. 0 is left, 1 is right, 2 is confirm.
 learning_rate = 0.0001
-gamma = 0.95
+gamma = 0.9
 reset_memory = 1000  # reset RNN activity after T trials
 
 # Actor-Critic Network with RNN
@@ -70,13 +70,10 @@ class ActorCritic(nn.Module):
                 elif 'bias' in name:
                     init.constant_(param, 0)
 
-
     def forward(self, x, hx):
         r, h = self.rnn(x, hx)
         r = r.squeeze(1)
         return self.actor(r), self.critic(r), h
-    
-
     
 def to_numpy(tensor):
     return tensor.cpu().detach().numpy()
@@ -182,7 +179,7 @@ for epoch in range(n_epochs):
 
         task_type = contexts[tt]
 
-        env = PIE_CP_OB(condition=task_type, max_time=max_time, total_trials=n_trials, 
+        env = PIE_CP_OB_(condition=task_type, max_time=max_time, total_trials=n_trials, 
                         train_cond=train_cond, max_displacement=max_displacement, reward_size=reward_size, step_cost=step_cost)
 
         totG, totloss,tottime = train(env, model, optimizer, epoch=epoch, n_trials=n_trials, gamma=gamma)
@@ -191,23 +188,18 @@ for epoch in range(n_epochs):
         epoch_loss[epoch, tt] = totloss
         epoch_time[epoch, tt] = tottime
 
-        print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, L {np.mean(totloss):.3f}")
+        print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, L {np.mean(totloss):.3f}, t {np.mean(tottime):.3f}")
 
         if epoch == n_epochs-1:
             #save last epochs behav data
             all_states[tt] = env.render(epoch)
 
-# save model
-model_path = f'./model_params/model_params_{max_displacement}.pth'
-torch.save(model.state_dict(), model_path)
+# Calculate the difference in learning rates between CP and OB conditions. Should be positive. 
+cp_vs_ob = plot_analysis(epoch_G, epoch_loss, epoch_time, all_states)
 
-model2 = ActorCritic(input_dim, hidden_dim, action_dim)
-model2.load_state_dict(torch.load(model_path))
-
-
-lrs = plot_analysis(epoch_G, epoch_loss, epoch_time, all_states)
-
-# store performance 
-# Calculate the difference in CP and OB conditions. Should be positive. 
-cp_vs_ob = np.sum((lrs[0]-lrs[1]))
 print(cp_vs_ob)
+
+# save model only when the model shows learning rate for CP > learning rate for OB.
+if cp_vs_ob > 50:
+    model_path = f'./model_params/model_params_{max_displacement}.pth'
+    torch.save(model.state_dict(), model_path)

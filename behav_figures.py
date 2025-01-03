@@ -9,7 +9,7 @@ from scipy.ndimage import uniform_filter1d
 def plot_metric_subplots(epoch_G, epoch_loss, epoch_time):
     """Plots mean metrics over epochs."""
     
-    plt.figure(figsize=(9, 6))
+    plt.figure(figsize=(10, 6))
     
     def plot_subplot(data, subplot_index, ylabel, colors=('b', 'r'), labels=('CP', 'OB')):
         plt.subplot(3, 3, subplot_index)
@@ -85,12 +85,16 @@ def plot_combined_analysis(pes, updates, lrs):
     plt.plot(pes[1], updates[1], color='brown', label='OB')
     plt.xlabel('Prediction Error')
     plt.ylabel('Update')
+    plt.legend(fontsize=7)
+    plt.title('Combined Updates')
 
     plt.subplot(3, 3, 9)
     plt.plot(pes[0], lrs[0], color='orange', label='CP')
     plt.plot(pes[1], lrs[1], color='brown', label='OB')
     plt.xlabel('Prediction Error')
     plt.ylabel('Learning Rate')
+    plt.legend(fontsize=7)
+    plt.title('Combined Learning Rates')
 
 def plot_analysis(epoch_G, epoch_loss, epoch_time, all_states):
     """Performs the full analysis and visualization."""
@@ -108,9 +112,10 @@ def plot_analysis(epoch_G, epoch_loss, epoch_time, all_states):
     
     # Plot combined analysis
     plot_combined_analysis(pes, updates, lrs)
-    
+    cp_vs_ob = np.sum((lrs[0]-lrs[1]))
+    plt.suptitle(f'CP vs OB: {cp_vs_ob:.1f}')
     plt.tight_layout()
-    return lrs
+    return cp_vs_ob
 
 
 def extract_states(states):
