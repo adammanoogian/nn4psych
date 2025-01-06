@@ -6,6 +6,21 @@ import matplotlib.pyplot as plt
 from scipy.stats import linregress
 from scipy.ndimage import uniform_filter1d
 
+def get_lrs(states):
+    true_state = states[2]  # bag position
+    predicted_state = states[1]  # bucket position
+    prediction_error = abs((true_state - predicted_state))[:-1]
+    update = abs(np.diff(predicted_state))
+    learning_rate = np.where(prediction_error != 0, update / prediction_error, 0)
+    
+    sorted_indices = np.argsort(prediction_error)
+    learning_rate_sorted = learning_rate[sorted_indices]
+
+    window_size = 10
+    smoothed_learning_rate = uniform_filter1d(learning_rate_sorted, size=window_size)
+    return smoothed_learning_rate
+
+
 def plot_metric_subplots(epoch_G, epoch_loss, epoch_time):
     """Plots mean metrics over epochs."""
     
@@ -34,8 +49,11 @@ def plot_context_analysis(contexts, states_list):
         true_state = states[2]  # bag position
         predicted_state = states[1]  # bucket position
         prediction_error = abs((true_state - predicted_state))[:-1]
-        update = abs(np.diff(predicted_state))
-        learning_rate = np.where(prediction_error != 0, update / prediction_error, 0)
+
+        valid_pe = prediction_error!=0
+        prediction_error = prediction_error[valid_pe]
+        update = abs(np.diff(predicted_state))[valid_pe]
+        learning_rate = np.where(prediction_error, update / prediction_error, 0)
         
         slope, intercept, r_value, p_value, std_err = linregress(prediction_error, update)
         slope_lr, intercept_lr, r_value_lr, p_value_lr, std_err_lr = linregress(prediction_error, learning_rate)
@@ -112,7 +130,8 @@ def plot_analysis(epoch_G, epoch_loss, epoch_time, all_states):
     
     # Plot combined analysis
     plot_combined_analysis(pes, updates, lrs)
-    cp_vs_ob = np.sum((lrs[0]-lrs[1]))
+
+    cp_vs_ob = np.sum((lrs[0][:50]-lrs[1][:50]))
     plt.suptitle(f'CP vs OB: {cp_vs_ob:.1f}')
     plt.tight_layout()
     return cp_vs_ob

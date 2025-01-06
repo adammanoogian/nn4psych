@@ -231,202 +231,8 @@ class ContinuousPredictiveInferenceEnv(gym.Env):
 
 class PIE_CP_OB:
     def __init__(self, condition="change-point", total_trials=100,max_time=300, train_cond=False, 
-                 max_displacement=30, reward_size=10, step_cost=0.0):
+                 max_displacement=10, reward_size=20, step_cost=0.0, alpha=1):
         super(PIE_CP_OB, self).__init__()
-        
-        # Observation: currentCurrent bucket position, last bag position, and prediction error
-        self.action_space = spaces.Discrete(3)
-        self.observation_space = 4 # helicopter pos during training, bucket pos, bag pos, bag-bucket pos, CP or OB context
-        self.max_time = max_time
-
-        self.min_obs_size = 1
-        self.max_obs_size = 301
-        self.bound_helicopter = 30
-        self.total_trials = total_trials
-        self.hide_variable = 0 # this means that if a variable is 0, it is supposed to be hidden from the agent's consideration
-
-        # Initialize variables
-        self.helicopter_pos =  np.random.randint(self.min_obs_size+self.bound_helicopter, self.max_obs_size-self.bound_helicopter)
-        self.bucket_pos = np.random.randint(self.min_obs_size+self.bound_helicopter, self.max_obs_size-self.bound_helicopter)
-        self.prev_bag_pos = copy.copy(self.hide_variable)
-        self.prev_pred_error = copy.copy(self.hide_variable)
-        self.sample_bag_pos = self._generate_bag_position(self.helicopter_pos)
-        self.reward = 0
-        self.max_disp = max_displacement #changed to 1 from 30
-        self.reward_size = reward_size
-        self.step_cost = step_cost
-
-        # Task type: "change-point" or "oddball"
-        self.task_type = condition
-        self.train_cond = train_cond  # either True or False, if True, helicopter position is shown to agent. if False helicopter position is 0
-
-        if condition == "change-point":
-            self.context =  np.array([1,0])
-        elif condition == "oddball":
-            self.context =  np.array([0,1])
-
-        
-        # Trial counter and data storage for rendering
-        self.trial = 0
-        self.trials = []
-        self.bucket_positions = []
-        self.bag_positions = []
-        self.helicopter_positions = []
-        self.hazard_triggers = []
-
-        # Hazard rates for the different conditions
-        self.change_point_hazard = 0.125
-        self.oddball_hazard = 0.125
-    
-    def normalize_states_(self,x):
-        # normalize states to be between -1 to 1 to feed to network
-        # return np.array([x[0]/self.maxobs, x[1]/self.maxobs , x[2]/(self.maxobs/2)])
-        ranges = np.array([[0, 300], [0, 300], [0, 300], [-300, 300]])
-        normalized_vector = np.array([2 * (x[i] - ranges[i, 0]) / (ranges[i, 1] - ranges[i, 0]) - 1 for i in range(len(x))])
-        return normalized_vector
-    
-    def normalize_states(self,x):
-        # normalize states to be between -1 to 1 to feed to network
-        return x/100
-
-    def reset(self):
-        # reset at the start of every trial. Observation inclues: helicopter 
-        self.hazard_trigger = 0
-
-        if self.task_type == "change-point":
-            if np.random.rand() < self.change_point_hazard:
-                self.helicopter_pos = np.random.randint(30, 270)  # change helicopter position based on hazard rate
-                self.hazard_trigger = 1
-            self.sample_bag_pos = self._generate_bag_position(self.helicopter_pos)  # Bag follows the stable helicopter position
-
-        else:  # "oddball"
-
-            # slow change in helicopter position in the oddball condition with small SD
-            slow_shift = int(np.random.normal(0, 7.5))
-            self.helicopter_pos += slow_shift
-            self.helicopter_pos = np.clip(self.helicopter_pos, self.min_obs_size + self.bound_helicopter,self.max_obs_size-self.bound_helicopter)
-
-            if np.random.rand() < self.oddball_hazard:
-                self.sample_bag_pos = np.random.randint(0, 300)  # Oddball event
-                self.hazard_trigger = 1
-            else:
-                self.sample_bag_pos = self._generate_bag_position(self.helicopter_pos)
-        self.time = 0
-
-        if self.train_cond:
-            self.obs = np.array([self.helicopter_pos, self.bucket_pos, copy.copy(self.hide_variable), self.prev_pred_error], dtype=np.float32)  # initialize initial observation. assume bag = bucket
-        else:
-            self.obs = np.array([copy.copy(self.hide_variable), self.bucket_pos, copy.copy(self.hide_variable), self.prev_pred_error], dtype=np.float32)  # initialize initial observation. assume bag = bucket
-
-        self.done = False
-        self.bag_dropped = False
-        return self.obs, self.done
-    
-    def step(self, action):
-        # idea is to have 2 separate phases within each trial. Phase 1: allow the agent to move the bucket to a desired position. Phase 2: press confirmation button to start bag drop
-
-        # Phase 1:
-        # Update bucket position based on action before confirmation
-        self.gt = 0
-        if action == 0: 
-            # Move left
-            self.gt = -self.max_disp
-        if action == 1:
-            # Move right
-            self.gt = self.max_disp
-
-        self.bucket_pos += self.gt
-        self.bucket_pos = np.clip(self.bucket_pos, a_min=self.min_obs_size,a_max=self.max_obs_size)
-        self.obs = copy.copy(self.obs)
-        self.obs[1] = self.bucket_pos
-        # reward = 0
-
-        # if self.bag_dropped:
-        #     # Increment trial count
-        #     self.trial += 1
-        #     self.done = True
-        #     reward = -abs(self.prev_bag_pos - self.bucket_pos)/self.max_obs_size  # reward is negative scalar, proportional to distance between bucket and bag. Faster to train agent
-        #     # self.gt = 0
-        
-        if self.time>= self.max_time:
-            self.done = True
-
-        # Phase 2:
-        self.reward = self.step_cost # either 0 to -1/self.max_obs_size # punish for every timestep
-
-        # confirm bucket position to start bag drop
-        if action == 2 or self.time >= self.max_time-1:
-            self.prev_bag_pos = copy.copy(self.sample_bag_pos)
-            self.prev_pred_error = self.prev_bag_pos - self.bucket_pos     
-
-            # Compute the new observation
-            if self.train_cond:
-                self.obs = np.array([self.helicopter_pos, self.bucket_pos, self.prev_bag_pos, self.prev_pred_error], dtype=np.float32)  # initialize initial observation. assume bag = bucket
-            else:
-                self.obs = np.array([copy.copy(self.hide_variable), self.bucket_pos, self.prev_bag_pos, self.prev_pred_error], dtype=np.float32)  # initialize initial observation. assume bag = bucket
-            
-            # Calculate reward/negative prediction error that the agent maximizes for
-            # self.reward = np.random.choice(np.arange(1,4),1)*(abs(self.prev_bag_pos - self.bucket_pos) <20)  # reward = 1 if bucket is close to bag pos for 10 units. Slower to train agent
-            # self.reward = -abs(self.prev_bag_pos - self.bucket_pos)/self.max_obs_size  # reward is negative scalar, proportional to distance between bucket and bag. Faster to train agent
-            
-            # reward or punish inactivity
-            if np.random.uniform()<0.0:
-                # randomly punish for not catching bag
-                self.reward = -abs(self.prev_bag_pos - self.bucket_pos)/self.max_obs_size  # reward is negative scalar, proportional to distance between bucket and bag. Faster to train agent
-            else:
-                # reward follows gaussian distribution. the closer the bucket is to the bag positin, the higher the reward.
-                df = ((self.prev_bag_pos - self.bucket_pos)/self.reward_size)**2
-                self.reward = np.exp(-0.5*df)
-                # self.reward = np.random.randint(1,4)*(abs(self.prev_bag_pos - self.bucket_pos) <20)  # reward = 1 if bucket is close to bag pos for 10 units. Slower to train agent
-
-            # penalize if agent doesnt choose to confirm
-            if self.time >= self.max_time-1:
-                self.reward -= 0
-                # self.reward =0
-                # print(f'T {self.trial}, t {self.time}, -- Penalize')
-
-            self.trial += 1
-            self.done = True
-
-            # Store positions for rendering
-            self.trials.append(self.trial)
-            self.bucket_positions.append(self.bucket_pos)
-            self.bag_positions.append(self.prev_bag_pos)
-            self.helicopter_positions.append(self.helicopter_pos)
-            self.hazard_triggers.append(self.hazard_trigger)
-            self.bag_dropped = True
-
-        self.time += 1
-        # reward = -abs(self.prev_bag_pos - self.bucket_pos)/self.max_obs_size  # reward is negative scalar, proportional to distance between bucket and bag. Faster to train agent
-        return self.obs, self.reward, self.done
-    
-    def _generate_bag_position(self, helicopter_pos):
-        """Generate a new bag position around the current helicopter location within bounds."""
-        bag_pos = int(np.random.normal(helicopter_pos, 20))
-        # Ensure the bag position is within the 0-300 range
-        return np.clip(bag_pos, 0,self.max_obs_size)
-
-    def render(self, epoch=0):
-        plt.figure(figsize=(10, 6))
-        # plt.plot(self.trials, self.bucket_positions, label='Bucket Position', color='blue')
-        plt.plot(self.trials, self.bag_positions, label='Bag Position', color='red', marker='o', linestyle='-.', alpha=0.5)
-        plt.plot(self.trials, self.helicopter_positions, label='Helicopter', color='green', linestyle='--')
-        plt.plot(self.trials, self.bucket_positions, label='Bucket Position', color='b',marker='o', linestyle='-.', alpha=0.5)
-
-        plt.ylim(-10, 310)  # Set y-axis limit from 0 to 300
-        plt.xlabel('Trial')
-        plt.ylabel('Position')
-        plt.title(f"Task: {self.task_type.capitalize()} Condition - Epoch: {epoch}")
-        plt.legend()
-        plt.show()
-
-        return np.array([self.trials, self.bucket_positions, self.bag_positions, self.helicopter_positions, self.hazard_triggers])
-
-
-class PIE_CP_OB_:
-    def __init__(self, condition="change-point", total_trials=100,max_time=300, train_cond=False, 
-                 max_displacement=30, reward_size=10, step_cost=0.0):
-        super(PIE_CP_OB_, self).__init__()
         
         # Observation: currentCurrent bucket position, last bag position, and prediction error
         self.action_space = spaces.Discrete(3)
@@ -451,6 +257,9 @@ class PIE_CP_OB_:
         self.step_cost = step_cost
         self.alpha = 1
 
+        self.velocity = 0
+        self.alpha = alpha
+
         # Task type: "change-point" or "oddball"
         self.task_type = condition
         self.train_cond = train_cond  # either True or False, if True, helicopter position is shown to agent. if False helicopter position is 0
@@ -488,6 +297,7 @@ class PIE_CP_OB_:
         # reset at the start of every trial. Observation inclues: helicopter 
         self.time = 0
         self.hazard_trigger = 0
+        self.velocity = 0
 
         if self.task_type == "change-point":
             if np.random.rand() < self.change_point_hazard:
@@ -533,7 +343,16 @@ class PIE_CP_OB_:
             # stay
             self.gt = 0
 
-        self.bucket_pos += self.gt
+        # print(self.bucket_pos, self.xt, self.gt)
+        self.velocity += self.alpha * (-self.velocity + self.gt)
+        newbucket_pos = copy.copy(self.bucket_pos) + self.velocity
+
+        if newbucket_pos > self.max_obs_size or newbucket_pos < self.min_obs_size:
+            self.velocity = 0
+            newbucket_pos = copy.copy(self.bucket_pos)
+
+        # self.bucket_pos += self.gt
+        self.bucket_pos = copy.copy(newbucket_pos)
         self.bucket_pos = np.clip(self.bucket_pos, a_min=self.min_obs_size,a_max=self.max_obs_size)
 
         # update the observation vector with new bucket position 
@@ -631,36 +450,27 @@ if __name__ == "__main__":
     #     env.close()
 
 
-    store_obs = []
-    store_obs_ = []
     trials = 100
     train_cond = True
     max_time = 300
+    max_displacement = 20
+    alpha = 1
     for task_type in ["change-point"]:
-        env = PIE_CP_OB(condition=task_type,max_time=max_time, total_trials=trials, train_cond=train_cond) #DiscretePredictiveInferenceEnv(condition=task_type)
+        env = PIE_CP_OB(condition=task_type,max_time=max_time, 
+                        total_trials=trials, train_cond=train_cond,
+                        max_displacement=max_displacement, alpha=alpha) #DiscretePredictiveInferenceEnv(condition=task_type)
         
         for trial in range(trials):
             obs, done = env.reset()
-            
+            total_reward = 0
+
             while not done:
                 action = env.action_space.sample()  # For testing, we use random actions
-
-                # action = np.random.choice(np.arange(2),1)
                 next_obs, reward, done = env.step(action)
+                total_reward += reward
 
                 print(env.trial, env.time, obs, action, next_obs, reward, done)
 
                 obs = copy.copy(next_obs)
 
-                store_obs.append(env.normalize_states(obs))
-                store_obs_.append(env.normalize_states_(obs))
-            
         env.render()
-
-    store_obs = np.array(store_obs)
-    store_obs_ = np.array(store_obs_)
-    plt.figure()
-    plt.hist(store_obs.reshape(-1), alpha=0.2, bins=100)
-    plt.hist(store_obs_.reshape(-1), alpha=0.2, bins=100)
-    plt.title(f'Max {np.max(store_obs):.3f}, Min {np.min(store_obs):.3f} \n Max {np.max(store_obs_):.3f}, Min {np.min(store_obs_):.3f}')
-# %%
