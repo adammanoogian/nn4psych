@@ -9,7 +9,7 @@ and for additional analyses
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--epochs', type=int, required=False, help='epochs', default=100)
+parser.add_argument('--epochs', type=int, required=False, help='epochs', default=5)
 parser.add_argument('--trials', type=int, required=False, help='trials', default=200)
 
 parser.add_argument('--maxdisp', type=int, required=False, help='maxdisp', default=20)
@@ -19,6 +19,8 @@ parser.add_argument('--lr', type=float, required=False, help='lr', default=0.000
 parser.add_argument('--gamma', type=float, required=False, help='gamma', default=0.9)
 parser.add_argument('--nrnn', type=int, required=False, help='nrnn', default=64)
 parser.add_argument('--loadmodel', type=bool, required=False, help='loadmodel', default=False)
+
+parser.add_argument('--seed', type=int, required=False, help='seed', default=0)
 
 args, unknown = parser.parse_known_args()
 print(args)
@@ -61,6 +63,9 @@ gamma = args.gamma
 reset_memory = 200  # reset RNN activity after T trials
 bias = [0, 0, -1]
 beta_ent = 0.0
+seed = args.seed
+
+exptname = f"noheli_{args.loadmodel}pre_{max_displacement}md_{reward_size}rs_{hidden_dim}n_{learning_rate}lr_{seed}s"
 
 if args.loadmodel:
     model_path = f'./model_params/pre_model_params_{max_displacement}_heliTrue.pth'
@@ -233,31 +238,19 @@ for epoch in range(n_epochs):
 
         print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, L {np.mean(totloss):.3f}, t {np.mean(tottime):.3f}, lr {np.sum(all_lrs[epoch,tt]):.3f}")
 
-        if epoch == n_epochs-1:
-            #save last epochs behav data
-            env.render(epoch)
+# # Calculate the difference in learning rates between CP and OB conditions. Should be positive. 
+# cp_vs_ob = plot_analysis(epoch_G, epoch_loss, epoch_time, all_states[-1])
 
-# Calculate the difference in learning rates between CP and OB conditions. Should be positive. 
-cp_vs_ob = plot_analysis(epoch_G, epoch_loss, epoch_time, all_states[epoch, tt])
+# print(cp_vs_ob)
 
-print(cp_vs_ob)
+# plt.figure(figsize=(3,2))
+# cp_ob = np.sum(all_lrs[:,0]-all_lrs[:,1],axis=1)
+# slope, intercept, r_value, p_value, std_err = linregress(np.arange(n_epochs), cp_ob)
+# plt.plot(cp_ob)
+# plt.plot(np.sum(all_lrs,axis=2))
+# plt.plot(slope * np.arange(n_epochs) + intercept, color='k', label=f'm={slope:.3f}, c={intercept:.2f}, r={r_value:.3f}, p={p_value:.3f}')
+# plt.xlabel('Epoch')
+# plt.ylabel('CP vs OB') # should become more positive.
+# plt.legend()
 
-plt.figure(figsize=(3,2))
-cp_ob = np.sum(all_lrs[:,0]-all_lrs[:,1],axis=1)
-slope, intercept, r_value, p_value, std_err = linregress(np.arange(n_epochs), cp_ob)
-plt.plot(cp_ob)
-plt.plot(np.sum(all_lrs,axis=2))
-plt.plot(slope * np.arange(n_epochs) + intercept, color='k', label=f'm={slope:.3f}, c={intercept:.2f}, r={r_value:.3f}, p={p_value:.3f}')
-plt.xlabel('Epoch')
-plt.ylabel('CP vs OB') # should become more positive.
-plt.legend()
-
-# save model only when the model shows learning rate for CP > learning rate for OB.
-if cp_vs_ob > 50:
-    model_path = f'./model_params/model_params_{max_displacement}_heli{train_cond}.pth'
-    torch.save(model.state_dict(), model_path)
-
-
-
-if save_states:
-    np.savez('arrays.npy', all_states)
+np.savez(f'./state_data/{exptname}.npz', all_states, epoch_G, epoch_loss, epoch_time)
