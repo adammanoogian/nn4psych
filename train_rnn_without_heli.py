@@ -21,8 +21,8 @@ from scipy.stats import linregress
 # from your_environment_file import PIE_CP_OB
 
 # Env parameters
-n_epochs = 100  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
-n_trials = 100  # number of trials per epoch for each condition.
+n_epochs = 50  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_trials = 200  # number of trials per epoch for each condition.
 max_time = 300  # number of time steps available for each trial. After max_time, the bag is dropped and the next trial begins after.
 
 train_epochs = 0 #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
@@ -42,7 +42,7 @@ hidden_dim = 64  # size of RNN
 action_dim = 3  # set this based on your action space. 0 is left, 1 is right, 2 is confirm.
 learning_rate = 0.0001
 gamma = 0.9
-reset_memory = 100  # reset RNN activity after T trials
+reset_memory = 200  # reset RNN activity after T trials
 bias = [0, 0, -1]
 beta_ent = 0.0
 
@@ -183,8 +183,9 @@ optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 epoch_G = np.zeros([n_epochs, num_contexts, n_trials])
 epoch_loss = np.zeros([n_epochs, num_contexts, n_trials])
 epoch_time = np.zeros([n_epochs, num_contexts, n_trials])
-all_states = np.zeros([num_contexts, 5, n_trials])
+all_states = np.zeros([n_epochs, num_contexts, 5, n_trials])
 all_lrs = np.zeros([n_epochs, num_contexts, n_trials-1])
+all_pes = np.zeros([n_epochs, num_contexts, n_trials-1])
 
 for epoch in range(n_epochs):
 
@@ -208,17 +209,17 @@ for epoch in range(n_epochs):
         epoch_loss[epoch, tt] = totloss
         epoch_time[epoch, tt] = tottime
 
-        print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, L {np.mean(totloss):.3f}, t {np.mean(tottime):.3f}")
+        all_states[epoch, tt] = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
+        all_pes[epoch,tt], all_lrs[epoch, tt] = get_lrs(all_states[epoch, tt])
 
-        states = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
-        all_lrs[epoch, tt] = get_lrs(states)
+        print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, L {np.mean(totloss):.3f}, t {np.mean(tottime):.3f}, lr {np.sum(all_lrs[epoch,tt]):.3f}")
 
         if epoch == n_epochs-1:
             #save last epochs behav data
-            all_states[tt] = env.render(epoch)
+            env.render(epoch)
 
 # Calculate the difference in learning rates between CP and OB conditions. Should be positive. 
-cp_vs_ob = plot_analysis(epoch_G, epoch_loss, epoch_time, all_states)
+cp_vs_ob = plot_analysis(epoch_G, epoch_loss, epoch_time, all_states[epoch, tt])
 
 print(cp_vs_ob)
 
@@ -226,6 +227,7 @@ plt.figure(figsize=(3,2))
 cp_ob = np.sum(all_lrs[:,0]-all_lrs[:,1],axis=1)
 slope, intercept, r_value, p_value, std_err = linregress(np.arange(n_epochs), cp_ob)
 plt.plot(cp_ob)
+plt.plot(np.sum(all_lrs,axis=2))
 plt.plot(slope * np.arange(n_epochs) + intercept, color='k', label=f'm={slope:.3f}, c={intercept:.2f}, r={r_value:.3f}, p={p_value:.3f}')
 plt.xlabel('Epoch')
 plt.ylabel('CP vs OB') # should become more positive.
@@ -235,3 +237,8 @@ plt.legend()
 if cp_vs_ob > 50:
     model_path = f'./model_params/model_params_{max_displacement}_heli{train_cond}.pth'
     torch.save(model.state_dict(), model_path)
+
+
+
+if save_states:
+    np.savez('arrays.npy', all_states)

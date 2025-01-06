@@ -14,11 +14,12 @@ def get_lrs(states):
     learning_rate = np.where(prediction_error != 0, update / prediction_error, 0)
     
     sorted_indices = np.argsort(prediction_error)
+    prediction_error_sorted = prediction_error[sorted_indices]
     learning_rate_sorted = learning_rate[sorted_indices]
 
     window_size = 10
     smoothed_learning_rate = uniform_filter1d(learning_rate_sorted, size=window_size)
-    return smoothed_learning_rate
+    return prediction_error_sorted, smoothed_learning_rate
 
 
 def plot_metric_subplots(epoch_G, epoch_loss, epoch_time):
@@ -67,6 +68,10 @@ def plot_context_analysis(contexts, states_list):
         smoothed_update = uniform_filter1d(update_sorted, size=window_size)
         smoothed_learning_rate = uniform_filter1d(learning_rate_sorted, size=window_size)
 
+        pes.append(prediction_error_sorted)
+        updates.append(smoothed_update)
+        lrs.append(smoothed_learning_rate)
+
         # Plot update vs prediction error
         plt.subplot(3, 3, i)
         plt.scatter(prediction_error, update, alpha=0.5)
@@ -77,10 +82,6 @@ def plot_context_analysis(contexts, states_list):
         plt.ylabel('Update')
         plt.title(context)
         plt.legend(fontsize=7)
-
-        pes.append(prediction_error_sorted)
-        updates.append(smoothed_update)
-        lrs.append(smoothed_learning_rate)
 
         # Plot learning rate vs prediction error
         plt.subplot(3, 3, i+3)
