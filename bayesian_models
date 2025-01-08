@@ -32,8 +32,6 @@ class BayesianModel:
         result = scipy.optimize.minimize(self.get_llik, x0, args=(self.predicted_state, self.prediction_error), method='BFGS')
         print(f"MLE: alpha = {result.x[0]:.2f} (true value = {true_noise})")
         print(f"MLE: beta = {result.x[1]:.2f} (true value = {true_switch})")
-        print(f"True Log-Likelihood: {true_ll:.4f}")
-        print(f"Difference from result: {true_ll - result.fun:.4f}")
 
     def get_llik(self, x, *args, model_name = 'normative'):
         #take args from minimizer
@@ -42,11 +40,12 @@ class BayesianModel:
         #initialize values
         logp_actions = np.zeros(len(actions))  
         #run loop
-        for t in range(len(actions)):
+        for t in range(len(actions) - 1): #lazy fix for prediction error for now, double check this
             #run through model
             logp_action = self.flexible_normative_model(Ω = Ω,
                                                         τ = τ, 
-                                                        δ = δ[t], 
+                                                        δ = δ[t],
+                                                        agent_update = self.update[t], 
                                                         task_name = 'changepoint')
 
             #store necessary data 
@@ -71,7 +70,7 @@ class BayesianModel:
         σ: float = .90,      #σ = total var on predictive dist
         #data
         δ: float = .5,       #δ = prediction error
-        participant_update: float = 50,  #participant update
+        agent_update: float = 50,  #participant update
         task_name: str = "change_point"): 
 
 
@@ -98,7 +97,7 @@ class BayesianModel:
         σ_update = utils.calculate_sigma_update(σ_motor, normative_update, σ_LR)
 
         #eq 6
-        L_normative = utils.calculate_L_normative(participant_update, normative_update, σ_update)
+        L_normative = utils.calculate_L_normative(agent_update, normative_update, σ_update)
 
         #make log likelihood
         ll = -np.log(L_normative)
