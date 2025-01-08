@@ -1,0 +1,62 @@
+#%%
+'''
+Fit Bayesian models to the RNN-AC simulated data
+'''
+
+import arviz as az
+import matplotlib.pyplot as plt
+import numpy as np
+import pymc as pm
+import pytensor
+import pytensor.tensor as pt
+import scipy
+
+from matplotlib.lines import Line2D
+
+if __name__ == "__main__":
+    states = np.load('data/pt_rnn_context/env_data.npy') #[trials, bucket_position, bag_position, helicopter_position]
+
+    prediction_error, update, slope, intercept, learning_rate, true_state, predicted_state,hazard_distance, hazard_trials = extract_states(states)
+
+#%%
+#get true data
+#actions = predicted_state
+#rewards = prediction_error
+#need true params of generative process, hazard rate, random walk rate, noise?
+
+
+def ll(x, *args):
+    #take args from minimizer
+    hazard_rate, switch_rate = x
+    actions, prediction_error = args
+    #initialize values
+    logp_actions = np.zeros(len(actions))
+
+    for len(logp_actions)
+        prev_state = 0.0
+        for t in range(len(actions)):
+            current_state = prev_state + hazard_rate * (prediction_error[t] - prev_state)
+            logp_actions[t] = -0.5 * (actions[t] - current_state) ** 2  # example Gaussian log-likelihood
+            prev_state = current_state
+    
+
+
+def flexible_normative_model(): 
+
+    normative_update[t] = learning_rate[t] * prediction_error[t]
+    CP_learning_rate[t] = changepoint_prob + relative_uncertainty - (changepoint_prob * relative_uncertainty)
+    OB_learning_rate[t] = relative_uncertainty - (relative_uncertainty * changepoint_prob)
+
+    relative_uncertainty = hazard_rate * likelihood
+
+    likelihood = uniform_distribution(prediction_error, 0:300)
+
+
+#%% 
+#run minimization
+true_ll = ll([true_hazard, true_switch], *(actions, prediction_errors)) #given true params
+#true MLE values
+x0 = [true_hazard, true_switch]
+result = scipy.optimize.minimize(ll, x0, args=(actions, prediction_errors), method='BFGS')
+print(f"MLE: alpha = {result.x[0]:.2f} (true value = {true_hazard})")
+print(f"MLE: beta = {result.x[1]:.2f} (true value = {true_switch})")
