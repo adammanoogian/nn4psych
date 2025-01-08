@@ -30,8 +30,10 @@ class BayesianModel:
         #true MLE values
         x0 = [true_switch, true_noise]
         result = scipy.optimize.minimize(self.get_llik, x0, args=(self.predicted_state, self.prediction_error), method='BFGS')
-        print(f"MLE: alpha = {result.x[0]:.2f} (true value = {true_noise})")
-        print(f"MLE: beta = {result.x[1]:.2f} (true value = {true_switch})")
+        print(f"MLE: Ω = {result.x[0]:.2f} (true value = {true_switch})")
+        print(f"MLE: τ = {result.x[1]:.2f} (true value = {true_noise})")
+        print(result)
+
 
     def get_llik(self, x, *args, model_name = 'normative'):
         #take args from minimizer
@@ -66,8 +68,8 @@ class BayesianModel:
         σ_LR: float = .90, 
         #priors 
         H: float = .2,      #H = changepoint or oddball prob dependening on the condition
-        LW: float = .001,      #LW = likelihood weight
-        σ: float = .90,      #σ = total var on predictive dist
+        LW: float = .99,      #LW = likelihood weight
+        σ: float = .125,      #σ = total var on predictive dist
         #data
         δ: float = .5,       #δ = prediction error
         agent_update: float = 50,  #participant update
@@ -100,7 +102,7 @@ class BayesianModel:
         L_normative = utils.calculate_L_normative(agent_update, normative_update, σ_update)
 
         #make log likelihood
-        ll = -np.log(L_normative)
+        ll = np.log(L_normative)
 
         return ll
 

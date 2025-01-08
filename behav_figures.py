@@ -305,7 +305,7 @@ def plot_lr_after_hazard(learning_rate, hazard_distance, condition):
 if __name__ == "__main__":
     states = np.load('data/pt_rnn_context/env_data.npy') #[trials, bucket_position, bag_position, helicopter_position]
 
-    prediction_error, update, slope, intercept, learning_rate, true_state, predicted_state,hazard_distance, hazard_trials = extract_states(states) #ERROR? Is this supposed to return slope
+    prediction_error, update, learning_rate, true_state, predicted_state,hazard_distance, hazard_trials = extract_states(states) #ERROR? Is this supposed to return slope
 
     # Call the functions to generate the plots
     plot_update_by_prediction_error(prediction_error, update, slope, intercept)
