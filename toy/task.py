@@ -127,8 +127,8 @@ class Heli_Bag:
             self.reward = np.exp(-0.5*df) #* 1/(self.reward_size * np.sqrt(2*np.pi))
 
             # if never confirm, dont give reward
-            if action != 2:
-                self.reward = np.array([0]) 
+            # if action != 2:
+            #     self.reward = np.array([0]) 
 
             self.trial += 1
             self.done = True

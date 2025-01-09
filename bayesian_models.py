@@ -110,7 +110,7 @@ class BayesianModel:
 #%%
 #run 
 if __name__ == "__main__":
-    states = np.load('data/pt_rnn_context/env_data.npy') #[trials, bucket_position, bag_position, helicopter_position]
+    states = np.load('./data/env_data_change-point.npy') #[trials, bucket_position, bag_position, helicopter_position]
     model = BayesianModel(states, model_type = 'changepoint')
     model.run_mle()
 

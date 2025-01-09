@@ -32,7 +32,7 @@ def extract_states(states):
 
 #Plots
 
-def plot_update_by_prediction_error(prediction_error, update, condition):
+def plot_update_by_prediction_error(prediction_error, update, condition="change-point"):
     # Plot update x pe
     plt.figure(figsize=(3, 2))
     plt.scatter(prediction_error, update, alpha=0.5, color='blue', label='Data Points')
@@ -57,7 +57,7 @@ def plot_update_by_prediction_error(prediction_error, update, condition):
     # Save the plot
     plt.savefig(f'plots/update_by_prediction_error_{condition}.png')
 
-def plot_learning_rate_by_prediction_error(prediction_error, learning_rate, condition):
+def plot_learning_rate_by_prediction_error(prediction_error, learning_rate, condition="change-point"):
     # Plot learning rate by prediction error
     plt.figure(figsize=(3, 2))
     plt.scatter(prediction_error, learning_rate, alpha=0.5, color='green', label='Data Points')
@@ -83,7 +83,7 @@ def plot_learning_rate_by_prediction_error(prediction_error, learning_rate, cond
     # Save the plot
     plt.savefig(f'plots/learning_rate_by_prediction_error_{condition}.png')
 
-def plot_states_and_learning_rate(true_state, predicted_state, learning_rate, condition):
+def plot_states_and_learning_rate(true_state, predicted_state, learning_rate, condition="change-point"):
     trials = np.arange(len(true_state))
     fig, ax1 = plt.subplots(figsize=(12, 6))
 
@@ -105,7 +105,7 @@ def plot_states_and_learning_rate(true_state, predicted_state, learning_rate, co
     plt.show()
     plt.savefig(f'plots/states_and_learning_rate_over_trials_{condition}.png')
 
-def plot_learning_rate_histogram(learning_rate, condition):
+def plot_learning_rate_histogram(learning_rate, condition="change-point"):
     bins = np.arange(0, 1.1, 0.1)
     plt.figure(figsize=(10, 6))
     plt.hist(learning_rate, bins=bins, edgecolor='black')
@@ -117,7 +117,7 @@ def plot_learning_rate_histogram(learning_rate, condition):
     plt.savefig(f'plots/learning_rate_histogram_{condition}.png')
 
 
-def plot_lr_after_hazard(learning_rate, hazard_distance, condition):
+def plot_lr_after_hazard(learning_rate, hazard_distance, condition="change-point"):
 
     bins = np.arange(0, 1.1, 0.1)
     bin_indices = np.digitize(learning_rate, bins) - 1
@@ -172,7 +172,7 @@ def plot_lr_after_hazard(learning_rate, hazard_distance, condition):
 # %%
 
 if __name__ == "__main__":
-    states = np.load('data/pt_rnn_context/env_data.npy') #[trials, bucket_position, bag_position, helicopter_position]
+    states = np.load('./data/env_data_change-point.npy') #[trials, bucket_position, bag_position, helicopter_position]
 
     prediction_error, update, learning_rate, true_state, predicted_state,hazard_distance, hazard_trials = extract_states(states) #ERROR? Is this supposed to return slope
 

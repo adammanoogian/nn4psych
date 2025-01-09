@@ -455,7 +455,7 @@ if __name__ == "__main__":
     max_time = 300
     max_displacement = 20
     alpha = 1
-    for task_type in ["change-point"]:
+    for task_type in ["change-point", "oddball"]:
         env = PIE_CP_OB(condition=task_type,max_time=max_time, 
                         total_trials=trials, train_cond=train_cond,
                         max_displacement=max_displacement, alpha=alpha) #DiscretePredictiveInferenceEnv(condition=task_type)
@@ -473,4 +473,5 @@ if __name__ == "__main__":
 
                 obs = copy.copy(next_obs)
 
-        env.render()
+        states = env.render()
+        np.save(f'./data/env_data_{task_type}', states)
