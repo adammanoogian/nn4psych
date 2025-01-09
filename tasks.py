@@ -342,6 +342,7 @@ class PIE_CP_OB:
         elif action == 2:
             # stay
             self.gt = 0
+            self.velocity = 0
 
         # print(self.bucket_pos, self.xt, self.gt)
         self.velocity += self.alpha * (-self.velocity + self.gt)

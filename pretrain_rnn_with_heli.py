@@ -15,13 +15,13 @@ from torch.distributions import Categorical
 from tasks import PIE_CP_OB
 import matplotlib.pyplot as plt
 from torch.nn import init
-from behav_figures import plot_analysis, get_lrs
+from utils_funcs import plot_analysis, get_lrs
 from scipy.stats import linregress
 # Assuming that PIE_CP_OB is a gym-like environment
 # from your_environment_file import PIE_CP_OB
 
 # Env parameters
-n_epochs = 1  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_epochs = 2000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
 n_trials = 100  # number of trials per epoch for each condition.
 max_time = 300  # number of time steps available for each trial. After max_time, the bag is dropped and the next trial begins after.
 
@@ -31,9 +31,9 @@ contexts = ["change-point","oddball"] #"change-point","oddball"
 num_contexts = len(contexts)
 
 # Task parameters
-max_displacement = 20 # number of units each left or right moves.
+max_displacement = 15 # number of units each left or right moves.
 step_cost = 0 #-1/300  # penalize every additional step that the agent does not confirm. 
-reward_size = 10 # smaller value means a tighter margin to get reward.
+reward_size = 7.5 # smaller value means a tighter margin to get reward.
 alpha = 1
 
 # Model Parameters
@@ -46,7 +46,7 @@ reset_memory = 100  # reset RNN activity after T trials
 bias = [0, 0, -1]
 beta_ent = 0.0
 
-model_path = f'./model_params/pre_model_params_{max_displacement}_heliTrue.pth'
+model_path = None#f'./model_params/pre_model_params_{max_displacement}_heliTrue.pth'
 
 # Actor-Critic Network with RNN
 class ActorCritic(nn.Module):
@@ -116,7 +116,6 @@ def train(env, model, optimizer,epoch, n_trials, gamma):
         while not done: #allows multiple actions in one trial (incrementally moving bag_position)
             # Forward pass
             actor_logits, critic_value, hx = model(state, hx)
-
             bias_tensor = torch.tensor(bias, dtype=actor_logits.dtype, device=actor_logits.device)
             actor_logits += bias_tensor
 
@@ -125,14 +124,16 @@ def train(env, model, optimizer,epoch, n_trials, gamma):
 
             log_probs.append(probs.log_prob(action))
             values.append(critic_value)
-
             entropies.append(probs.entropy())
 
             next_obs, reward, done = env.step(action.item())
+
             norm_next_obs = env.normalize_states(next_obs)
             next_state = np.concatenate([norm_next_obs,env.context])
+
             rewards.append(reward)
             totR += reward
+
             state = torch.FloatTensor(next_state).unsqueeze(0).unsqueeze(0)
 
             if done:
@@ -211,7 +212,7 @@ for epoch in range(n_epochs):
         print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, L {np.mean(totloss):.3f}, t {np.mean(tottime):.3f}")
 
         states = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
-        all_lrs[epoch, tt] = get_lrs(states)
+        _, all_lrs[epoch, tt] = get_lrs(states)
 
         if epoch == n_epochs-1:
             #save last epochs behav data
