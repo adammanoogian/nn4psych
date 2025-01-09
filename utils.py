@@ -1,146 +1,152 @@
+#%%
+'''
+Useful functions 
+'''
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import linregress
 from scipy.ndimage import uniform_filter1d
+from scipy import stats
 
-def saveload(filename, variable, opt):
-    import pickle
-    if opt == 'save':
-        with open(f"{filename}.pickle", "wb") as file:
-            pickle.dump(variable, file)
-        print('file saved')
-    else:
-        with open(f"{filename}.pickle", "rb") as file:
-            return pickle.load(file)
+def extract_states(states):
 
-
-def get_lrs(states):
+    # originally by Adam
+    # Extract prediction error (PE) and state (s) and predicted state (s_hat)
     true_state = states[2]  # bag position
     predicted_state = states[1]  # bucket position
-    prediction_error = abs((true_state - predicted_state))[:-1]
+    prediction_error = abs(true_state - predicted_state)
+    prediction_error = np.minimum(prediction_error, 100)
+    prediction_error = prediction_error[:-1] 
+
     update = abs(np.diff(predicted_state))
     learning_rate = np.where(prediction_error != 0, update / prediction_error, 0)
+
+    hazard_trials = states[4]
+    hazard_indexes = np.where(states[4] == 1)[0]
+    hazard_distance = np.zeros(len(states[0]), dtype=int)
+    current = 0
+    for i in range(len(states[0])):
+        if i in hazard_indexes:
+            current = 0
+        hazard_distance[i] = current
+        current += 1
+    return prediction_error, update, learning_rate, true_state, predicted_state,hazard_distance, hazard_trials
+
+def calculate_normative_update(alpha, delta):
+    """
+    Equation 1: Calculate normative update.
     
-    sorted_indices = np.argsort(prediction_error)
-    prediction_error_sorted = prediction_error[sorted_indices]
-    learning_rate_sorted = learning_rate[sorted_indices]
-
-    window_size = 10
-    smoothed_learning_rate = uniform_filter1d(learning_rate_sorted, size=window_size)
-    return prediction_error_sorted, smoothed_learning_rate
-
-
-def plot_metric_subplots(epoch_G, epoch_loss, epoch_time):
-    """Plots mean metrics over epochs."""
+    Parameters:
+        alpha (float): Learning rate.
+        delta (float): Prediction error.
+        t (int): Current time step.
     
-    plt.figure(figsize=(10, 6))
+    Returns:
+        float: Normative update value.
     
-    def plot_subplot(data, subplot_index, ylabel, colors=('b', 'r'), labels=('CP', 'OB')):
-        plt.subplot(3, 3, subplot_index)
-        for i, (color, label) in enumerate(zip(colors, labels)):
-            plt.plot(np.mean(data[:, i], axis=1), color=color, label=label)
-        plt.xlabel('Epoch')
-        plt.ylabel(ylabel)
-        plt.legend()
+    Equation:
+        normative_update[t] = alpha[t] * delta[t]
+    """
+    return alpha * delta
+
+def calculate_alpha_changepoint(omega, tau):
+    """
+    Equation 2: Calculate alpha for changepoint model.
     
-    plot_subplot(epoch_G, 1, 'G')
-    plot_subplot(epoch_loss, 2, 'Loss')
-    plot_subplot(epoch_time, 3, 'Time to Confirm')
-
-def plot_context_analysis(contexts, states_list):
-    """Plots prediction errors and updates for different contexts."""
+    Parameters:
+        omega (float): Changepoint probability.
+        tau (float): Relative uncertainty.
+        t (int): Current time step.
     
-    pes = []
-    updates = []
-    lrs = []
+    Returns:
+        float: Updated alpha value.
     
-    for i, (context, states) in enumerate(zip(contexts, states_list), start=4):
-        true_state = states[2]  # bag position
-        predicted_state = states[1]  # bucket position
-        prediction_error = abs((true_state - predicted_state))[:-1]
+    Equation:
+        alpha[t] = omega + tau - (omega * tau)
+    """
+    return omega + tau - (omega * tau)
 
-        valid_pe = prediction_error!=0
-        prediction_error = prediction_error[valid_pe]
-        update = abs(np.diff(predicted_state))[valid_pe]
-        learning_rate = np.where(prediction_error, update / prediction_error, 0)
-        
-        slope, intercept, r_value, p_value, std_err = linregress(prediction_error, update)
-        slope_lr, intercept_lr, r_value_lr, p_value_lr, std_err_lr = linregress(prediction_error, learning_rate)
-
-        sorted_indices = np.argsort(prediction_error)
-        prediction_error_sorted = prediction_error[sorted_indices]
-        update_sorted = update[sorted_indices]
-        learning_rate_sorted = learning_rate[sorted_indices]
-
-        window_size = 10
-        smoothed_update = uniform_filter1d(update_sorted, size=window_size)
-        smoothed_learning_rate = uniform_filter1d(learning_rate_sorted, size=window_size)
-
-        pes.append(prediction_error_sorted)
-        updates.append(smoothed_update)
-        lrs.append(smoothed_learning_rate)
-
-        # Plot update vs prediction error
-        plt.subplot(3, 3, i)
-        plt.scatter(prediction_error, update, alpha=0.5)
-        plt.plot(prediction_error_sorted, smoothed_update, color='red')
-        plt.plot(prediction_error, slope * prediction_error + intercept, color='k',
-                 label=f'm={slope:.3f}, c={intercept:.2f}, r={r_value:.3f}, p={p_value:.3f}')
-        plt.xlabel('Prediction Error')
-        plt.ylabel('Update')
-        plt.title(context)
-        plt.legend(fontsize=7)
-
-        # Plot learning rate vs prediction error
-        plt.subplot(3, 3, i+3)
-        plt.scatter(prediction_error, learning_rate, alpha=0.5)
-        plt.plot(prediction_error_sorted, smoothed_learning_rate, color='red')
-        plt.plot(prediction_error, slope_lr * prediction_error + intercept_lr, color='k',
-                 label=f'm={slope_lr:.3f}, c={intercept_lr:.2f}, r={r_value_lr:.3f}, p={p_value_lr:.3f}')
-        plt.xlabel('Prediction Error')
-        plt.ylabel('Learning Rate')
-        plt.title(context)
-        plt.legend(fontsize=7)
-
-    return pes, updates, lrs
-
-def plot_combined_analysis(pes, updates, lrs):
-    """Plots combined analysis for CP and OB."""
+def calculate_alpha_oddball(tau, omega):
+    """
+    Equation 3: Calculate alpha for oddball model.
     
-    plt.subplot(3, 3, 6)
-    plt.plot(pes[0], updates[0], color='orange', label='CP')
-    plt.plot(pes[1], updates[1], color='brown', label='OB')
-    plt.xlabel('Prediction Error')
-    plt.ylabel('Update')
-    plt.legend(fontsize=7)
-    plt.title('Combined Updates')
+    Parameters:
+        tau (float): Relative uncertainty.
+        omega (float): Changepoint probability.
+    
+    Returns:
+        float: Updated alpha value.
+    
+    Equation:
+        alpha[t] = tau - (tau * omega)
+    """
+    return tau - (tau * omega)
 
-    plt.subplot(3, 3, 9)
-    plt.plot(pes[0], lrs[0], color='orange', label='CP')
-    plt.plot(pes[1], lrs[1], color='brown', label='OB')
-    plt.xlabel('Prediction Error')
-    plt.ylabel('Learning Rate')
-    plt.legend(fontsize=7)
-    plt.title('Combined Learning Rates')
+def calculate_omega(H, U_val, N_val):
+    """
+    Equation 4: Calculate updated omega.
+    
+    Parameters:
+        H (float): Probability depending on the condition.
+        U_val (float): Uniform PDF value raised to the likelihood weight.
+        N_val (float): Normal PDF value raised to the likelihood weight.
+    
+    Returns:
+        float: Updated omega value.
+    
+    Equation:
+        omega = (H * U_val) / (H * U_val + (1 - H) * N_val)
+    """
+    return (H * U_val) / (H * U_val + (1 - H) * N_val)
 
-def plot_analysis(epoch_G, epoch_loss, epoch_time, all_states):
-    """Performs the full analysis and visualization."""
+def calculate_tau(tau, UU):
+    """
+    Equation 5: Update tau based on uncertainty underestimation.
     
-    # Prepare contexts and states
-    cp_states, ob_states = all_states
-    contexts = ['CP Context', 'OB Context']
-    states_list = [cp_states, ob_states]
+    Parameters:
+        tau (float): Relative uncertainty.
+        UU (float): Uncertainty underestimation.
     
-    # Plot individual subplots
-    plot_metric_subplots(epoch_G, epoch_loss, epoch_time)
+    Returns:
+        float: Updated tau value.
     
-    # Plot context analysis and get predictions and updates for combined plots
-    pes, updates, lrs = plot_context_analysis(contexts, states_list)
-    
-    # Plot combined analysis
-    plot_combined_analysis(pes, updates, lrs)
+    Equation:
+        tau = tau / UU
+    """
+    return tau / UU
 
-    cp_vs_ob = np.sum((lrs[0][:50]-lrs[1][:50]))
-    plt.suptitle(f'CP vs OB: {cp_vs_ob:.1f}')
-    plt.tight_layout()
-    return cp_vs_ob
+def calculate_L_normative(participant_update, normative_update, sigma_update):
+    """
+    Equation 6: Calculate normative likelihood.
+    
+    Parameters:
+        participant_update (numpy.ndarray): Participant's update data.
+        normative_update (float): Normative update value.
+        sigma_update (float): Updated sigma value.
+        t (int): Current time step.
+    
+    Returns:
+        float: Log-normalized likelihood.
+    
+    Equation:
+        L_normative = stats.norm.pdf(participant_update[t], loc=normative_update[t], scale=sigma_update)
+    """
+    return stats.norm.pdf(participant_update, loc=normative_update, scale=sigma_update)
+
+def calculate_sigma_update(sigma_motor, normative_update, sigma_LR):
+    """
+    Equation 7: Calculate variability of update.
+    
+    Parameters:
+        sigma_motor (float): Motor sigma value.
+        normative_update (float): Normative update value.
+        sigma_LR (float): Learning rate sigma value.
+        t (int): Current time step.
+    
+    Returns:
+        float: Updated sigma value.
+    
+    Equation:
+        sigma_update = sigma_motor + normative_update[t] * sigma_LR
+    """
+    return sigma_motor + normative_update * sigma_LR
