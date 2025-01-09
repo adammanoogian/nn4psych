@@ -11,6 +11,7 @@ import numpy as np
 import scipy
 import scipy.stats as stats
 import utils
+from tasks import PIE_CP_OB
 
 
 #%% 
@@ -44,11 +45,11 @@ class BayesianModel:
         #run loop
         for t in range(len(actions) - 1): #lazy fix for prediction error for now, double check this
             #run through model
-            logp_action = self.flexible_normative_model(Ω = Ω,
+            logp_action, _ = self.flexible_normative_model(Ω = Ω,
                                                         τ = τ, 
                                                         δ = δ[t],
                                                         agent_update = self.update[t], 
-                                                        task_name = 'changepoint')
+                                                        context = 'changepoint')
 
             #store necessary data 
             logp_actions[t] = logp_action
@@ -73,7 +74,7 @@ class BayesianModel:
         #data
         δ: float = .5,       #δ = prediction error
         agent_update: float = 50,  #participant update
-        task_name: str = "change_point"): 
+        context: str = "change_point"): 
 
 
         #eq 4 - needs hardset priors in
@@ -83,10 +84,10 @@ class BayesianModel:
         #eq 5 - in oddball, relative uncertainty requires drift rate D (?)
         τ = utils.calculate_tau(τ, UU)
 
-        if task_name == 'changepoint':
+        if context == 'changepoint':
             #eq 2
             alpha = utils.calculate_alpha_changepoint(Ω, τ)
-        elif task_name == 'oddball':
+        elif context == 'oddball':
             #eq 3
             alpha = utils.calculate_alpha_oddball(τ, Ω)
         else:
@@ -104,7 +105,44 @@ class BayesianModel:
         #make log likelihood
         ll = np.log(L_normative)
 
-        return ll
+        #sample for simulation
+        sim_action = normative_update
+
+        return ll, sim_action
+    
+    def sim_data(self, 
+                 total_trials:int = 100, 
+                 model_name:str   = "flexible_normative_model",
+                 condition:str    = 'changepoint'):
+        """
+        Simulate data by interacting with the PIE_CP_OB environment using flexible_normative_model.
+        """
+        self.total_trials = total_trials
+        self.model_name = model_name
+        self.condition = condition
+
+        env = PIE_CP_OB(condition=self.condition, total_trials=self.total_trials, max_time=300,
+                        train_cond=False, max_displacement=10, reward_size=20, step_cost=0.0, alpha=1)
+        #all_states[epoch, tt] = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
+        obs, _ = env.reset()
+        pred_error = 0
+
+        for t in range(self.total_trials):
+            # extract necessary trial info from env
+            # Use the model to get sim_action
+            ll, sim_action = self.flexible_normative_model(
+                δ = pred_error,
+                context = self.condition
+            )
+            obs, _, _ = env.step(action = None, direct_action = sim_action)
+            pred_error = obs[3]
+
+    
+        # 0 = trial index, 1 = bucket_pos, 2 = bag_pos, 3 = helicopter_pos, 4 = hazard_trigger
+        states = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
+           
+        np.save("data/bayesian_models/model_predictions.npy", states)
+        return states
 
 
 #%%
@@ -114,9 +152,9 @@ if __name__ == "__main__":
     model = BayesianModel(states, model_type = 'changepoint')
     model.run_mle()
 
-
-
-
+    # #run simulation
+    model = BayesianModel(states, model_type = 'changepoint')
+    model.sim_data(total_trials=100, model_name = "flexible_normative_model", condition = 'changepoint')
 
 
 
