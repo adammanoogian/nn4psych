@@ -327,8 +327,9 @@ class PIE_CP_OB:
 
         return self.obs, self.done
     
-    def step(self, action):
+    def step(self, action, direct_action):
         # idea is to have 2 separate phases within each trial. Phase 1: allow the agent to move the bucket to a desired position. Phase 2: press confirmation button to start bag drop
+        #adding direct action to allow bayesian agent to choose action directly
         self.time += 1
 
         # Phase 1:
@@ -342,6 +343,8 @@ class PIE_CP_OB:
         elif action == 2:
             # stay
             self.gt = 0
+        elif direct_action is not None:
+            self.gt = direct_action
 
         # print(self.bucket_pos, self.xt, self.gt)
         self.velocity += self.alpha * (-self.velocity + self.gt)
@@ -369,7 +372,7 @@ class PIE_CP_OB:
 
         # Phase 2:
         # confirm bucket position to start bag drop
-        if action == 2 or self.time >= self.max_time-1:
+        if action == 2 or self.time >= self.max_time-1 or direct_action is not None:
             self.bag_pos = copy.copy(self.sample_bag_pos)
             self.pred_error = self.bag_pos - self.bucket_pos     
 
