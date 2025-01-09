@@ -51,10 +51,12 @@ class Heli_Bag:
     # reset at the start of every trial. Observation inclues: helicopter 
         self.time = 0
         self.velocity = 0
+        self.hazard_trigger = 0
 
         if self.task_type == "change-point":
             if np.random.rand() < self.change_point_hazard:
                 self.helipos = np.random.uniform(self.env_min+self.heli_bound,self.env_max-self.heli_bound,1)
+                self.hazard_trigger = 1
             self.bagpos = self.sample_bag(self.helipos)  
 
         else:  # "oddball"
@@ -66,6 +68,7 @@ class Heli_Bag:
 
             if np.random.rand() < self.oddball_hazard:
                 self.bagpos = np.random.uniform(self.env_min, self.env_max)  # Oddball event
+                self.hazard_trigger = 1
             else:
                 self.bagpos =  self.sample_bag(self.helipos)
 
@@ -127,8 +130,8 @@ class Heli_Bag:
             self.reward = np.exp(-0.5*df) #* 1/(self.reward_size * np.sqrt(2*np.pi))
 
             # if never confirm, dont give reward
-            # if action != 2:
-            #     self.reward = np.array([0]) 
+            if action != 2:
+                self.reward = np.array([0]) 
 
             self.trial += 1
             self.done = True
@@ -138,6 +141,7 @@ class Heli_Bag:
             self.bucket_positions.append(self.bucketpos)
             self.bag_positions.append(self.bagpos)
             self.helicopter_positions.append(self.helipos)
+            self.hazard_triggers.append(self.hazard_trigger)
 
         return self.obs, self.reward[0], self.done
     
@@ -149,7 +153,7 @@ class Heli_Bag:
         plt.plot(self.trials, self.helicopter_positions, label='Helicopter', color='green', linestyle='--')
         plt.plot(self.trials, self.bucket_positions, label='Bucket Position', color='b',marker='o', linestyle='-.', alpha=0.5)
 
-        plt.ylim(-1.1, 1.1)  # Set y-axis limit from 0 to 300
+        plt.ylim(-0.1, 2.1)  # Set y-axis limit from 0 to 300
         plt.xlabel('Trial')
         plt.ylabel('Position')
         plt.title(f"Task: {self.task_type.capitalize()} Condition - Epoch: {epoch}")
@@ -162,10 +166,10 @@ class Heli_Bag:
 # Run
 if __name__ == "__main__":
 
-    trials = 4
+    trials = 100
     train_cond = False
     max_time = 300
-    alpha = 1
+    alpha = 0.2
 
     actions = np.array([1,1,1, 2])
     for task_type in ["change-point"]:
@@ -176,13 +180,15 @@ if __name__ == "__main__":
             total_reward = 0
 
             while not done:
-                # action = np.random.randint(3)  
-                action = actions[env.time]
+                action = np.random.randint(3)  
+                # action = actions[env.time]
                 obs, reward, done = env.step(action)
                 total_reward += reward
 
                 print(env.trial, env.time, action,obs, reward, done)
 
         env.render()
+    
+    # plt.hist(np.array(env.bucket_positions).reshape(-1), bins=np.linspace(0,2,11))
 
 # %%

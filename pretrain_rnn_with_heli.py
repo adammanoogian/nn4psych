@@ -21,7 +21,7 @@ from scipy.stats import linregress
 # from your_environment_file import PIE_CP_OB
 
 # Env parameters
-n_epochs = 2000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_epochs = 5000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
 n_trials = 100  # number of trials per epoch for each condition.
 max_time = 300  # number of time steps available for each trial. After max_time, the bag is dropped and the next trial begins after.
 

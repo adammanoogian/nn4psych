@@ -353,13 +353,11 @@ class PIE_CP_OB:
             newbucket_pos = copy.copy(self.bucket_pos)
 
         # self.bucket_pos += self.gt
-        self.bucket_pos = copy.copy(newbucket_pos)
-        self.bucket_pos = np.clip(self.bucket_pos, a_min=self.min_obs_size,a_max=self.max_obs_size)
+        self.bucket_pos = np.clip(copy.copy(newbucket_pos), a_min=self.min_obs_size,a_max=self.max_obs_size)
 
         # update the observation vector with new bucket position 
         self.obs = copy.copy(self.obs)
         self.obs[1] = self.bucket_pos
-
         self.reward = self.step_cost # either 0 to -1/self.max_obs_size # punish for every timestep
         
         # # if max time is reached. terminate trial
@@ -454,7 +452,7 @@ if __name__ == "__main__":
     trials = 100
     train_cond = True
     max_time = 300
-    max_displacement = 20
+    max_displacement = 15
     alpha = 1
     for task_type in ["change-point", "oddball"]:
         env = PIE_CP_OB(condition=task_type,max_time=max_time, 
@@ -476,3 +474,4 @@ if __name__ == "__main__":
 
         states = env.render()
         np.save(f'./data/env_data_{task_type}', states)
+        # plt.hist(np.array(env.bucket_positions).reshape(-1), bins=np.linspace(0,300,21))
