@@ -177,8 +177,10 @@ if __name__ == "__main__":
     prediction_error, update, learning_rate, true_state, predicted_state,hazard_distance, hazard_trials = extract_states(states) #ERROR? Is this supposed to return slope
 
     # Call the functions to generate the plots
-    plot_update_by_prediction_error(prediction_error, update, slope, intercept)
-    plot_learning_rate_by_prediction_error(prediction_error, learning_rate, slope, intercept)
+    plot_update_by_prediction_error(prediction_error, update)
+    plot_learning_rate_by_prediction_error(prediction_error, learning_rate)
     plot_states_and_learning_rate(true_state, predicted_state, learning_rate)
     plot_learning_rate_histogram(learning_rate)
     plot_lr_after_hazard(learning_rate, hazard_trials)
+
+# %%
