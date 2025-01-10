@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 from scipy.stats import linregress
 from scipy.ndimage import uniform_filter1d
 
-
 def extract_states(states):
     # originally by Adam
     # Extract prediction error (PE) and state (s) and predicted state (s_hat)

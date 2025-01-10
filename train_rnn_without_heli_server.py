@@ -7,6 +7,24 @@ similar to Nassar et al. 2021
 and for additional analyses
 '''
 
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--epochs', type=int, required=False, help='epochs', default=2)
+parser.add_argument('--trials', type=int, required=False, help='trials', default=200)
+
+parser.add_argument('--maxdisp', type=int, required=False, help='maxdisp', default=20)
+parser.add_argument('--rewardsize', type=int, required=False, help='rewardsize', default=10)
+
+parser.add_argument('--lr', type=float, required=False, help='lr', default=0.0001)
+parser.add_argument('--gamma', type=float, required=False, help='gamma', default=0.9)
+parser.add_argument('--nrnn', type=int, required=False, help='nrnn', default=64)
+parser.add_argument('--loadmodel',type=int, required=False, help='loadmodel', default=0)
+
+parser.add_argument('--seed', type=int, required=False, help='seed', default=0)
+
+args, unknown = parser.parse_known_args()
+print(args)
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -15,38 +33,44 @@ from torch.distributions import Categorical
 from tasks import PIE_CP_OB
 import matplotlib.pyplot as plt
 from torch.nn import init
-from utils_funcs import plot_analysis, get_lrs
+from behav_figures import plot_analysis, get_lrs, saveload
 from scipy.stats import linregress
 # Assuming that PIE_CP_OB is a gym-like environment
 # from your_environment_file import PIE_CP_OB
 
 # Env parameters
-n_epochs = 1000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
-n_trials = 100  # number of trials per epoch for each condition.
+n_epochs = args.epochs  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_trials = args.trials  # number of trials per epoch for each condition.
 max_time = 300  # number of time steps available for each trial. After max_time, the bag is dropped and the next trial begins after.
 
-train_epochs = n_epochs*0.5 #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
+train_epochs = 0 #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
 no_train_epochs = []  # epoch in which the agent weights are not updated using gradient descent. To see if the model can use its dynamics to solve the task instead.
 contexts = ["change-point","oddball"] #"change-point","oddball"
 num_contexts = len(contexts)
 
 # Task parameters
-max_displacement = 15 # number of units each left or right moves.
+max_displacement = args.maxdisp # number of units each left or right moves.
 step_cost = 0 #-1/300  # penalize every additional step that the agent does not confirm. 
-reward_size = 7.5 # smaller value means a tighter margin to get reward.
+reward_size = args.rewardsize # smaller value means a tighter margin to get reward.
 alpha = 1
 
 # Model Parameters
 input_dim = 4+2  # set this based on your observation space. observation vector is length 4 [helicopter pos, bucket pos, bag pos, bag-bucket pos], context vector is length 2.  
-hidden_dim = 64  # size of RNN
+hidden_dim = args.nrnn  # size of RNN
 action_dim = 3  # set this based on your action space. 0 is left, 1 is right, 2 is confirm.
-learning_rate = 0.0001
-gamma = 0.9
-reset_memory = 100  # reset RNN activity after T trials
+learning_rate = args.lr
+gamma = args.gamma
+reset_memory = 200  # reset RNN activity after T trials
 bias = [0, 0, -1]
 beta_ent = 0.0
+seed = args.seed
+loadmodel = args.loadmodel
+exptname = f"noheli_{loadmodel}pre_{max_displacement}md_{reward_size}rs_{hidden_dim}n_{learning_rate}lr_{n_epochs}e_{seed}s"
+print(exptname)
 
-model_path = None#f'./model_params/pre_model_params_{max_displacement}_heliTrue.pth'
+if loadmodel == 1:
+    model_path = f'./model_params/pre_model_params_{max_displacement}_heliTrue.pth'
+
 
 # Actor-Critic Network with RNN
 class ActorCritic(nn.Module):
@@ -116,6 +140,7 @@ def train(env, model, optimizer,epoch, n_trials, gamma):
         while not done: #allows multiple actions in one trial (incrementally moving bag_position)
             # Forward pass
             actor_logits, critic_value, hx = model(state, hx)
+
             bias_tensor = torch.tensor(bias, dtype=actor_logits.dtype, device=actor_logits.device)
             actor_logits += bias_tensor
 
@@ -124,16 +149,14 @@ def train(env, model, optimizer,epoch, n_trials, gamma):
 
             log_probs.append(probs.log_prob(action))
             values.append(critic_value)
+
             entropies.append(probs.entropy())
 
             next_obs, reward, done = env.step(action.item())
-
             norm_next_obs = env.normalize_states(next_obs)
             next_state = np.concatenate([norm_next_obs,env.context])
-
             rewards.append(reward)
             totR += reward
-
             state = torch.FloatTensor(next_state).unsqueeze(0).unsqueeze(0)
 
             if done:
@@ -175,7 +198,7 @@ def train(env, model, optimizer,epoch, n_trials, gamma):
 
 
 model = ActorCritic(input_dim, hidden_dim, action_dim)
-if model_path is not None:
+if loadmodel:
     print('Load Model')
     model.load_state_dict(torch.load(model_path))
 
@@ -184,8 +207,9 @@ optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 epoch_G = np.zeros([n_epochs, num_contexts, n_trials])
 epoch_loss = np.zeros([n_epochs, num_contexts, n_trials])
 epoch_time = np.zeros([n_epochs, num_contexts, n_trials])
-all_states = np.zeros([num_contexts, 5, n_trials])
+all_states = np.zeros([n_epochs, num_contexts, 5, n_trials])
 all_lrs = np.zeros([n_epochs, num_contexts, n_trials-1])
+all_pes = np.zeros([n_epochs, num_contexts, n_trials-1])
 
 for epoch in range(n_epochs):
 
@@ -209,30 +233,26 @@ for epoch in range(n_epochs):
         epoch_loss[epoch, tt] = totloss
         epoch_time[epoch, tt] = tottime
 
-        print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, L {np.mean(totloss):.3f}, t {np.mean(tottime):.3f}")
+        all_states[epoch, tt] = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
+        all_pes[epoch,tt], all_lrs[epoch, tt] = get_lrs(all_states[epoch, tt])
 
-        states = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
-        _, all_lrs[epoch, tt] = get_lrs(states)
+        print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, L {np.mean(totloss):.3f}, t {np.mean(tottime):.3f}, lr {np.sum(all_lrs[epoch,tt]):.3f}")
 
-        if epoch == n_epochs-1:
-            #save last epochs behav data
-            all_states[tt] = env.render(epoch)
+# # Calculate the difference in learning rates between CP and OB conditions. Should be positive. 
+# cp_vs_ob = plot_analysis(epoch_G, epoch_loss, epoch_time, all_states[-1])
 
-# Calculate the difference in learning rates between CP and OB conditions. Should be positive. 
-cp_vs_ob = plot_analysis(epoch_G, epoch_loss, epoch_time, all_states)
+# print(cp_vs_ob)
 
-print(cp_vs_ob)
+# plt.figure(figsize=(3,2))
+# cp_ob = np.sum(all_lrs[:,0]-all_lrs[:,1],axis=1)
+# slope, intercept, r_value, p_value, std_err = linregress(np.arange(n_epochs), cp_ob)
+# plt.plot(cp_ob)
+# plt.plot(np.sum(all_lrs,axis=2))
+# plt.plot(slope * np.arange(n_epochs) + intercept, color='k', label=f'm={slope:.3f}, c={intercept:.2f}, r={r_value:.3f}, p={p_value:.3f}')
+# plt.xlabel('Epoch')
+# plt.ylabel('CP vs OB') # should become more positive.
+# plt.legend()
 
-plt.figure(figsize=(3,2))
-cp_ob = np.sum(all_lrs[:,0]-all_lrs[:,1],axis=1)
-slope, intercept, r_value, p_value, std_err = linregress(np.arange(n_epochs), cp_ob)
-plt.plot(cp_ob)
-plt.plot(slope * np.arange(n_epochs) + intercept, color='k', label=f'm={slope:.3f}, c={intercept:.2f}, r={r_value:.3f}, p={p_value:.3f}')
-plt.xlabel('Epoch')
-plt.ylabel('CP vs OB') # should become more positive.
-plt.legend()
-
-# save model only when the model shows learning rate for CP > learning rate for OB.
-# if cp_vs_ob > 50:
-#     model_path = f'./model_params/model_params_{max_displacement}_heli{train_cond}.pth'
-#     torch.save(model.state_dict(), model_path)
+np.savez(f'./state_data/{exptname}.npz', all_states, epoch_G, epoch_loss, epoch_time)
+print('Save States')
+print(exptname)

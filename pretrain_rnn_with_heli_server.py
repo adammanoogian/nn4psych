@@ -7,6 +7,25 @@ similar to Nassar et al. 2021
 and for additional analyses
 '''
 
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--epochs', type=int, required=False, help='epochs', default=10000)
+parser.add_argument('--trials', type=int, required=False, help='trials', default=200)
+
+parser.add_argument('--maxdisp', type=int, required=False, help='maxdisp', default=20)
+parser.add_argument('--rewardsize', type=int, required=False, help='rewardsize', default=10)
+
+parser.add_argument('--lr', type=float, required=False, help='lr', default=0.0001)
+parser.add_argument('--gamma', type=float, required=False, help='gamma', default=0.9)
+parser.add_argument('--nrnn', type=int, required=False, help='nrnn', default=64)
+parser.add_argument('--loadmodel', type=int, required=False, help='loadmodel', default=0)
+
+parser.add_argument('--seed', type=int, required=False, help='seed', default=0)
+
+args, unknown = parser.parse_known_args()
+print(args)
+
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -15,38 +34,38 @@ from torch.distributions import Categorical
 from tasks import PIE_CP_OB
 import matplotlib.pyplot as plt
 from torch.nn import init
-from utils_funcs import plot_analysis, get_lrs
+from behav_figures import plot_analysis, get_lrs, saveload
 from scipy.stats import linregress
 # Assuming that PIE_CP_OB is a gym-like environment
 # from your_environment_file import PIE_CP_OB
 
 # Env parameters
-n_epochs = 1000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
-n_trials = 100  # number of trials per epoch for each condition.
+n_epochs = args.epochs  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_trials = args.trials  # number of trials per epoch for each condition.
 max_time = 300  # number of time steps available for each trial. After max_time, the bag is dropped and the next trial begins after.
 
-train_epochs = n_epochs*0.5 #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
+train_epochs = n_epochs*0.8 #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
 no_train_epochs = []  # epoch in which the agent weights are not updated using gradient descent. To see if the model can use its dynamics to solve the task instead.
 contexts = ["change-point","oddball"] #"change-point","oddball"
 num_contexts = len(contexts)
 
 # Task parameters
-max_displacement = 15 # number of units each left or right moves.
+max_displacement = args.maxdisp # number of units each left or right moves.
 step_cost = 0 #-1/300  # penalize every additional step that the agent does not confirm. 
-reward_size = 7.5 # smaller value means a tighter margin to get reward.
+reward_size = args.rewardsize # smaller value means a tighter margin to get reward.
 alpha = 1
 
 # Model Parameters
 input_dim = 4+2  # set this based on your observation space. observation vector is length 4 [helicopter pos, bucket pos, bag pos, bag-bucket pos], context vector is length 2.  
-hidden_dim = 64  # size of RNN
+hidden_dim = args.nrnn  # size of RNN
 action_dim = 3  # set this based on your action space. 0 is left, 1 is right, 2 is confirm.
-learning_rate = 0.0001
-gamma = 0.9
-reset_memory = 100  # reset RNN activity after T trials
+learning_rate = args.lr
+gamma = args.gamma
+reset_memory = n_trials  # reset RNN activity after T trials
 bias = [0, 0, -1]
 beta_ent = 0.0
+seed = args.seed
 
-model_path = None#f'./model_params/pre_model_params_{max_displacement}_heliTrue.pth'
 
 # Actor-Critic Network with RNN
 class ActorCritic(nn.Module):
@@ -59,22 +78,22 @@ class ActorCritic(nn.Module):
         self.actor = nn.Linear(hidden_dim, action_dim)
         self.critic = nn.Linear(hidden_dim, 1)
 
-    def init_weights(self):
-        for name, param in self.rnn.named_parameters(): # initialize the input and rnn weights 
-            if 'weight_ih' in name:
-                # initialize input weights using 1/sqrt(fan_in). if 1/fan_in, more feature learning. 
-                init.normal_(param, mean=0, std=1/(self.input_dim**0.5 * self.hidden_dim))
-            elif 'weight_hh' in name:
-                # initialize rnn weights in a stable (gain=1.0) or chaotic regime (gain=1.5)
-                init.normal_(param, mean=0, std=self.gain / self.hidden_dim**0.5)
+    # def init_weights(self):
+    #     for name, param in self.rnn.named_parameters(): # initialize the input and rnn weights 
+    #         if 'weight_ih' in name:
+    #             # initialize input weights using 1/sqrt(fan_in). if 1/fan_in, more feature learning. 
+    #             init.normal_(param, mean=0, std=1/(self.input_dim**0.5 * self.hidden_dim))
+    #         elif 'weight_hh' in name:
+    #             # initialize rnn weights in a stable (gain=1.0) or chaotic regime (gain=1.5)
+    #             init.normal_(param, mean=0, std=self.gain / self.hidden_dim**0.5)
         
-        for layer in [self.actor, self.critic]:
-            for name, param in layer.named_parameters():
-                if 'weight' in name:
-                    # initialize input weights using 1/fan_in to induce feature learning 
-                    init.normal_(param, mean=0, std=1/self.hidden_dim)
-                elif 'bias' in name:
-                    init.constant_(param, 0)
+    #     for layer in [self.actor, self.critic]:
+    #         for name, param in layer.named_parameters():
+    #             if 'weight' in name:
+    #                 # initialize input weights using 1/fan_in to induce feature learning 
+    #                 init.normal_(param, mean=0, std=1/self.hidden_dim)
+    #             elif 'bias' in name:
+    #                 init.constant_(param, 0)
 
     def forward(self, x, hx):
         r, h = self.rnn(x, hx)
@@ -116,6 +135,7 @@ def train(env, model, optimizer,epoch, n_trials, gamma):
         while not done: #allows multiple actions in one trial (incrementally moving bag_position)
             # Forward pass
             actor_logits, critic_value, hx = model(state, hx)
+
             bias_tensor = torch.tensor(bias, dtype=actor_logits.dtype, device=actor_logits.device)
             actor_logits += bias_tensor
 
@@ -124,16 +144,14 @@ def train(env, model, optimizer,epoch, n_trials, gamma):
 
             log_probs.append(probs.log_prob(action))
             values.append(critic_value)
+
             entropies.append(probs.entropy())
 
             next_obs, reward, done = env.step(action.item())
-
             norm_next_obs = env.normalize_states(next_obs)
             next_state = np.concatenate([norm_next_obs,env.context])
-
             rewards.append(reward)
             totR += reward
-
             state = torch.FloatTensor(next_state).unsqueeze(0).unsqueeze(0)
 
             if done:
@@ -175,17 +193,11 @@ def train(env, model, optimizer,epoch, n_trials, gamma):
 
 
 model = ActorCritic(input_dim, hidden_dim, action_dim)
-if model_path is not None:
-    print('Load Model')
-    model.load_state_dict(torch.load(model_path))
-
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-epoch_G = np.zeros([n_epochs, num_contexts, n_trials])
-epoch_loss = np.zeros([n_epochs, num_contexts, n_trials])
-epoch_time = np.zeros([n_epochs, num_contexts, n_trials])
-all_states = np.zeros([num_contexts, 5, n_trials])
-all_lrs = np.zeros([n_epochs, num_contexts, n_trials-1])
+epoch_perf = np.zeros([n_epochs, num_contexts, 3, n_trials])
+epoch_states = np.zeros([n_epochs, num_contexts, 5, n_trials])
+store_params = []
 
 for epoch in range(n_epochs):
 
@@ -205,34 +217,51 @@ for epoch in range(n_epochs):
 
         totG, totloss,tottime = train(env, model, optimizer, epoch=epoch, n_trials=n_trials, gamma=gamma)
 
-        epoch_G[epoch, tt] = totG
-        epoch_loss[epoch, tt] = totloss
-        epoch_time[epoch, tt] = tottime
+        epoch_perf[epoch, tt] = np.array([totG, totloss,tottime])
+        epoch_states[epoch, tt] = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
+        _, lrs = get_lrs(epoch_states[epoch, tt])
 
-        print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, L {np.mean(totloss):.3f}, t {np.mean(tottime):.3f}")
+        print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, L {np.mean(totloss):.3f}, t {np.mean(tottime):.3f}, lr {np.sum(lrs):.3f}")
 
-        states = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
-        _, all_lrs[epoch, tt] = get_lrs(states)
+    if epoch == train_epochs-1:
+        store_params.append(model.state_dict())
+    if epoch == n_epochs-1:
+        store_params.append(model.state_dict())
 
-        if epoch == n_epochs-1:
-            #save last epochs behav data
-            all_states[tt] = env.render(epoch)
 
-# Calculate the difference in learning rates between CP and OB conditions. Should be positive. 
-cp_vs_ob = plot_analysis(epoch_G, epoch_loss, epoch_time, all_states)
+trials = epoch_states.shape[-1]
+epochs = epoch_states.shape[0]
+train_epochs = int(epoch_states.shape[0]*0.8)
+test_epochs = epoch_states.shape[0] - train_epochs
 
-print(cp_vs_ob)
+lrs = np.zeros([test_epochs, 2, trials-1])
+pes = np.zeros([test_epochs, 2, trials-1])
+scores = np.zeros(test_epochs)
+for te in range(test_epochs):
 
-plt.figure(figsize=(3,2))
-cp_ob = np.sum(all_lrs[:,0]-all_lrs[:,1],axis=1)
-slope, intercept, r_value, p_value, std_err = linregress(np.arange(n_epochs), cp_ob)
-plt.plot(cp_ob)
-plt.plot(slope * np.arange(n_epochs) + intercept, color='k', label=f'm={slope:.3f}, c={intercept:.2f}, r={r_value:.3f}, p={p_value:.3f}')
-plt.xlabel('Epoch')
-plt.ylabel('CP vs OB') # should become more positive.
-plt.legend()
+    for c in range(2):
+        states = epoch_states[train_epochs + te, c]
+        true_state = states[2]  # bag position
+        predicted_state = states[1]  # bucket position
+        pe = abs((true_state - predicted_state))[:-1]
 
-# save model only when the model shows learning rate for CP > learning rate for OB.
-# if cp_vs_ob > 50:
-#     model_path = f'./model_params/model_params_{max_displacement}_heli{train_cond}.pth'
-#     torch.save(model.state_dict(), model_path)
+        update = abs(np.diff(predicted_state))
+
+        pes[te, c] = pe
+        lrs[te, c] = np.where(pe != 0, update / pe, 0)
+
+    scores[te] = np.mean(lrs[te, 0]) - np.mean(lrs[te, 1])
+
+slope, intercept, r_value, p_value, std_err = linregress(np.arange(test_epochs), scores)
+
+
+epochs = np.array([train_epochs, n_epochs-train_epochs],dtype=int)
+helis = [True, False]
+
+if slope >0.0 and r_value>0 and p_value< 0.0001:
+    for i in range(2):
+        exptname = f"{n_trials}t_{max_displacement}md_{reward_size}rz_{hidden_dim}n_{gamma}g_{learning_rate}lr_{seed}s"
+        print(exptname)
+        torch.save(store_params[i], f'./model_params/{helis[i]}heli_{epochs[i]}e_{exptname}.pth')
+        
+    saveload(f'./best_data/{slope:.3f}_{exptname}', [epoch_perf, epoch_states],'save')
