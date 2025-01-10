@@ -21,11 +21,11 @@ from scipy.stats import linregress
 # from your_environment_file import PIE_CP_OB
 
 # Env parameters
-n_epochs = 5000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_epochs = 10000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
 n_trials = 100  # number of trials per epoch for each condition.
 max_time = 300  # number of time steps available for each trial. After max_time, the bag is dropped and the next trial begins after.
 
-train_epochs = n_epochs #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
+train_epochs = n_epochs*0.5 #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
 no_train_epochs = []  # epoch in which the agent weights are not updated using gradient descent. To see if the model can use its dynamics to solve the task instead.
 contexts = ["change-point","oddball"] #"change-point","oddball"
 num_contexts = len(contexts)

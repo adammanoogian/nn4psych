@@ -141,7 +141,7 @@ class BayesianModel:
         # 0 = trial index, 1 = bucket_pos, 2 = bag_pos, 3 = helicopter_pos, 4 = hazard_trigger
         states = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
            
-        np.save("data/bayesian_models/model_predictions.npy", states)
+        np.save("./data/bayesian_models/model_predictions.npy", states)
         return states
 
 

@@ -255,10 +255,8 @@ class PIE_CP_OB:
         self.max_disp = max_displacement #changed to 1 from 30
         self.reward_size = reward_size
         self.step_cost = step_cost
-        self.alpha = 1
-
-        self.velocity = 0
         self.alpha = alpha
+        self.velocity = 0
 
         # Task type: "change-point" or "oddball"
         self.task_type = condition
@@ -327,7 +325,7 @@ class PIE_CP_OB:
 
         return self.obs, self.done
     
-    def step(self, action, direct_action):
+    def step(self, action, direct_action=None):
         # idea is to have 2 separate phases within each trial. Phase 1: allow the agent to move the bucket to a desired position. Phase 2: press confirmation button to start bag drop
         #adding direct action to allow bayesian agent to choose action directly
         self.time += 1
@@ -393,6 +391,7 @@ class PIE_CP_OB:
             # penalize if agent doesnt choose to confirm
             if self.time >= self.max_time-1:
                 self.reward += self.step_cost
+                # self.reward = self.step_cost
 
             self.trial += 1
             self.done = True

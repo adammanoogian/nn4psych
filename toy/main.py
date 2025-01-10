@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from model import res_ac
 
 # task
-epochs = 1000
+epochs = 10000
 trials = 100
 max_time = 300
 train_cond = False # show helicopter?
@@ -53,10 +53,12 @@ for epoch in range(epochs):
 
                 obs, reward, done = env.step(A)
                 totR += reward
+                # print(agent.aprob, A, env.bucketpos)
 
                 state = np.concatenate([obs, env.context])[:,None]
                 r = agent.get_rnn(state)
                 v = agent.get_value(r)
+                A = agent.get_action(r, bias_action)
 
                 td = reward + gamma * v[0,0] - prev_v[0,0]
                 totloss += td**2
