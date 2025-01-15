@@ -31,11 +31,11 @@ device = torch.device("cpu")
 
 
 # Env parameters
-n_epochs = 2000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_epochs = 1000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
 n_trials = 200  # number of trials per epoch for each condition.
 max_time = 300  # number of time steps available for each trial. After max_time, the bag is dropped and the next trial begins after.
 
-train_epochs = n_epochs*0.25 #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
+train_epochs = n_epochs*0.5 #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
 no_train_epochs = []  # epoch in which the agent weights are not updated using gradient descent. To see if the model can use its dynamics to solve the task instead.
 contexts = ["change-point","oddball"] #"change-point","oddball"
 num_contexts = len(contexts)
@@ -109,12 +109,11 @@ def train(env, model, optimizer,epoch, n_trials, gamma):
     hx = (torch.randn(1, 1, hidden_dim) * 0.00).to(device)
     for trial in range(n_trials):
 
-        obs, done = env.reset()  # reset env at the start of every trial to change helocopter pos based on hazard rate
+        next_obs, done = env.reset()  # reset env at the start of every trial to change helocopter pos based on hazard rate
 
-        norm_obs = env.normalize_states(obs)  # normalize vector to bound between something resonable for the RNN to handle
-
-        state = np.concatenate([norm_obs,env.context])
-        state = torch.FloatTensor(state).unsqueeze(0).unsqueeze(0).to(device)  # add batch and seq dim
+        norm_next_obs = env.normalize_states(next_obs)  # normalize vector to bound between something resonable for the RNN to handle
+        next_state = np.concatenate([norm_next_obs,env.context])
+        next_state = torch.FloatTensor(next_state).unsqueeze(0).unsqueeze(0).to(device)  # add batch and seq dim
 
         # Detach hx to prevent backpropagation through the entire history
         hx = hx.detach()
@@ -129,27 +128,28 @@ def train(env, model, optimizer,epoch, n_trials, gamma):
         totR = 0 
 
         while not done: #allows multiple actions in one trial (incrementally moving bag_position)
-            # Forward pass
-            actor_logits, critic_value, hx = model(state, hx)
+
+            # choose action given state
+            actor_logits, critic_value, hx = model(next_state, hx)
             bias_tensor = torch.tensor(bias, dtype=actor_logits.dtype, device=actor_logits.device)
             actor_logits += bias_tensor
-
             probs = Categorical(logits=actor_logits)
             action = probs.sample()
 
+            # take action in env
+            next_obs, reward, done = env.step(action.item())
+
+            # log state, action, reward
             log_probs.append(probs.log_prob(action))
             values.append(critic_value)
             entropies.append(probs.entropy())
-
-            next_obs, reward, done = env.step(action.item())
-
-            norm_next_obs = env.normalize_states(next_obs)
-            next_state = np.concatenate([norm_next_obs,env.context])
-
             rewards.append(reward)
             totR += reward
 
-            state = torch.FloatTensor(next_state).unsqueeze(0).unsqueeze(0).to(device)
+            # prep next state
+            norm_next_obs = env.normalize_states(next_obs)
+            next_state = np.concatenate([norm_next_obs,env.context])
+            next_state = torch.FloatTensor(next_state).unsqueeze(0).unsqueeze(0).to(device)
 
         
         # print("trial:", env.trial, "time:", env.time, "obs:", obs, "actor:", actor_logits, "action:", action, "reward:", reward, "next_obs:", next_obs)
