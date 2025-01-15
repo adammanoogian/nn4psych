@@ -122,9 +122,9 @@ class Heli_Bag:
 
             # Compute the new observation
             if self.train_cond:
-                self.obs = np.array([self.helipos, self.bucketpos, self.bagpos, np.array([0])], dtype=np.float32)[:,0] 
+                self.obs = np.array([self.helipos, self.bucketpos, self.bagpos, self.pred_error], dtype=np.float32)[:,0] 
             else:
-                self.obs = np.array([np.array([0]), self.bucketpos, self.bagpos, np.array([0])], dtype=np.float32)[:,0]   # include bucket and bag position. hide pre
+                self.obs = np.array([np.array([0]), self.bucketpos, self.bagpos, self.pred_error], dtype=np.float32)[:,0]   # include bucket and bag position. hide pre
             
             df = ((self.bagpos - self.bucketpos)/self.reward_size)**2
             self.reward = np.exp(-0.5*df) #* 1/(self.reward_size * np.sqrt(2*np.pi))

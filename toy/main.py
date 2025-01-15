@@ -6,12 +6,12 @@ import matplotlib.pyplot as plt
 from model import res_ac
 
 # task
-epochs = 10000
-trials = 100
+epochs = 1000
+trials = 200
 max_time = 300
 train_cond = False # show helicopter?
 tasks = ["change-point"]
-alpha = 0.2
+alpha = 0.5
 
 # model 
 ninput = 4+2

@@ -7,8 +7,8 @@ class res_ac:
         self.nact = nact
         self.ncri = 1
         self.gamma = gamma
-        self.gain = 1.0
-        self.tau = 50
+        self.gain = 1.5
+        self.tau = 10
         self.dt = 1 # 1 millisecond
         self.cp = 0.1
         self.alpha = self.dt/self.tau

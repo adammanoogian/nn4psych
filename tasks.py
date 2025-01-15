@@ -230,8 +230,8 @@ class ContinuousPredictiveInferenceEnv(gym.Env):
 
 
 class PIE_CP_OB:
-    def __init__(self, condition="change-point", total_trials=100,max_time=300, train_cond=False, 
-                 max_displacement=10, reward_size=20, step_cost=0.0, alpha=1):
+    def __init__(self, condition="change-point", total_trials=200,max_time=300, train_cond=False, 
+                 max_displacement=15, reward_size=7.5, step_cost=0.0, alpha=1):
         super(PIE_CP_OB, self).__init__()
         
         # Observation: currentCurrent bucket position, last bag position, and prediction error
@@ -249,7 +249,7 @@ class PIE_CP_OB:
         # Initialize variables
         self.helicopter_pos =  np.random.randint(self.min_obs_size+self.bound_helicopter, self.max_obs_size-self.bound_helicopter)
         self.bucket_pos = np.random.randint(self.min_obs_size+self.bound_helicopter, self.max_obs_size-self.bound_helicopter)
-        self.pred_error = copy.copy(self.hide_variable)
+        self.pred_error = 0
         self.sample_bag_pos = self._generate_bag_position(self.helicopter_pos)
         self.reward = 0
         self.max_disp = max_displacement #changed to 1 from 30
@@ -289,7 +289,7 @@ class PIE_CP_OB:
     
     def normalize_states(self,x):
         # normalize states to be between -1 to 1 to feed to network
-        return x/100
+        return x/300
 
     def reset(self):
         # reset at the start of every trial. Observation inclues: helicopter 
@@ -390,8 +390,8 @@ class PIE_CP_OB:
 
             # penalize if agent doesnt choose to confirm
             if self.time >= self.max_time-1:
-                self.reward += self.step_cost
-                # self.reward = self.step_cost
+                # self.reward += self.step_cost
+                self.reward = self.step_cost
 
             self.trial += 1
             self.done = True
@@ -451,22 +451,24 @@ if __name__ == "__main__":
     #     env.close()
 
 
-    trials = 100
-    train_cond = True
+    trials = 10
+    train_cond = False
     max_time = 300
     max_displacement = 15
+    reward_size = 15
     alpha = 1
-    for task_type in ["change-point", "oddball"]:
+
+    for task_type in ["change-point"]:
         env = PIE_CP_OB(condition=task_type,max_time=max_time, 
                         total_trials=trials, train_cond=train_cond,
-                        max_displacement=max_displacement, alpha=alpha) #DiscretePredictiveInferenceEnv(condition=task_type)
+                        max_displacement=max_displacement, alpha=alpha, reward_size=reward_size)
         
         for trial in range(trials):
             obs, done = env.reset()
             total_reward = 0
 
             while not done:
-                action = env.action_space.sample()  # For testing, we use random actions
+                action = np.random.choice(np.arange(3), 1)  # For testing, we use random actions
                 next_obs, reward, done = env.step(action)
                 total_reward += reward
 
@@ -474,6 +476,6 @@ if __name__ == "__main__":
 
                 obs = copy.copy(next_obs)
 
-        states = env.render()
-        np.save(f'./data/env_data_{task_type}', states)
-        # plt.hist(np.array(env.bucket_positions).reshape(-1), bins=np.linspace(0,300,21))
+    states = env.render()
+    # np.save(f'./data/env_data_{task_type}', states)
+    # plt.hist(np.array(env.bucket_positions).reshape(-1), bins=np.linspace(0,300,21))
