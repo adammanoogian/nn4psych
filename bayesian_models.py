@@ -6,8 +6,8 @@ Fit Bayesian models to the RNN-AC simulated data
 import matplotlib.pyplot as plt
 import numpy as np
 #import pymc as pm
-#import pytensor
-#import pytensor.tensor as pt
+import pytensor
+import pytensor.tensor as pt
 import scipy
 import scipy.stats as stats
 import utils
@@ -57,7 +57,25 @@ class BayesianModel:
             
 
         return -np.sum(logp_actions[1:]) 
+    
+    def get_pytensor_llik(self, Ω, τ):
+        """
+        PyTensor function estimate log-likelihood 
+        for use with PyMC sampling.
+        """
+        def step(delta, agent_upd, o, t):
+            logp, _ = self.flexible_normative_model(
+                Ω=o, τ=t, δ=delta, agent_update=agent_upd, context=self.model_type
+            )
+            return logp
 
+        logp_series, _ = pytensor.scan(
+            fn=step,
+            sequences=[self.prediction_error, self.update],
+            non_sequences=[Ω, τ]
+        )
+        return pt.sum(logp_series[1:])
+        
 
     def flexible_normative_model(
         self,
@@ -75,7 +93,9 @@ class BayesianModel:
         δ: float = .5,       #δ = prediction error
         agent_update: float = 50,  #participant update
         context: str = "change_point"): 
-
+        """
+        Flexible normative model that can be used for both changepoint and oddball conditions.
+        """
 
         #eq 4 - needs hardset priors in
         U_val = stats.uniform.pdf(δ, 0, 300) ** LW
@@ -121,8 +141,7 @@ class BayesianModel:
         self.model_name = model_name
         self.condition = condition
 
-        env = PIE_CP_OB(condition=self.condition, total_trials=self.total_trials, max_time=300,
-                        train_cond=False, max_displacement=10, reward_size=20, step_cost=0.0, alpha=1)
+        env = PIE_CP_OB(condition=self.condition, total_trials=self.total_trials)
         #all_states[epoch, tt] = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
         obs, _ = env.reset()
         pred_error = 0
