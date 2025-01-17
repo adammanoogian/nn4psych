@@ -624,7 +624,7 @@ class PIE_CP_OB_v2:
 # Run
 if __name__ == "__main__":
     trials = 10
-    train_cond = True
+    train_cond = False
     max_time = 300
     max_displacement = 15
     reward_size = 5
@@ -642,9 +642,12 @@ if __name__ == "__main__":
             while not done:
                 action = np.random.choice(np.arange(3), 1)  # For testing, we use random actions
                 next_obs, reward, done = env.step(action)
+                norm_next_obs = env.normalize_states(next_obs)  # normalize vector to bound between something resonable for the RNN to handle
+                next_state = np.round(np.concatenate([norm_next_obs,env.context]),5)
+
                 total_reward += reward
 
-                print(env.trial, env.time, action, next_obs, reward, done)
+                print(env.trial, env.time, action, next_state, reward, done)
 
     states = env.render()
     # np.save(f'./data/env_data_{task_type}', states)

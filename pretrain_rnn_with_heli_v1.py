@@ -28,22 +28,20 @@ from scipy.ndimage import uniform_filter1d
 # else:
 device = torch.device("cpu")
 
-
-
 # Env parameters
-n_epochs = 1000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_epochs = 2000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
 n_trials = 200  # number of trials per epoch for each condition.
-max_time = 300  # number of time steps available for each trial. After max_time, the bag is dropped and the next trial begins after.
 
-train_epochs = n_epochs*0.5 #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
+train_epochs = n_epochs*0.99 #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
 no_train_epochs = []  # epoch in which the agent weights are not updated using gradient descent. To see if the model can use its dynamics to solve the task instead.
 contexts = ["change-point","oddball"] #"change-point","oddball"
 num_contexts = len(contexts)
 
 # Task parameters
 max_displacement = 15 # number of units each left or right moves.
+max_time = 300
 step_cost = 0 #-1/300  # penalize every additional step that the agent does not confirm. 
-reward_size = 5 # smaller value means a tighter margin to get reward.
+reward_size = 7.5 # smaller value means a tighter margin to get reward.
 alpha = 1
 
 # Model Parameters
@@ -51,7 +49,7 @@ input_dim = 4+2  # set this based on your observation space. observation vector 
 hidden_dim = 64  # size of RNN
 action_dim = 3  # set this based on your action space. 0 is left, 1 is right, 2 is confirm.
 params = hidden_dim*(input_dim+hidden_dim + action_dim+1)
-learning_rate = 1/params
+learning_rate = 0.0001
 gamma = 0.95
 reset_memory = n_trials  # reset RNN activity after T trials
 bias = [0, 0, 0]
@@ -236,7 +234,9 @@ for epoch in range(n_epochs):
         idx = all_pes[epoch,tt]>max_displacement
         all_scores[epoch, tt] = np.trapz(all_lrs[epoch, tt][idx], all_pes[epoch,tt][idx])
 
-        print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, t {np.mean(tottime):.3f}, s {np.mean(all_scores[epoch, tt]):.3f}")
+        perf = abs(all_states[epoch, tt, 3] - all_states[epoch, tt,1])
+
+        print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, d {np.mean(perf):.3f}, t {np.mean(tottime):.3f}, s {np.mean(all_scores[epoch, tt]):.3f}")
 
         if epoch == n_epochs-1 or epoch == train_epochs-1:
             #plot last epochs behav data
@@ -276,6 +276,7 @@ plt.tight_layout()
 plt.figure(figsize=(3*2,2))
 gap = 10
 idxs = [int(train_epochs)-1, int(n_epochs)-1]
+titles = ['With Heli', 'Without Heli']
 colors = ['orange', 'brown']
 for i,id in enumerate(idxs):
     plt.subplot(1,2,i+1)
@@ -301,5 +302,6 @@ for i,id in enumerate(idxs):
 
     plt.xlabel('Prediction Error')
     plt.ylabel('Learning Rate')
+    plt.title(titles[i])
 plt.tight_layout()
 
