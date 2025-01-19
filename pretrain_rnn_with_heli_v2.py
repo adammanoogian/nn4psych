@@ -15,7 +15,7 @@ from torch.distributions import Categorical
 from tasks import PIE_CP_OB_v2
 import matplotlib.pyplot as plt
 from torch.nn import init
-from utils_funcs import plot_analysis, get_lrs
+from utils_funcs import plot_analysis, get_lrs_v2, saveload
 from scipy.stats import linregress
 from scipy.ndimage import uniform_filter1d
 # Assuming that PIE_CP_OB is a gym-like environment
@@ -31,7 +31,7 @@ device = torch.device("cpu")
 
 
 # Env parameters
-n_epochs = 4000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_epochs = 200  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
 n_trials = 200  # number of trials per epoch for each condition.
 
 train_epochs = n_epochs*0.5 #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
@@ -57,9 +57,13 @@ reset_memory = n_trials  # reset RNN activity after T trials
 bias = [0, 0, 0]
 beta_ent = 0.0
 
-model_path = None#f'./model_params/pre_model_params_{max_displacement}_heliTrue.pth'
+seed = 2025
+np.random.seed(seed)
+torch.manual_seed(seed)
 
-exptname = f"{n_trials}t_{max_displacement}md_{reward_size}rz_{hidden_dim}n_{gamma}g_{learning_rate}lr"
+model_path = None
+
+exptname = f"v2_{hidden_dim}n_{gamma}g_{learning_rate}lr_{max_displacement}md_{reward_size}rz_{seed}s"
 print(exptname)
 
 # Actor-Critic Network with RNN
@@ -198,13 +202,10 @@ if model_path is not None:
     model.load_state_dict(torch.load(model_path))
 
 # store variables
-epoch_G = np.zeros([n_epochs, num_contexts, n_trials])
-epoch_loss = np.zeros([n_epochs, num_contexts, n_trials])
-epoch_time = np.zeros([n_epochs, num_contexts, n_trials])
+epoch_perf = np.zeros([n_epochs, num_contexts, 4, n_trials])
 all_states = np.zeros([n_epochs, num_contexts, 5, n_trials])
 all_lrs = np.zeros([n_epochs, num_contexts, n_trials-1])
 all_pes = np.zeros([n_epochs, num_contexts, n_trials-1])
-all_scores = np.zeros([n_epochs,num_contexts])
 
 
 # training loop
@@ -227,18 +228,13 @@ for epoch in range(n_epochs):
 
         totG, totloss,tottime = train(env, model, optimizer, epoch=epoch, n_trials=n_trials, gamma=gamma)
 
-        epoch_G[epoch, tt] = totG
-        epoch_loss[epoch, tt] = totloss
-        epoch_time[epoch, tt] = tottime
-
+        # save performance
         all_states[epoch, tt] = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
-        all_pes[epoch,tt], all_lrs[epoch, tt] = get_lrs(all_states[epoch, tt])
-        idx = all_pes[epoch,tt]>max_displacement
-        all_scores[epoch, tt] = np.trapz(all_lrs[epoch, tt][idx], all_pes[epoch,tt][idx])
-
+        all_pes[epoch,tt], all_lrs[epoch, tt] = get_lrs_v2(all_states[epoch, tt])
         perf = abs(all_states[epoch, tt, 3] - all_states[epoch, tt,1])
+        epoch_perf[epoch,tt] = np.array([totG, totloss, tottime, perf])
 
-        print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, d {np.mean(perf):.3f}, t {np.mean(tottime):.3f}, s {np.mean(all_scores[epoch, tt]):.3f}")
+        print(f"Epoch {epoch}, Task {task_type}, G {np.mean(totG):.3f}, d {np.mean(epoch_perf[epoch,tt, 3]):.3f}, s {np.mean(all_lrs[epoch, tt]):.3f}")
 
         if epoch == n_epochs-1 or epoch == train_epochs-1:
             #plot last epochs behav data
@@ -246,64 +242,86 @@ for epoch in range(n_epochs):
 
 
     perf = np.mean(abs(all_states[epoch,:, 3] - all_states[epoch,:,1]))
-    if epoch == train_epochs-1 and perf < 15:
+    if epoch == train_epochs-1 and perf < 32:
         store_params.append(model.state_dict())
         # model_path = f'./model_params/Trueheli_{epoch+1}e_{exptname}.pth'
         # torch.save(model.state_dict(), model_path)
 
-    if epoch == n_epochs-1 and perf < 15:
+    if epoch == n_epochs-1 and len(store_params)>0:
         store_params.append(model.state_dict())
         # model_path = f'./model_params/Falseheli_{epoch+1}e_{exptname}.pth'
         # torch.save(model.state_dict(), model_path)
 
 
-# Calculate the difference in learning rates between CP and OB conditions. Should be positive. 
-cp_vs_ob = plot_analysis(epoch_G, epoch_loss, epoch_time, all_states[-1])
 
-plt.figure(figsize=(3,2*2))
-scores = all_scores[:,0] - all_scores[:,1]
-plt.subplot(311)
-plt.plot(scores)
+colors = ['orange', 'brown']
+labels = ['CP', 'OB']
+plt.figure(figsize=(3*3,2*2))
+
+plt.subplot(231)
+for i in range(2):
+    plt.plot(np.mean(epoch_perf[:,i,3],axis=1), color=colors[i], label=labels[i])
 plt.xlabel('Epoch')
-plt.ylabel('CP vs OB') # should become more positive.
+plt.ylabel('Heli - Bucket error') # should become more positive.
+plt.axhline(32, color='r')
+plt.axvline(train_epochs, color='b')
 
-perf = np.mean(abs(all_states[:,:, 3] - all_states[:,:,1]),axis=2)
-plt.subplot(312)
-plt.plot(perf)
+plt.subplot(232)
+for i in range(2):
+    plt.plot(np.mean(epoch_perf[:,i, 0],axis=1), color=colors[i], label=labels[i])
 plt.xlabel('Epoch')
-plt.ylabel('Heli-Bucket') # should become more positive.
-plt.axhline(max_displacement*2, color='k')
-plt.tight_layout()
+plt.ylabel('G')
+plt.axvline(train_epochs, color='b')
 
-plt.figure(figsize=(3*2,2))
-gap = 10
+
+plt.subplot(233)
+for i in range(2):
+    plt.plot(np.mean(epoch_perf[:,i,2],axis=1), color=colors[i], label=labels[i])
+plt.xlabel('Epoch')
+plt.ylabel('Time to Confirm')
+plt.axvline(train_epochs, color='b')
+
+scores = np.mean(all_lrs[:,0],axis=1) - np.mean(all_lrs[:,1],axis=1)
+plt.subplot(236)
+plt.plot(scores, color='tab:green')
+slope, intercept, r_value, p_value, std_err = linregress(np.arange(n_epochs), scores)
+plt.plot(slope*np.arange(n_epochs)+intercept, color='k')
+plt.xlabel('Epoch')
+plt.ylabel('Avg LR Diff') # should become more positive.
+plt.title(f'm={slope:.3f}, R={r_value:.3f}, p={p_value:.3f}')
+
 idxs = [int(train_epochs)-1, int(n_epochs)-1]
 titles = ['With Heli', 'Without Heli']
-colors = ['orange', 'brown']
-for i,id in enumerate(idxs):
-    plt.subplot(1,2,i+1)
-    for c in range(2):
-        pes = []
-        lrs = []
-        for s,states in enumerate(all_states[id-gap:id]):
-            pe, lr = get_lrs(states[c])
-            pes.append(pe)
-            lrs.append(lr)
-        pes = np.array(pes).reshape(-1)
-        lrs = np.array(lrs).reshape(-1)
 
-        sorted_indices = np.argsort(pes)
-        prediction_error_sorted = pes[sorted_indices]
-        learning_rate_sorted = lrs[sorted_indices]
-        idx = np.argmax(prediction_error_sorted>15)
+for i,id in enumerate(idxs):
+
+    plt.subplot(2,3,i+4)
+    for c in range(2):
+
+        pes = all_pes[id, c]
+        lrs = all_lrs[id,c]
+
+        pes = pes[pes>=0]
+        lrs = lrs[lrs>=0]
+
+        plt.scatter(pes, lrs, color=colors[c],alpha=0.1, s=2)
         
-        window_size = 15
-        smoothed_learning_rate = uniform_filter1d(learning_rate_sorted, size=window_size)
-        plt.plot(prediction_error_sorted[idx:], smoothed_learning_rate[idx:], color=colors[c])
-        print(np.trapz(smoothed_learning_rate[idx:], prediction_error_sorted[idx:]))
+        window_size = 100
+        smoothed_learning_rate = uniform_filter1d(lrs, size=window_size)
+        plt.plot(pes, smoothed_learning_rate, color=colors[c], linewidth=5)
+        print(np.mean(smoothed_learning_rate))
 
     plt.xlabel('Prediction Error')
     plt.ylabel('Learning Rate')
     plt.title(titles[i])
+
 plt.tight_layout()
 
+
+perf = np.mean(abs(all_states[int(train_epochs),:, 3] - all_states[int(train_epochs),:,1]))
+print(perf)
+if perf<32:
+    plt.savefig(f'./figs/{exptname}.png')
+    print('Fig saved')
+    saveload('./state_data/'+exptname, [epoch_perf, all_states, all_pes, all_lrs, store_params], 'save')
+    print('Data saved')
