@@ -55,3 +55,17 @@ def get_lrs_v2(states):
     return pad_pes, pad_lrs
 
 
+def plot_behavior(states, context,epoch, ax=None):
+    if ax is None:
+        plt.figure(figsize=(10, 6))
+    trials, bucket_positions, bag_positions, helicopter_positions, hazard_triggers = states
+    # plt.plot(self.trials, self.bucket_positions, label='Bucket Position', color='blue')
+    plt.plot(trials, bag_positions, label='Bag', color='red', marker='o', linestyle='-.', alpha=0.5, ms=2)
+    plt.plot(trials, helicopter_positions, label='Heli', color='green', linestyle='--',ms=2)
+    plt.plot(trials, bucket_positions, label='Bucket', color='b',marker='o', linestyle='-.', alpha=0.5,ms=2)
+
+    plt.ylim(-10, 310)  # Set y-axis limit from 0 to 300
+    plt.xlabel('Trial')
+    plt.ylabel('Position')
+    plt.title(f"{context}, E:{epoch}")
+    plt.legend(fontsize=6)

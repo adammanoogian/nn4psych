@@ -15,7 +15,7 @@ from torch.distributions import Categorical
 from tasks import PIE_CP_OB_v2
 import matplotlib.pyplot as plt
 from torch.nn import init
-from utils_funcs import plot_analysis, get_lrs_v2, saveload
+from utils_funcs import get_lrs_v2, saveload, plot_behavior
 from scipy.stats import linregress
 from scipy.ndimage import uniform_filter1d
 # Assuming that PIE_CP_OB is a gym-like environment
@@ -31,10 +31,11 @@ device = torch.device("cpu")
 
 
 # Env parameters
-n_epochs = 200  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_epochs = 100  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
 n_trials = 200  # number of trials per epoch for each condition.
+trratio = 0.5
 
-train_epochs = n_epochs*0.5 #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
+train_epochs = n_epochs*trratio #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
 no_train_epochs = []  # epoch in which the agent weights are not updated using gradient descent. To see if the model can use its dynamics to solve the task instead.
 contexts = ["change-point","oddball"] #"change-point","oddball"
 num_contexts = len(contexts)
@@ -63,7 +64,7 @@ torch.manual_seed(seed)
 
 model_path = None
 
-exptname = f"v2_{hidden_dim}n_{gamma}g_{learning_rate}lr_{max_displacement}md_{reward_size}rz_{seed}s"
+exptname = f"v2_{n_epochs}e_{trratio}r_{hidden_dim}n_{gamma}g_{learning_rate}lr_{max_displacement}md_{reward_size}rz_{seed}s"
 print(exptname)
 
 # Actor-Critic Network with RNN
@@ -256,9 +257,9 @@ for epoch in range(n_epochs):
 
 colors = ['orange', 'brown']
 labels = ['CP', 'OB']
-plt.figure(figsize=(3*3,2*2))
+plt.figure(figsize=(3*2,2*5))
 
-plt.subplot(231)
+plt.subplot(521)
 for i in range(2):
     plt.plot(np.mean(epoch_perf[:,i,3],axis=1), color=colors[i], label=labels[i])
 plt.xlabel('Epoch')
@@ -266,7 +267,7 @@ plt.ylabel('Heli - Bucket error') # should become more positive.
 plt.axhline(32, color='r')
 plt.axvline(train_epochs, color='b')
 
-plt.subplot(232)
+plt.subplot(522)
 for i in range(2):
     plt.plot(np.mean(epoch_perf[:,i, 0],axis=1), color=colors[i], label=labels[i])
 plt.xlabel('Epoch')
@@ -274,7 +275,7 @@ plt.ylabel('G')
 plt.axvline(train_epochs, color='b')
 
 
-plt.subplot(233)
+plt.subplot(523)
 for i in range(2):
     plt.plot(np.mean(epoch_perf[:,i,2],axis=1), color=colors[i], label=labels[i])
 plt.xlabel('Epoch')
@@ -282,7 +283,7 @@ plt.ylabel('Time to Confirm')
 plt.axvline(train_epochs, color='b')
 
 scores = np.mean(all_lrs[:,0],axis=1) - np.mean(all_lrs[:,1],axis=1)
-plt.subplot(236)
+plt.subplot(524)
 plt.plot(scores, color='tab:green')
 slope, intercept, r_value, p_value, std_err = linregress(np.arange(n_epochs), scores)
 plt.plot(slope*np.arange(n_epochs)+intercept, color='k')
@@ -293,9 +294,15 @@ plt.title(f'm={slope:.3f}, R={r_value:.3f}, p={p_value:.3f}')
 idxs = [int(train_epochs)-1, int(n_epochs)-1]
 titles = ['With Heli', 'Without Heli']
 
+j=5
+for c in range(2):
+    for i,id in enumerate(idxs):
+        plot_behavior(all_states[id, c], contexts[c], id, ax=plt.subplot(5,2,j))
+        j+=1
+
 for i,id in enumerate(idxs):
 
-    plt.subplot(2,3,i+4)
+    plt.subplot(5,2,i+9)
     for c in range(2):
 
         pes = all_pes[id, c]
