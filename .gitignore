@@ -5,3 +5,5 @@ __pycache__
 *.pkl*
 *npy
 **.DS_Store
+./state_data
+./figs

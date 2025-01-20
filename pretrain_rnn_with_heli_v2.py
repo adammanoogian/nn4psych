@@ -18,6 +18,7 @@ from torch.nn import init
 from utils_funcs import get_lrs_v2, saveload, plot_behavior
 from scipy.stats import linregress
 from scipy.ndimage import uniform_filter1d
+from copy import deepcopy
 # Assuming that PIE_CP_OB is a gym-like environment
 # from your_environment_file import PIE_CP_OB
 
@@ -33,7 +34,7 @@ device = torch.device("cpu")
 # Env parameters
 n_epochs = 100  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
 n_trials = 200  # number of trials per epoch for each condition.
-trratio = 0.5
+trratio = 0.6
 
 train_epochs = n_epochs*trratio #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
 no_train_epochs = []  # epoch in which the agent weights are not updated using gradient descent. To see if the model can use its dynamics to solve the task instead.
@@ -78,14 +79,19 @@ class ActorCritic(nn.Module):
         self.actor = nn.Linear(hidden_dim, action_dim)
         self.critic = nn.Linear(hidden_dim, 1)
 
+        self.init_weights()
+
     def init_weights(self):
         for name, param in self.rnn.named_parameters(): # initialize the input and rnn weights 
             if 'weight_ih' in name:
                 # initialize input weights using 1/sqrt(fan_in). if 1/fan_in, more feature learning. 
-                init.normal_(param, mean=0, std=1/(self.input_dim))
+                init.normal_(param, mean=0, std=1/(self.input_dim**0.5))
             elif 'weight_hh' in name:
                 # initialize rnn weights in a stable (gain=1.0) or chaotic regime (gain=1.5)
                 init.normal_(param, mean=0, std=self.gain / self.hidden_dim**0.5)
+            elif 'bias_ih' in name or 'bias_hh' in name:
+                # Set RNN biases to zero
+                init.constant_(param, 0)
         
         for layer in [self.actor, self.critic]:
             for name, param in layer.named_parameters():
@@ -194,7 +200,7 @@ def train(env, model, optimizer,epoch, n_trials, gamma):
 # initialize untrained model
 model = ActorCritic(input_dim, hidden_dim, action_dim).to(device)
 store_params = []
-store_params.append(model.state_dict())
+store_params.append(deepcopy(model.state_dict()))
 optimizer = optim.Adam(model.parameters(), lr=learning_rate) # initialize optimizer for training
 
 # load pretrained, if any
@@ -244,20 +250,18 @@ for epoch in range(n_epochs):
 
     perf = np.mean(abs(all_states[epoch,:, 3] - all_states[epoch,:,1]))
     if epoch == train_epochs-1 and perf < 32:
-        store_params.append(model.state_dict())
+        store_params.append(deepcopy(model.state_dict()))
         # model_path = f'./model_params/Trueheli_{epoch+1}e_{exptname}.pth'
         # torch.save(model.state_dict(), model_path)
 
-    if epoch == n_epochs-1 and len(store_params)>0:
-        store_params.append(model.state_dict())
+    if epoch == n_epochs-1 and len(store_params)>1:
+        store_params.append(deepcopy(model.state_dict()))
         # model_path = f'./model_params/Falseheli_{epoch+1}e_{exptname}.pth'
         # torch.save(model.state_dict(), model_path)
 
-
-
 colors = ['orange', 'brown']
 labels = ['CP', 'OB']
-plt.figure(figsize=(3*2,2*5))
+plt.figure(figsize=(4*2,3*5))
 
 plt.subplot(521)
 for i in range(2):
@@ -294,15 +298,9 @@ plt.title(f'm={slope:.3f}, R={r_value:.3f}, p={p_value:.3f}')
 idxs = [int(train_epochs)-1, int(n_epochs)-1]
 titles = ['With Heli', 'Without Heli']
 
-j=5
-for c in range(2):
-    for i,id in enumerate(idxs):
-        plot_behavior(all_states[id, c], contexts[c], id, ax=plt.subplot(5,2,j))
-        j+=1
-
 for i,id in enumerate(idxs):
 
-    plt.subplot(5,2,i+9)
+    plt.subplot(5,2,i+5)
     for c in range(2):
 
         pes = all_pes[id, c]
@@ -313,7 +311,7 @@ for i,id in enumerate(idxs):
 
         plt.scatter(pes, lrs, color=colors[c],alpha=0.1, s=2)
         
-        window_size = 100
+        window_size = 30
         smoothed_learning_rate = uniform_filter1d(lrs, size=window_size)
         plt.plot(pes, smoothed_learning_rate, color=colors[c], linewidth=5)
         print(np.mean(smoothed_learning_rate))
@@ -322,12 +320,15 @@ for i,id in enumerate(idxs):
     plt.ylabel('Learning Rate')
     plt.title(titles[i])
 
+j=7
+for c in range(2):
+    for i,id in enumerate(idxs):
+        plot_behavior(all_states[id, c], contexts[c], id, ax=plt.subplot(5,2,j))
+        j+=1
 plt.tight_layout()
 
 
-perf = np.mean(abs(all_states[int(train_epochs),:, 3] - all_states[int(train_epochs),:,1]))
-print(perf)
-if perf<32:
+if len(store_params)==3:
     plt.savefig(f'./figs/{exptname}.png')
     print('Fig saved')
     saveload('./state_data/'+exptname, [epoch_perf, all_states, all_pes, all_lrs, store_params], 'save')
