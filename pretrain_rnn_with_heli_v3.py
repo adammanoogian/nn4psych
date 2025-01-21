@@ -32,7 +32,7 @@ device = torch.device("cpu")
 
 
 # Env parameters
-n_epochs = 20000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_epochs = 25000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
 n_trials = 200  # number of trials per epoch for each condition.
 trratio = 0.75
 
@@ -53,8 +53,8 @@ input_dim = 6+2  # set this based on your observation space. observation vector 
 hidden_dim = 64  # size of RNN
 action_dim = 3  # set this based on your action space. 0 is left, 1 is right, 2 is confirm.
 params = hidden_dim*(input_dim+hidden_dim + action_dim+1)
-learning_rate = 0.0001
-gamma = 0.95
+learning_rate = 1/params/2.5
+gamma = 0.99
 reset_memory = n_trials  # reset RNN activity after T trials
 bias = [0, 0, 0]
 beta_ent = 0.0
@@ -362,3 +362,5 @@ if len(store_params)==3:
     print('Fig saved')
     saveload('./state_data/'+exptname, [epoch_perf, all_states, all_pes, all_lrs, store_params], 'save')
     print('Data saved')
+    model_path = f'./model_params/Falseheli_{epoch+1}e_{exptname}.pth'
+    torch.save(model.state_dict(), model_path)
