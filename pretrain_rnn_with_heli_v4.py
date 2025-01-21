@@ -7,6 +7,24 @@ similar to Nassar et al. 2021
 and for additional analyses
 '''
 
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--epochs', type=int, required=False, help='epochs', default=1000)
+parser.add_argument('--trials', type=int, required=False, help='trials', default=200)
+parser.add_argument('--maxt', type=int, required=False, help='maxt', default=300)
+parser.add_argument('--maxdisp', type=int, required=False, help='maxdisp', default=15)
+parser.add_argument('--rewardsize', type=float, required=False, help='rewardsize', default=7.5)
+parser.add_argument('--gamma', type=float, required=False, help='gamma', default=0.95)
+parser.add_argument('--nrnn', type=int, required=False, help='nrnn', default=64)
+parser.add_argument('--seed', type=int, required=False, help='seed', default=0)
+parser.add_argument('--ratio', type=float, required=False, help='ratio', default=0.95)
+parser.add_argument('--rollsz', type=int, required=False, help='rollsz', default=30)
+
+parser.add_argument('--cliptd', type=int, required=False, help='rollsz', default=30)
+
+args, unknown = parser.parse_known_args()
+print(args)
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -22,56 +40,58 @@ from copy import deepcopy
 # Assuming that PIE_CP_OB is a gym-like environment
 # from your_environment_file import PIE_CP_OB
 
-# if torch.backends.mps.is_available():
-#     device = torch.device("mps")
-# elif torch.cuda.is_available():
-#     device = torch.device("cuda")
-# else:
+if torch.backends.mps.is_available():
+    device = torch.device("mps")
+elif torch.cuda.is_available():
+    device = torch.device("cuda")
+else:
+    device = torch.device("cpu")
+
 device = torch.device("cpu")
-
-
+print(device)
 
 # Env parameters
-n_epochs = 20000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
-n_trials = 200  # number of trials per epoch for each condition.
-trratio = 0.75
+n_epochs = args.epochs  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_trials = args.trials  # number of trials per epoch for each condition.
 
-train_epochs = n_epochs*trratio #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
-no_train_epochs = []  # epoch in which the agent weights are not updated using gradient descent. To see if the model can use its dynamics to solve the task instead.
+train_epochs = n_epochs*args.ratio #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
 contexts = ["change-point","oddball"] #"change-point","oddball"
 num_contexts = len(contexts)
 
 # Task parameters
-max_displacement = 15 # number of units each left or right moves.
-max_time = 300
+max_displacement = args.maxdisp # number of units each left or right moves.
+max_time = args.maxt # int(5*300//max_displacement)
 step_cost = 0 #-1/300  # penalize every additional step that the agent does not confirm. 
-reward_size = 7.5 # smaller value means a tighter margin to get reward.
+reward_size = args.rewardsize # smaller value means a tighter margin to get reward.
 alpha = 1
 
 # Model Parameters
 input_dim = 6+2  # set this based on your observation space. observation vector is length 4 [helicopter pos, bucket pos, bag pos, bag-bucket pos], context vector is length 2.  
-hidden_dim = 64  # size of RNN
+hidden_dim = args.nrnn  # size of RNN
 action_dim = 3  # set this based on your action space. 0 is left, 1 is right, 2 is confirm.
 params = hidden_dim*(input_dim+hidden_dim + action_dim+1)
-learning_rate = 0.0001
-gamma = 0.95
+learning_rate = 1/params/2.5
+gamma = args.gamma
 reset_memory = n_trials  # reset RNN activity after T trials
 bias = [0, 0, 0]
 beta_ent = 0.0
-rollout_size = 100
+seed = args.seed
 
-seed = 2025
+model_path = None
+rollout_size = args.rollsz
+
 np.random.seed(seed)
 torch.manual_seed(seed)
 
 model_path = None
 
-exptname = f"v3_{n_epochs}e_{trratio}r_{hidden_dim}n_{gamma}g_{learning_rate}lr_{max_displacement}md_{reward_size}rz_{seed}s"
+exptname = f"V4_{rollout_size}roll_{n_epochs}e_{args.ratio}r_{reward_size}rz_{hidden_dim}n_{gamma}g_{max_displacement}md_{seed}s"
 print(exptname)
+
 
 # Actor-Critic Network with RNN
 class ActorCritic(nn.Module):
-    def __init__(self, input_dim, hidden_dim, action_dim, gain=1.0):
+    def __init__(self, input_dim, hidden_dim, action_dim, gain=1.5):
         super(ActorCritic, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -120,14 +140,16 @@ class RolloutBuffer:
         self.values = []
         self.log_probs = []
         self.entropies = []
+        self.dones = []
 
-    def add_experience(self, state, action, reward, value, log_prob, entropy):
+    def add_experience(self, state, action, reward, value, log_prob, entropy, done):
         self.states.append(state)
         self.actions.append(action)
         self.rewards.append(reward)
         self.values.append(value)
         self.log_probs.append(log_prob)
         self.entropies.append(entropy)
+        self.dones.append(done)
 
     def clear(self):
         self.states.clear()
@@ -136,6 +158,7 @@ class RolloutBuffer:
         self.values.clear()
         self.log_probs.clear()
         self.entropies.clear()
+        self.dones.clear()
 
 def compute_advantages_and_returns(buffer, gamma, device):
     returns = []
@@ -155,6 +178,51 @@ def compute_advantages_and_returns(buffer, gamma, device):
 
     return returns, advantages, log_probs, values
 
+def compute_td(buffer, gamma, device, next_value):
+
+    buffer_size = len(buffer.rewards)
+    tds = torch.zeros(buffer_size).to(device)
+
+    for i in range(buffer_size):
+        reward = buffer.rewards[i]
+        value = buffer.values[i].detach().cpu().numpy()
+
+        if i < buffer_size - 1:
+            next_value = buffer.values[i+1].detach().cpu().numpy()
+        else:
+            next_value = 0  # Next value is 0 at terminal state.
+
+        td = reward + gamma * next_value - value
+        tds.append(td)
+
+    returns = torch.tensor(buffer.rewards, dtype=torch.float32).to(device)
+    tds = torch.tensor(tds, dtype=torch.float32).to(device)
+    log_probs = torch.stack(buffer.log_probs)
+    values = torch.stack(buffer.values).squeeze()
+
+    return returns, tds, log_probs, values
+
+def compute_gae(buffer, gamma, device, next_value, gae_lambda=0.95):
+    rewards = torch.tensor(buffer.rewards, dtype=torch.float32).to(device)
+    values = torch.tensor(buffer.values, dtype=torch.float32).to(device)
+    dones = torch.tensor(buffer.dones, dtype=torch.float32).to(device)
+    advantages = torch.zeros(len(rewards)).to(device)
+    last_gae_lam = 0
+    
+    for t in reversed(range(len(rewards))):
+        if t == len(rewards) - 1:
+            next_non_terminal = 1.0 - dones[-1]
+            next_values = next_value
+        else:
+            next_non_terminal = 1.0 - dones[t + 1]
+            next_values = values[t + 1]
+        
+        delta = rewards[t] + gamma * next_values * next_non_terminal - values[t]
+        advantages[t] = last_gae_lam = delta + gamma * gae_lambda * next_non_terminal * last_gae_lam
+    
+    returns = advantages + values
+    return advantages, returns
+
 def train_with_rollouts(env, model, optimizer, epoch, n_trials, gamma, rollout_buffer_size):
     buffer = RolloutBuffer(rollout_buffer_size)
 
@@ -162,7 +230,7 @@ def train_with_rollouts(env, model, optimizer, epoch, n_trials, gamma, rollout_b
     totloss = []
     tottime = []
 
-    hx = (torch.randn(1, 1, hidden_dim) * 0.00).to(device)
+    hx = (torch.randn(1, 1, hidden_dim) * 1/hidden_dim).to(device)
     trial_counter = 0
     
     while trial_counter < n_trials:
@@ -175,7 +243,7 @@ def train_with_rollouts(env, model, optimizer, epoch, n_trials, gamma, rollout_b
         # Detach hx to prevent backpropagation through the entire history
         hx = hx.detach()
         if trial_counter % reset_memory == 0:
-            hx = (torch.randn(1, 1, hidden_dim) * 0.00).to(device)
+            hx = (torch.randn(1, 1, hidden_dim) * 1/hidden_dim).to(device)
 
         totR = 0
         
@@ -191,7 +259,7 @@ def train_with_rollouts(env, model, optimizer, epoch, n_trials, gamma, rollout_b
             totR += reward
 
             # Append experiences to rollout buffer
-            buffer.add_experience(next_state, action, reward, critic_value, probs.log_prob(action), probs.entropy())
+            buffer.add_experience(next_state, action, reward, critic_value, probs.log_prob(action), probs.entropy(), done)
 
             # Prep next state
             norm_next_obs = env.normalize_states(next_obs)
@@ -202,11 +270,16 @@ def train_with_rollouts(env, model, optimizer, epoch, n_trials, gamma, rollout_b
 
         if len(buffer.rewards) >= rollout_buffer_size:
             # Computation for advantages and returns
-            returns, advantages, log_probs, values = compute_advantages_and_returns(buffer, gamma, device)
+            # returns, advantages, log_probs, values = compute_advantages_and_returns(buffer, gamma, device)
+            with torch.no_grad():
+                _, critic_value, _ = model(next_state, hx)
+                tds, returns = compute_gae(buffer, gamma, device, critic_value)
 
             # Calculate losses
-            actor_loss = -(log_probs * advantages).mean()
-            critic_loss = ((returns - values)**2).mean()
+            log_probs = torch.tensor(buffer.log_probs, dtype=torch.float32).to(device)
+            actor_loss = -(log_probs * tds.detach()).mean()
+            # critic_loss = (tds**2).mean()
+            critic_loss = (returns - torch.stack(buffer.values).squeeze()).pow(2).mean()
             entropy_loss = -torch.stack(buffer.entropies).mean()
 
             loss = actor_loss + 0.5 * critic_loss + beta_ent * entropy_loss
@@ -327,20 +400,30 @@ plt.title(f'm={slope:.3f}, R={r_value:.3f}, p={p_value:.3f}')
 idxs = [int(train_epochs)-1, int(n_epochs)-1]
 titles = ['With Heli', 'Without Heli']
 
+gap = 5
 for i,id in enumerate(idxs):
 
     plt.subplot(5,2,i+5)
     for c in range(2):
 
-        pes = all_pes[id, c]
-        lrs = all_lrs[id,c]
+        pes = []
+        lrs = []
+        for g in range(gap):
+            pes.append(all_pes[id-g, c])
+            lrs.append(all_lrs[id-g,c])
+        pes = np.concatenate(pes).flatten()
+        lrs = np.concatenate(lrs).flatten()
 
         pes = pes[pes>=0]
         lrs = lrs[lrs>=0]
 
-        plt.scatter(pes, lrs, color=colors[c],alpha=0.1, s=2)
+        idx = np.argsort(pes)
+        pes = pes[idx]
+        lrs = lrs[idx]
+
+        plt.scatter(pes, lrs, color=colors[c],alpha=0.1, s=5)
         
-        window_size = 30
+        window_size = max_displacement*2
         smoothed_learning_rate = uniform_filter1d(lrs, size=window_size)
         plt.plot(pes, smoothed_learning_rate, color=colors[c], linewidth=5)
         print(np.mean(smoothed_learning_rate))
@@ -350,11 +433,14 @@ for i,id in enumerate(idxs):
     plt.title(titles[i])
 
 j=7
-for c in range(2):
-    for i,id in enumerate(idxs):
+for i,id in enumerate(idxs):
+    for c in range(2):
         plot_behavior(all_states[id, c], contexts[c], id, ax=plt.subplot(5,2,j))
         j+=1
+
+
 plt.tight_layout()
+
 
 
 if len(store_params)==3:
