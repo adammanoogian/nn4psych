@@ -5,9 +5,10 @@ Fit Bayesian models to the RNN-AC simulated data
 
 import matplotlib.pyplot as plt
 import numpy as np
-#import pymc as pm
+#import arviz as az
 import pytensor
 import pytensor.tensor as pt
+import pymc as pm
 import scipy
 import scipy.stats as stats
 import utils
@@ -37,6 +38,9 @@ class BayesianModel:
 
 
     def get_llik(self, x, *args, model_name = 'normative'):
+        '''
+        Get nll for MLE
+        '''
         #take args from minimizer
         Ω, τ = x
         actions, δ = args
@@ -54,28 +58,50 @@ class BayesianModel:
             #store necessary data 
             logp_actions[t] = logp_action
             #update states for next trial
-            
-
         return -np.sum(logp_actions[1:]) 
     
     def get_pytensor_llik(self, Ω, τ):
         """
         PyTensor function estimate log-likelihood 
         for use with PyMC sampling.
+
         """
-        def step(delta, agent_upd, o, t):
+        def step(delta, agent_upd, Ω, τ):
             logp, _ = self.flexible_normative_model(
-                Ω=o, τ=t, δ=delta, agent_update=agent_upd, context=self.model_type
+                Ω=Ω, τ=τ, δ=delta, agent_update=agent_upd, context=self.model_type
             )
             return logp
 
-        logp_series, _ = pytensor.scan(
-            fn=step,
-            sequences=[self.prediction_error, self.update],
-            non_sequences=[Ω, τ]
+        #transform variables into pytensor variables
+        pe_         = pt.as_tensor_variable(self.prediction_error, dtype="int32")
+        updates_    = pt.as_tensor_variable(self.update, dtype="int32")
+
+        #init ll vector
+        logp_series = pt.zeros(len(self.prediction_error), dtype = "float64")
+
+        #compute ll for each trial
+        logp_series, param_update = pytensor.scan(
+            fn = step,
+            sequences = [pe_, updates_], 
+            outputs_info = [logp_series],
+            non_sequences = [Ω, τ]
         )
-        return pt.sum(logp_series[1:])
+        #neg ll of entire sequence?
+        neg_ll = pt.sum(logp_series[1:])
         
+        #calc llik
+        pytensor_llik = pytensor.function(
+            inputs = [Ω, τ],
+            outputs = neg_ll,
+            on_unused_input="ignore"
+        )
+
+        #test w true priors
+        true_switch = .2 #changepoint rate
+        true_noise = .125 #heli to bag noise 
+        result = pytensor_llik(true_switch, true_noise)
+        print(f"True llik: {result:.2f}")
+        return pytensor_llik 
 
     def flexible_normative_model(
         self,
@@ -128,7 +154,7 @@ class BayesianModel:
         #sample for simulation
         sim_action = normative_update
 
-        return ll, sim_action
+        return ll, sim_action, L_normative
     
     def sim_data(self, 
                  total_trials:int = 100, 
@@ -167,17 +193,32 @@ class BayesianModel:
 #%%
 #run 
 if __name__ == "__main__":
-    states = np.load('./data/env_data_change-point.npy') #[trials, bucket_position, bag_position, helicopter_position]
+    #load data and init model
+    states = np.load('./data/pt_rnn_context/env_data.npy') #[trials, bucket_position, bag_position, helicopter_position]
+    #states = np.load('./data/env_data_change-point.npy') #[trials, bucket_position, bag_position, helicopter_position]
     model = BayesianModel(states, model_type = 'changepoint')
+    
+    #run MLE
     model.run_mle()
 
     # #run simulation
-    model = BayesianModel(states, model_type = 'changepoint')
     model.sim_data(total_trials=100, model_name = "flexible_normative_model", condition = 'changepoint')
 
+    #run pytensor fitting
+    with pm.model() as m:
+        #priors
+        Ω = pm.Beta('Ω', alpha=1, beta=1)
+        τ = pm.Beta('τ', alpha=1, beta=1)
 
+        lik = pm.Potential(name = "like",
+                           var = model.get_pytensor_llik(Ω, τ))
 
-
+        #sample
+        #trace = pm.sample(1000, tune=1000, target_accept=0.95, return_inferencedata=False)
+        trace = pm.sample(random_seed = rng)
+    
+    az.plot_trace(data = trace)
+    az.plot_posterior(data = trace, ref_val = [.2, .125]) 
 
 
 
