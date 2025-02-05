@@ -14,12 +14,12 @@ from copy import deepcopy
 
 contexts = ["change-point","oddball"] #"change-point","oddball"
 num_contexts = len(contexts)
-train_cond = False
-reward_size= 5
+train_cond = True
+reward_size= 7.5
 max_displacement=15
 max_time = 300
 n_trials = 200
-epochs = 1
+epochs = 100
 
 input_dim = 6+2  # set this based on your observation space. observation vector is length 4 [helicopter pos, bucket pos, bag pos, bag-bucket pos], context vector is length 2.  
 hidden_dim = 64  # size of RNN
@@ -75,6 +75,8 @@ if model_path is not None:
     print('Load Model')
 
 
+all_states = np.zeros([epochs, num_contexts, 5, n_trials])
+
 # get rnn, actor, critic activity
 for epoch in range(epochs):
     Hs = []
@@ -82,12 +84,12 @@ for epoch in range(epochs):
     Cs = []
     Rs = []
     Os = []
-    for context in contexts:
+    for tt, context in enumerate(contexts):
         env = PIE_CP_OB_v2(condition=context, max_time=max_time, total_trials=n_trials, 
                 train_cond=train_cond, max_displacement=max_displacement, reward_size=reward_size)
         
         h, a, c, r, o = [],[],[], [], []
-        hx = torch.randn(1, 1, hidden_dim) *0# 1/hidden_dim
+        hx = torch.randn(1, 1, hidden_dim) * 1/hidden_dim
         for trial in range(n_trials):
 
             next_obs, done = env.reset()
@@ -112,6 +114,70 @@ for epoch in range(epochs):
 
         Hs.append(h), As.append(a), Cs.append(c), Rs.append(r), Os.append(o)
 
+        all_states[epoch, tt] = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
+
+
+
+def get_lrs_v2(states, threshold=20):
+    true_state = states[2]  # bag position
+    predicted_state = states[1]  # bucket position
+    prediction_error = (true_state - predicted_state)[:-1]
+    update = np.diff(predicted_state)
+
+    idx = prediction_error !=0
+    prediction_error= prediction_error[idx]
+    update = update[idx]
+    learning_rate = update / prediction_error
+
+    prediction_error = abs(prediction_error)
+    idx = prediction_error>threshold
+    pes = prediction_error[idx]
+    lrs = np.clip(learning_rate,0,1)[idx]
+
+    sorted_indices = np.argsort(pes)
+    prediction_error_sorted = pes[sorted_indices]
+    learning_rate_sorted = lrs[sorted_indices]
+
+    return prediction_error_sorted, learning_rate_sorted
+
+
+def plot_lrs(states, scale=0.1):
+    epochs = states.shape[0]
+    pess, lrss, area = [],[], []
+    for c in range(2):
+        pes,lrs = [],[]
+        for e in range(epochs):
+            pe, lr = get_lrs_v2(states[e, c])
+
+            pes.append(pe)
+            lrs.append(lr)
+
+        pes = np.concatenate(pes)
+        lrs = np.concatenate(lrs)
+        sorted_indices = np.argsort(pes)
+        prediction_error_sorted = pes[sorted_indices]
+        learning_rate_sorted = lrs[sorted_indices]
+
+        pess.append(prediction_error_sorted)
+        lrss.append(learning_rate_sorted)
+        area.append(np.trapz(learning_rate_sorted, prediction_error_sorted))
+    
+
+    plt.figure(figsize=(3,2))
+    colors = ['orange', 'brown']
+    labels = ['CP', 'OB']
+    for i in range(2):
+        window_size = int(len(lrss[i])*scale)
+        smoothed_learning_rate = uniform_filter1d(lrss[i], size=window_size)
+        plt.plot(pess[i], smoothed_learning_rate, color=colors[i], linewidth=2,label=labels[i])
+    plt.legend()
+    plt.xlabel('Prediction error')
+    plt.ylabel('Learning rate')
+    plt.title(f'CB={area[0]:.1f}, OB={area[1]:.1f}, A={(area[0]-area[1]):.1f}')
+    plt.tight_layout()
+    return pess, lrss, area
+
+_,_,area = plot_lrs(all_states,scale=0.25)
 
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA

@@ -29,7 +29,7 @@ def get_lrs(states):
     smoothed_learning_rate = uniform_filter1d(learning_rate_sorted, size=window_size)
     return prediction_error_sorted, smoothed_learning_rate
 
-def get_lrs_v2(states):
+def get_lrs_v2(states, threshold=20):
     true_state = states[2]  # bag position
     predicted_state = states[1]  # bucket position
     prediction_error = (true_state - predicted_state)[:-1]
@@ -41,7 +41,7 @@ def get_lrs_v2(states):
     learning_rate = update / prediction_error
 
     prediction_error = abs(prediction_error)
-    idx = prediction_error>20
+    idx = prediction_error>threshold
     pes = prediction_error[idx]
     lrs = np.clip(learning_rate,0,1)[idx]
 
