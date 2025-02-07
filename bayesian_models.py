@@ -5,7 +5,7 @@ Fit Bayesian models to the RNN-AC simulated data
 
 import matplotlib.pyplot as plt
 import numpy as np
-#import arviz as az
+import arviz as az
 import pytensor
 import pytensor.tensor as pt
 import pymc as pm
@@ -66,10 +66,18 @@ class BayesianModel:
         for use with PyMC sampling.
 
         """
-        def step(delta, agent_upd, Ω, τ):
-            logp, _ = self.flexible_normative_model(
-                Ω=Ω, τ=τ, δ=delta, agent_update=agent_upd, context=self.model_type
+        def step(δ_t, agent_upd_t, prev_logp, Ω, τ):
+            '''
+            Step function for scan, serves as lambda expression in pytensor.scan
+            agent_update and pe are drawn for each trial
+            params stay constant
+            logp is accumulated and returns sum
+            '''
+            current_logp, _ = self.PYMC_flexible_normative_model(
+                Ω=Ω, τ=τ, δ=δ_t, agent_update=agent_upd_t, context=self.model_type
             )
+            #accum logp
+            logp = prev_logp + current_logp
             return logp
 
         #transform variables into pytensor variables
@@ -80,7 +88,7 @@ class BayesianModel:
         logp_series = pt.zeros(len(self.prediction_error), dtype = "float64")
 
         #compute ll for each trial
-        logp_series, param_update = pytensor.scan(
+        logp_series, param_updates = pytensor.scan( #where is param update? 
             fn = step,
             sequences = [pe_, updates_], 
             outputs_info = [logp_series],
@@ -89,19 +97,7 @@ class BayesianModel:
         #neg ll of entire sequence?
         neg_ll = pt.sum(logp_series[1:])
         
-        #calc llik
-        pytensor_llik = pytensor.function(
-            inputs = [Ω, τ],
-            outputs = neg_ll,
-            on_unused_input="ignore"
-        )
-
-        #test w true priors
-        true_switch = .2 #changepoint rate
-        true_noise = .125 #heli to bag noise 
-        result = pytensor_llik(true_switch, true_noise)
-        print(f"True llik: {result:.2f}")
-        return pytensor_llik 
+        return neg_ll 
 
     def flexible_normative_model(
         self,
@@ -122,11 +118,11 @@ class BayesianModel:
         """
         Flexible normative model that can be used for both changepoint and oddball conditions.
         """
-
         #eq 4 - needs hardset priors in
         U_val = stats.uniform.pdf(δ, 0, 300) ** LW
         N_val = stats.norm.pdf(δ, 0, σ) ** LW
         Ω = utils.calculate_omega(H, U_val, N_val)
+
         #eq 5 - in oddball, relative uncertainty requires drift rate D (?)
         τ = utils.calculate_tau(τ, UU)
 
@@ -154,8 +150,63 @@ class BayesianModel:
         #sample for simulation
         sim_action = normative_update
 
-        return ll, sim_action, L_normative
+        return ll, sim_action
     
+    def PYMC_flexible_normative_model(
+        self,
+        #params
+        Ω: float = .20,   #Ω = changepoint probability
+        τ: float = .125,  #τ = relative uncertainty
+        UU: float = .001,     #UU = uncertainty underestimation 
+        σ_motor: float = .001, 
+        σ_LR: float = .90, 
+        #priors 
+        H: float = .2,      #H = changepoint or oddball prob dependening on the condition
+        LW: float = .99,      #LW = likelihood weight
+        σ: float = .125,      #σ = total var on predictive dist
+        #data
+        δ: float = .5,       #δ = prediction error
+        agent_update: float = 50,  #participant update
+        context: str = "changepoint"): 
+        """
+        Flexible normative model that can be used for both changepoint and oddball conditions.
+        -for fitting with PYMC min function
+        """
+
+        #eq 4 - in logspace 
+        U_val = LW * pm.logp(pm.Uniform.dist(lower = 0, upper = 300), δ)
+        N_val = LW * pm.logp(pm.Normal.dist(mu = 0, sigma = σ), δ)
+        Ω =  pm.logaddexp(pm.math.log(H) + U_val,
+                                pm.math.log(1 - H) + N_val)
+
+        #eq 5 - in oddball, relative uncertainty requires drift rate D (?)
+        τ = utils.calculate_tau(τ, UU)
+
+        if context == 'changepoint':
+            #eq 2
+            alpha = utils.calculate_alpha_changepoint(Ω, τ)
+        elif context == 'oddball':
+            #eq 3
+            alpha = utils.calculate_alpha_oddball(τ, Ω)
+        else:
+            raise ValueError("model_type must be either 'changepoint' or 'oddball'")   
+
+        #eq 1
+        normative_update = utils.calculate_normative_update(alpha, δ)
+        
+        #eq 7, variability of update
+        σ_update = utils.calculate_sigma_update(σ_motor, normative_update, σ_LR)
+
+        #eq 6
+        L_normative = pm.logp(pm.Normal.dist(mu = normative_update, sigma = σ_update), agent_update)
+        #make log likelihood
+        #ll = np.log(L_normative)
+        ll = -L_normative
+        #sample for simulation
+        sim_action = normative_update
+
+        return ll, sim_action
+
     def sim_data(self, 
                  total_trials:int = 100, 
                  model_name:str   = "flexible_normative_model",
@@ -205,20 +256,37 @@ if __name__ == "__main__":
     model.sim_data(total_trials=100, model_name = "flexible_normative_model", condition = 'changepoint')
 
     #run pytensor fitting
-    with pm.model() as m:
+    with pm.Model() as m:
         #priors
-        Ω = pm.Beta('Ω', alpha=1, beta=1)
-        τ = pm.Beta('τ', alpha=1, beta=1)
+        Ω = pm.LogitNormal('Ω', mu = 0, sigma = .5)
+        τ = pm.LogitNormal('τ', mu = 0, sigma = .5)
 
-        lik = pm.Potential(name = "like",
-                           var = model.get_pytensor_llik(Ω, τ))
+        like = pm.Potential(name = "like",
+                           var = model.get_pytensor_llik(Ω, τ)) #need to put in actions and pe here?
 
+        #set seed
+        seed = sum(map(ord, "RL_PyMC"))
+        rng = np.random.default_rng(seed)
         #sample
         #trace = pm.sample(1000, tune=1000, target_accept=0.95, return_inferencedata=False)
-        trace = pm.sample(random_seed = rng)
+
+        tr = pm.sample(random_seed = rng)
     
-    az.plot_trace(data = trace)
-    az.plot_posterior(data = trace, ref_val = [.2, .125]) 
+    #plot pytensor fitting 
+    az.plot_trace(data = tr)
+    az.plot_posterior(data = tr, ref_val = [.2, .125]) 
+
+    #pytensor test with true priors
+    pytensor_llik = pytensor.function(
+        inputs = [Ω, τ],
+        outputs = neg_ll,
+        on_unused_input="ignore"
+    )
+
+    true_switch = .2 #changepoint rate
+    true_noise = .125 #heli to bag noise 
+    result = pytensor_llik(true_switch, true_noise)
+    print(f"True llik: {result:.2f}")
 
 
 
