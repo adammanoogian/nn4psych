@@ -128,7 +128,6 @@ class BayesianModel:
         for t in range(self.total_trials):
             obs, _ = env.reset()
             pred_error = 0
-
             for i in range(2):
                 # extract necessary trial info from env
                 # Use the model to get sim_action
@@ -136,7 +135,7 @@ class BayesianModel:
                 print(obs, sim_action, env.bucket_pos)
 
                 obs, _, _ = env.step(action = None, direct_action = sim_action)
-                pred_error = obs[3]
+                pred_error = abs(obs[3]) # If PE is positive, model does not know to shift back. 
     
         # 0 = trial index, 1 = bucket_pos, 2 = bag_pos, 3 = helicopter_pos, 4 = hazard_trigger
         states = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
@@ -158,7 +157,7 @@ def plot_states(states):
     plt.ylim(-10, 310)  # Set y-axis limit from 0 to 300
     plt.xlabel('Trial')
     plt.ylabel('Position')
-    plt.legend(frameon=True)
+    # plt.legend(frameon=True)
     plt.tight_layout()
 
 #%%
