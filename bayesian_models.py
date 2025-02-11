@@ -77,7 +77,7 @@ class BayesianModel:
                 Ω=Ω, τ=τ, δ=δ_t, agent_update=agent_upd_t, context=self.model_type
             )
             #accum logp
-            logp = prev_logp + current_logp
+            logp = pt.set_subtensor(prev_logp[δ_t], current_logp)
             return logp
 
         #transform variables into pytensor variables
@@ -95,9 +95,9 @@ class BayesianModel:
             non_sequences = [Ω, τ]
         )
         #neg ll of entire sequence?
-        neg_ll = pt.sum(logp_series[1:])
+        ll = pt.sum(logp_series[1:])
         
-        return neg_ll 
+        return ll 
 
     def flexible_normative_model(
         self,
@@ -162,7 +162,7 @@ class BayesianModel:
         σ_LR: float = .90, 
         #priors 
         H: float = .2,      #H = changepoint or oddball prob dependening on the condition
-        LW: float = .99,      #LW = likelihood weight
+        LW: float = .5,      #LW = likelihood weight
         σ: float = .125,      #σ = total var on predictive dist
         #data
         δ: float = .5,       #δ = prediction error
@@ -201,7 +201,7 @@ class BayesianModel:
         L_normative = pm.logp(pm.Normal.dist(mu = normative_update, sigma = σ_update), agent_update)
         #make log likelihood
         #ll = np.log(L_normative)
-        ll = -L_normative
+        ll = L_normative
         #sample for simulation
         sim_action = normative_update
 
@@ -256,17 +256,20 @@ if __name__ == "__main__":
     model.sim_data(total_trials=100, model_name = "flexible_normative_model", condition = 'changepoint')
 
     #run pytensor fitting
+
+    #set seed
+    seed = sum(map(ord, "RL_PyMC"))
+    rng = np.random.default_rng(seed)
+
     with pm.Model() as m:
         #priors
         Ω = pm.LogitNormal('Ω', mu = 0, sigma = .5)
-        τ = pm.LogitNormal('τ', mu = 0, sigma = .5)
+        τ = pm.LogitNormal('τ', mu = 0, sigma = .5 )
 
         like = pm.Potential(name = "like",
                            var = model.get_pytensor_llik(Ω, τ)) #need to put in actions and pe here?
 
-        #set seed
-        seed = sum(map(ord, "RL_PyMC"))
-        rng = np.random.default_rng(seed)
+
         #sample
         #trace = pm.sample(1000, tune=1000, target_accept=0.95, return_inferencedata=False)
 
@@ -276,20 +279,40 @@ if __name__ == "__main__":
     az.plot_trace(data = tr)
     az.plot_posterior(data = tr, ref_val = [.2, .125]) 
 
+    #debug code
     #pytensor test with true priors
-    pytensor_llik = pytensor.function(
-        inputs = [Ω, τ],
-        outputs = neg_ll,
-        on_unused_input="ignore"
+
+    def step_test(δ_t, agent_upd_t, logp_series, Ω, τ):
+        '''
+        Step function for scan, serves as lambda expression in pytensor.scan
+        agent_update and pe are drawn for each trial
+        params stay constant
+        logp is accumulated and returns sum
+        '''
+        current_logp, _ = model.PYMC_flexible_normative_model(
+            Ω=Ω, τ=τ, δ=δ_t, agent_update=agent_upd_t, context=model.model_type
+        )
+        #accum logp
+        return current_logp #fix to be like guide
+
+    # Transform the variables into appropriate PyTensor objects
+    pe_ = pt.as_tensor_variable(model.prediction_error, dtype="int32")
+    updates_ = pt.as_tensor_variable(model.update, dtype="int32")
+
+    omega = pt.scalar("omega")
+    tau = pt.scalar("tau")
+
+    logp_series = pt.ones(len(model.prediction_error), dtype = "float64")
+
+    # Compute the Q values for each trial
+    logp_series, _ = pytensor.scan(
+        fn= step_test,
+        sequences=[pe_, updates_], 
+        outputs_info=[logp_series],
+        non_sequences=[omega, tau]
     )
-
-    true_switch = .2 #changepoint rate
-    true_noise = .125 #heli to bag noise 
-    result = pytensor_llik(true_switch, true_noise)
-    print(f"True llik: {result:.2f}")
-
-
-
+    
+    ll = pt.sum(logp_series[1:])
 
 
 
@@ -317,3 +340,15 @@ if __name__ == "__main__":
 
 # #make log likelihood
 # ll = -log(L_normative)
+
+
+    # pytensor_llik = pytensor.function(
+    #     inputs = [Ω, τ],
+    #     outputs = ll,
+    #     on_unused_input="ignore"
+    #     )
+
+
+    # true_switch = .2 #changepoint rate
+    # true_noise = .125 #heli to bag noise 
+    # result = pytensor_llik(true_switch, true_noise)
