@@ -230,7 +230,7 @@ class ContinuousPredictiveInferenceEnv(gym.Env):
 
 
 class PIE_CP_OB:
-    def __init__(self, condition="change-point", total_trials=200,max_time=300, train_cond=False, 
+    def __init__(self, condition="changepoint", total_trials=200,max_time=300, train_cond=False, 
                  max_displacement=15, reward_size=7.5, step_cost=0.0, alpha=1):
         super(PIE_CP_OB, self).__init__()
         
@@ -262,7 +262,7 @@ class PIE_CP_OB:
         self.task_type = condition
         self.train_cond = train_cond  # either True or False, if True, helicopter position is shown to agent. if False helicopter position is 0
 
-        if condition == "change-point":
+        if condition == "changepoint":
             self.context =  np.array([1,0])
         elif condition == "oddball":
             self.context =  np.array([0,1])
@@ -297,7 +297,7 @@ class PIE_CP_OB:
         self.hazard_trigger = 0
         self.velocity = 0
 
-        if self.task_type == "change-point":
+        if self.task_type == "changepoint":
             if np.random.rand() < self.change_point_hazard:
                 self.helicopter_pos = np.random.randint(self.min_obs_size + self.bound_helicopter,self.max_obs_size-self.bound_helicopter)  # change helicopter position based on hazard rate
                 self.hazard_trigger = 1

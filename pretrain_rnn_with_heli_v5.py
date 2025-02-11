@@ -21,16 +21,11 @@ parser.add_argument('--ratio', type=float, required=False, help='ratio', default
 
 parser.add_argument('--gamma', type=float, required=False, help='gamma', default=0.95)
 parser.add_argument('--rollsz', type=int, required=False, help='rollsz', default=50)
-parser.add_argument('--tdnoise', type=float, required=False, help='tdnoise', default=0.0)
+parser.add_argument('--tdnoise', type=float, required=False, help='tdnoise', default=0.1)
 parser.add_argument('--presetmem', type=float, required=False, help='presetmem', default=0.0)
 parser.add_argument('--tdlb', type=float, required=False, help='tdlb', default=None)
 parser.add_argument('--tdub', type=float, required=False, help='tdub', default=None)
 parser.add_argument('--tdscale', type=float, required=False, help='tdscale', default=1.0)
-
-# PPO-specific hyperparameters
-parser.add_argument('--epsilon', type=float, required=False, help='PPO clipping parameter', default=0.2)
-parser.add_argument('--lambda_gae', type=float, required=False, help='GAE parameter', default=0.95)
-parser.add_argument('--update_steps', type=int, required=False, help='Number of PPO update steps', default=1)
 
 args, unknown = parser.parse_known_args()
 print(args)
@@ -48,12 +43,12 @@ from scipy.stats import linregress
 from scipy.ndimage import uniform_filter1d
 from copy import deepcopy
 
-if torch.backends.mps.is_available():
-    device = torch.device("mps")
-elif torch.cuda.is_available():
-    device = torch.device("cuda")
-else:
-    device = torch.device("cpu")
+# if torch.backends.mps.is_available():
+#     device = torch.device("mps")
+# elif torch.cuda.is_available():
+#     device = torch.device("cuda")
+# else:
+device = torch.device("cpu")
 print(device)
 
 # Env parameters
@@ -85,20 +80,14 @@ gamma = args.gamma
 rollout_size = args.rollsz
 reset_memory = args.presetmem  # reset RNN activity after T trials
 tdnoise = args.tdnoise
-tdlb = args.tdlb  # if args.lowerb == "None" else float(args.lowerb)
-tdub = args.tdub  # if args.upperb == "None" else float(args.upperb)
 tdscale = args.tdscale
 learning_rate = 0.0001 / 100 * rollout_size 
 
-# PPO-specific hyperparameters
-epsilon = args.epsilon  # PPO clipping parameter
-lambda_gae = args.lambda_gae  # GAE parameter
-update_steps = args.update_steps  # Number of PPO update steps
 
 np.random.seed(seed)
 torch.manual_seed(seed)
 
-exptname = f"V3_{gamma}g_{reset_memory}rm_{rollout_size}bz_{tdnoise}td_{tdscale}tds_{tdlb}lb_{tdub}up_{hidden_dim}n_{n_epochs}e_{max_displacement}md_{reward_size}rz_{seed}s"
+exptname = f"V5_{gamma}g_{reset_memory}rm_{rollout_size}bz_{tdnoise}td_{tdscale}tds_{hidden_dim}n_{n_epochs}e_{max_displacement}md_{reward_size}rz_{seed}s"
 print(exptname)
 model_path = None
 
@@ -146,7 +135,6 @@ class RolloutBuffer:
     def __init__(self, buffer_size):
         self.buffer_size = buffer_size
         self.states = []
-        self.hxs = []  # Store hidden states
         self.actions = []
         self.rewards = []
         self.values = []
@@ -154,9 +142,8 @@ class RolloutBuffer:
         self.entropies = []
         self.dones = []  # Track terminal states
 
-    def add_experience(self, state, hx, action, reward, value, log_prob, entropy, done):
+    def add_experience(self, state, action, reward, value, log_prob, entropy, done):
         self.states.append(state)
-        self.hxs.append(hx)  # Add hidden state
         self.actions.append(action)
         self.rewards.append(reward)
         self.values.append(value)
@@ -166,7 +153,6 @@ class RolloutBuffer:
 
     def clear(self):
         self.states.clear()
-        self.hxs.clear()  # Clear hidden states
         self.actions.clear()
         self.rewards.clear()
         self.values.clear()
@@ -175,13 +161,12 @@ class RolloutBuffer:
         self.dones.clear()
 
 
-def compute_gae(buffer, gamma, lambda_gae, device):
+def compute_gae(buffer, gamma, device):
     rewards = buffer.rewards
     values = buffer.values
     dones = buffer.dones  # Add 'dones' to the RolloutBuffer to track terminal states
 
     advantages = []
-    gae = 0
     next_value = 0  # Value of the next state if not terminal
 
     for t in reversed(range(len(rewards))):
@@ -198,20 +183,21 @@ def compute_gae(buffer, gamma, lambda_gae, device):
 
     advantages = torch.tensor(advantages, dtype=torch.float32).to(device)
     returns = advantages + torch.tensor(values, dtype=torch.float32).to(device)
+    log_probs = torch.stack(buffer.log_probs)
+    values = torch.stack(buffer.values).squeeze()
 
-    return returns, advantages
+    return returns, advantages, log_probs, values
 
-
-def train_with_rollouts(env, model, optimizer, epoch, n_trials, gamma, lambda_gae, rollout_buffer_size, epsilon):
+def train_with_rollouts(env, model, optimizer, epoch, n_trials, gamma, rollout_buffer_size):
     buffer = RolloutBuffer(rollout_buffer_size)
 
     totG = []
     totloss = []
     tottime = []
 
-    hx = (torch.randn(1, 1, hidden_dim) * 1 / hidden_dim ** 0.5).to(device)  # Initialize hidden state at the start of each episode
+    hx = (torch.randn(1, 1, hidden_dim) * 1/hidden_dim**0.5).to(device)
     trial_counter = 0
-
+    
     while trial_counter < n_trials:
         next_obs, done = env.reset()
         norm_next_obs = env.normalize_states(next_obs)
@@ -220,12 +206,13 @@ def train_with_rollouts(env, model, optimizer, epoch, n_trials, gamma, lambda_ga
 
         hx = hx.detach()  # Detach the hidden state to avoid retaining the computation graph
         totR = 0
-
+        
         while not done:
-            if np.random.random_sample() < reset_memory:
-                hx += (torch.randn(1, 1, hidden_dim) * 1 / hidden_dim ** 0.5).to(device)
 
-            actor_logits, critic_value, next_hx = model(next_state, hx)
+            if np.random.random_sample()< reset_memory:
+                hx = (torch.randn(1, 1, hidden_dim) * 1/hidden_dim).to(device)
+
+            actor_logits, critic_value, hx = model(next_state, hx)
             bias_tensor = torch.tensor(bias, dtype=actor_logits.dtype, device=actor_logits.device)
             actor_logits += bias_tensor
             probs = Categorical(logits=actor_logits)
@@ -236,66 +223,30 @@ def train_with_rollouts(env, model, optimizer, epoch, n_trials, gamma, lambda_ga
             totR += reward
 
             # Append experiences to rollout buffer
-            buffer.add_experience(next_state, hx, action, reward, critic_value, probs.log_prob(action), probs.entropy(), done)
+            buffer.add_experience(next_state, action, reward, critic_value, probs.log_prob(action), probs.entropy(), done)
 
             # Prep next state
             norm_next_obs = env.normalize_states(next_obs)
             next_state = np.concatenate([norm_next_obs, env.context, np.array([reward])])
             next_state = torch.FloatTensor(next_state).unsqueeze(0).unsqueeze(0).to(device)
 
-            hx = next_hx.detach()  # Detach the updated hidden state to avoid retaining the computation graph
-
         trial_counter += 1
 
         if len(buffer.rewards) >= rollout_buffer_size:
-            # Compute GAE and returns
-            returns, advantages = compute_gae(buffer, gamma, lambda_gae, device)
+            # Computation for advantages and returns
+            returns, advantages, log_probs, values = compute_gae(buffer, gamma, device)
 
-            # Convert buffer data to tensors
-            states = torch.stack(buffer.states).squeeze(1)
-            hxs = torch.stack(buffer.hxs).squeeze(1)  # Stack hidden states
-            hxs = hxs.transpose(0, 1)  # Reshape to (1, batch_size, hidden_dim)
-            actions = torch.stack(buffer.actions)
-            old_log_probs = torch.stack(buffer.log_probs)
-            values = torch.stack(buffer.values).squeeze()
+            # Calculate losses
+            actor_loss = -(log_probs * advantages).mean()
+            critic_loss = ((returns - values)**2).mean()
+            entropy_loss = -torch.stack(buffer.entropies).mean()
 
-            # Perform multiple epochs of updates
-            for _ in range(update_steps):
-                # Detach hxs to avoid retaining the computation graph
-                # hxs = hxs.detach()
+            loss = actor_loss + 0.5 * critic_loss + beta_ent * entropy_loss
 
-                # Get new action probabilities and state values
-                # with torch.no_grad():
-                new_action_probs, new_state_values, _ = model(states, hxs)
-                
-                # Detach the computation graph to avoid retaining it across iterations
-                # new_action_probs = new_action_probs.detach()
-                # new_state_values = new_state_values.detach()
-
-                dist = Categorical(logits=new_action_probs)
-                new_log_probs = dist.log_prob(actions)
-
-                # Calculate ratios
-                ratios = torch.exp(new_log_probs - old_log_probs)
-
-                # PPO objective function
-                surrogate1 = ratios * advantages
-                surrogate2 = torch.clamp(ratios, 1 - epsilon, 1 + epsilon) * advantages
-                actor_loss = -torch.min(surrogate1, surrogate2).mean()
-
-                # Critic loss
-                critic_loss = nn.MSELoss()(new_state_values.squeeze(), returns)
-
-                # Entropy loss
-                entropy_loss = -torch.mean(dist.entropy())
-
-                # Total loss
-                loss = actor_loss + 0.5 * critic_loss + beta_ent * entropy_loss
-
-                # Backpropagation
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+            # Update model
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
             buffer.clear()
 
@@ -342,7 +293,7 @@ for epoch in range(n_epochs):
         env = PIE_CP_OB_v2(condition=task_type, max_time=max_time, total_trials=n_trials, 
                         train_cond=train_cond, max_displacement=max_displacement, reward_size=reward_size, step_cost=step_cost, alpha=alpha)
 
-        totG, totloss, tottime = train_with_rollouts(env, model, optimizer, epoch=epoch, n_trials=n_trials, gamma=gamma, lambda_gae=lambda_gae, rollout_buffer_size=rollout_size, epsilon=epsilon)
+        totG, totloss, tottime = train_with_rollouts(env, model, optimizer, epoch=epoch, n_trials=n_trials, gamma=gamma, rollout_buffer_size=rollout_size)
         totloss = np.tile(np.mean(totloss), 200)
 
         # save performance

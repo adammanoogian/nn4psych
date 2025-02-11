@@ -32,9 +32,9 @@ device = torch.device("cpu")
 
 
 # Env parameters
-n_epochs = 25000  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
+n_epochs = 2  # number of epochs to train the model on. Similar to the number of times the agent is trained on the helicopter task. 
 n_trials = 200  # number of trials per epoch for each condition.
-trratio = 0.75
+trratio = 0.5
 
 train_epochs = n_epochs*trratio #n_epochs*0.5  # number of epochs where the helicopter is shown to the agent. if 0, helicopter is never shown.
 no_train_epochs = []  # epoch in which the agent weights are not updated using gradient descent. To see if the model can use its dynamics to solve the task instead.
@@ -42,23 +42,29 @@ contexts = ["change-point","oddball"] #"change-point","oddball"
 num_contexts = len(contexts)
 
 # Task parameters
-max_displacement = 15 # number of units each left or right moves.
+max_displacement = 10 # number of units each left or right moves.
 max_time = 300
 step_cost = 0 #-1/300  # penalize every additional step that the agent does not confirm. 
-reward_size = 7.5 # smaller value means a tighter margin to get reward.
+reward_size = 5 # smaller value means a tighter margin to get reward.
 alpha = 1
 
 # Model Parameters
-input_dim = 6+2  # set this based on your observation space. observation vector is length 4 [helicopter pos, bucket pos, bag pos, bag-bucket pos], context vector is length 2.  
+input_dim = 6+3  # set this based on your observation space. observation vector is length 4 [helicopter pos, bucket pos, bag pos, bag-bucket pos], context vector is length 2.  
 hidden_dim = 64  # size of RNN
 action_dim = 3  # set this based on your action space. 0 is left, 1 is right, 2 is confirm.
 params = hidden_dim*(input_dim+hidden_dim + action_dim+1)
-learning_rate = 1/params/2.5
-gamma = 0.99
-reset_memory = n_trials  # reset RNN activity after T trials
 bias = [0, 0, 0]
 beta_ent = 0.0
-rollout_size = 100
+
+# knobs
+gamma = 0.95
+rollout_size = 10
+reset_memory = 1.0  # reset RNN activity after T trials
+tdnoise = 0.0
+tdlb = None
+tdub = None
+
+learning_rate = 0.0001/100 * rollout_size 
 
 seed = 2025
 np.random.seed(seed)
@@ -76,9 +82,10 @@ class ActorCritic(nn.Module):
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.gain =gain
-        self.rnn = nn.RNN(input_dim, hidden_dim, batch_first=True, nonlinearity='tanh')
-        self.actor = nn.Linear(hidden_dim, action_dim)
-        self.critic = nn.Linear(hidden_dim, 1)
+        bias = False
+        self.rnn = nn.RNN(input_dim, hidden_dim, batch_first=True, nonlinearity='tanh', bias=bias)
+        self.actor = nn.Linear(hidden_dim, action_dim, bias=bias)
+        self.critic = nn.Linear(hidden_dim, 1, bias=bias)
 
         self.init_weights()
 
@@ -142,11 +149,24 @@ def compute_advantages_and_returns(buffer, gamma, device):
     G = 0.0
     advantages = []
     buffer_size = len(buffer.rewards)
-    
+
+
     for reward, value in zip(reversed(buffer.rewards), reversed(buffer.values)):
         G = reward + gamma * G
         returns.insert(0, G)
-        advantages.insert(0, G - value.detach().cpu().numpy())
+
+        # Calculate TD error
+        td_error = G - value.detach().cpu().numpy()
+
+        # noise = np.random.normal(0, tdnoise, size=td_error.shape)
+        noise = np.random.gamma(1.0,1.0, size=td_error.shape) * tdnoise
+        td_error += noise
+
+        # Apply bounds if specified
+        if tdlb is not None or tdub is not None:
+            td_error = np.clip(td_error, tdlb, tdub)
+
+        advantages.insert(0, td_error)
 
     returns = torch.tensor(returns, dtype=torch.float32).to(device)
     advantages = torch.tensor(advantages, dtype=torch.float32).to(device)
@@ -162,24 +182,28 @@ def train_with_rollouts(env, model, optimizer, epoch, n_trials, gamma, rollout_b
     totloss = []
     tottime = []
 
-    hx = (torch.randn(1, 1, hidden_dim) * 0.00).to(device)
+    hx = (torch.randn(1, 1, hidden_dim) * 1/hidden_dim**0.5).to(device)
     trial_counter = 0
     
     while trial_counter < n_trials:
     
         next_obs, done = env.reset()
         norm_next_obs = env.normalize_states(next_obs)
-        next_state = np.concatenate([norm_next_obs, env.context])
+        next_state = np.concatenate([norm_next_obs, env.context, np.array([0.0])])
         next_state = torch.FloatTensor(next_state).unsqueeze(0).unsqueeze(0).to(device)
 
         # Detach hx to prevent backpropagation through the entire history
         hx = hx.detach()
-        if trial_counter % reset_memory == 0:
-            hx = (torch.randn(1, 1, hidden_dim) * 0.00).to(device)
-
+        # if trial_counter % reset_memory == 0:
+        # if np.random.random_sample()< reset_memory:
+        #     hx += (torch.randn(1, 1, hidden_dim) * 1/hidden_dim).to(device)
         totR = 0
         
         while not done:
+
+            if np.random.random_sample()< reset_memory:
+                hx = (torch.randn(1, 1, hidden_dim) * 1/hidden_dim).to(device)
+
             actor_logits, critic_value, hx = model(next_state, hx)
             bias_tensor = torch.tensor(bias, dtype=actor_logits.dtype, device=actor_logits.device)
             actor_logits += bias_tensor
@@ -195,7 +219,7 @@ def train_with_rollouts(env, model, optimizer, epoch, n_trials, gamma, rollout_b
 
             # Prep next state
             norm_next_obs = env.normalize_states(next_obs)
-            next_state = np.concatenate([norm_next_obs, env.context])
+            next_state = np.concatenate([norm_next_obs, env.context, np.array([reward])])
             next_state = torch.FloatTensor(next_state).unsqueeze(0).unsqueeze(0).to(device)
 
         trial_counter += 1
