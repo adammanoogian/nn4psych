@@ -6,22 +6,23 @@ from torch.distributions import Categorical
 from tasks import PIE_CP_OB_v2
 import matplotlib.pyplot as plt
 from torch.nn import init
-from utils_funcs import get_lrs_v2, saveload, plot_behavior
+from utils_funcs import get_lrs_v2, saveload, plot_behavior, ActorCritic
 from scipy.stats import linregress
 from scipy.ndimage import uniform_filter1d
 from copy import deepcopy
+import glob
 
 
 contexts = ["change-point","oddball"] #"change-point","oddball"
 num_contexts = len(contexts)
 train_cond = False
 reward_size= 5
-max_displacement=15
+max_displacement=10
 max_time = 300
 n_trials = 200
-epochs = 1
+epochs = 10
 
-input_dim = 6+2  # set this based on your observation space. observation vector is length 4 [helicopter pos, bucket pos, bag pos, bag-bucket pos], context vector is length 2.  
+input_dim = 6+3  # set this based on your observation space. observation vector is length 4 [helicopter pos, bucket pos, bag pos, bag-bucket pos], context vector is length 2.  
 hidden_dim = 64  # size of RNN
 action_dim = 3  # set this based on your action space. 0 is left, 1 is right, 2 is confirm.
 
@@ -29,51 +30,28 @@ seed = 2025
 np.random.seed(seed)
 torch.manual_seed(seed)
 
-model_path = "./model_params/Falseheli_25000e_v3_25000e_0.75r_64n_0.99g_8.223684210526316e-05lr_15md_7.5rz_0s.pth"
+# model_path = "./model_params/36.0_V3_0.0ns_Nonelb_Noneub_0.95g_64n_40000e_2s.pth" # good model
+# model_path = "./model_params_gamma/12.0_V3_0.0ns_Nonelb_Noneub_0.7g_64n_40000e_2s.pth" # subptimal
+
+gamma = 0.95
+tds = 1.0
+prm = 0.0
+troll = 50
+
+models = f"./model_params_101000/*_V3_{gamma}g_{prm}rm_{troll}bz_0.0td_{tds}tds_Nonelb_Noneup_64n_50000e_10md_5.0rz_*s.pth"
+files = glob.glob(models)
+sorted_file_paths = sorted(files, key=lambda x: float(x.split('/')[2].split('_')[0]))
+model_path = files[-1]
+print(model_path)
 
 
-class ActorCritic(nn.Module):
-    def __init__(self, input_dim, hidden_dim, action_dim, gain=1.5):
-        super(ActorCritic, self).__init__()
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.gain =gain
-        self.rnn = nn.RNN(input_dim, hidden_dim, batch_first=True, nonlinearity='tanh')
-        self.actor = nn.Linear(hidden_dim, action_dim)
-        self.critic = nn.Linear(hidden_dim, 1)
-
-        self.init_weights()
-
-    def init_weights(self):
-        for name, param in self.rnn.named_parameters(): # initialize the input and rnn weights 
-            if 'weight_ih' in name:
-                # initialize input weights using 1/sqrt(fan_in). if 1/fan_in, more feature learning. 
-                init.normal_(param, mean=0, std=1/(self.input_dim**0.5))
-            elif 'weight_hh' in name:
-                # initialize rnn weights in a stable (gain=1.0) or chaotic regime (gain=1.5)
-                init.normal_(param, mean=0, std=self.gain / self.hidden_dim**0.5)
-            elif 'bias_ih' in name or 'bias_hh' in name:
-                # Set RNN biases to zero
-                init.constant_(param, 0)
-        
-        for layer in [self.actor, self.critic]:
-            for name, param in layer.named_parameters():
-                if 'weight' in name:
-                    # initialize input weights using 1/fan_in to induce feature learning 
-                    init.normal_(param, mean=0, std=1/self.hidden_dim)
-                elif 'bias' in name:
-                    init.constant_(param, 0)
-
-    def forward(self, x, hx):
-        r, h = self.rnn(x, hx)
-        r = r.squeeze(1)
-        return self.actor(r), self.critic(r), h
-
-model = ActorCritic(input_dim, hidden_dim, action_dim)
+model = ActorCritic(input_dim, hidden_dim, action_dim, noise=0.0)
 if model_path is not None:
     model.load_state_dict(torch.load(model_path))
     print('Load Model')
 
+
+all_states = np.zeros([epochs, num_contexts, 5, n_trials])
 
 # get rnn, actor, critic activity
 for epoch in range(epochs):
@@ -82,20 +60,24 @@ for epoch in range(epochs):
     Cs = []
     Rs = []
     Os = []
-    for context in contexts:
+    for tt, context in enumerate(contexts):
         env = PIE_CP_OB_v2(condition=context, max_time=max_time, total_trials=n_trials, 
                 train_cond=train_cond, max_displacement=max_displacement, reward_size=reward_size)
         
         h, a, c, r, o = [],[],[], [], []
-        hx = torch.randn(1, 1, hidden_dim) *0# 1/hidden_dim
+        hx = torch.randn(1, 1, hidden_dim) * 1/hidden_dim
         for trial in range(n_trials):
 
             next_obs, done = env.reset()
             norm_next_obs = env.normalize_states(next_obs)
-            next_state = np.concatenate([norm_next_obs, env.context])
+            next_state = np.concatenate([norm_next_obs, env.context, np.array([0.0])])
             next_state = torch.FloatTensor(next_state).unsqueeze(0).unsqueeze(0)
 
             while not done:
+
+                if np.random.random_sample()< prm:
+                    hx = (torch.randn(1, 1, hidden_dim) * 1/hidden_dim)
+
                 actor_logits, critic_value, hx = model(next_state, hx)
                 probs = Categorical(logits=actor_logits)
                 action = probs.sample()
@@ -107,18 +89,104 @@ for epoch in range(epochs):
 
                 # Prep next state
                 norm_next_obs = env.normalize_states(next_obs)
-                next_state = np.concatenate([norm_next_obs, env.context])
+                next_state = np.concatenate([norm_next_obs, env.context, np.array([reward])])
                 next_state = torch.FloatTensor(next_state).unsqueeze(0).unsqueeze(0)
 
         Hs.append(h), As.append(a), Cs.append(c), Rs.append(r), Os.append(o)
 
+        all_states[epoch, tt] = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
+
+
+
+def get_lrs_v2(states, threshold=20):
+    true_state = states[2]  # bag position
+    predicted_state = states[1]  # bucket position
+    prediction_error = (true_state - predicted_state)[:-1]
+    update = np.diff(predicted_state)
+
+    idx = prediction_error !=0
+    prediction_error= prediction_error[idx]
+    update = update[idx]
+    learning_rate = update / prediction_error
+
+    prediction_error = abs(prediction_error)
+    idx = prediction_error>threshold
+    pes = prediction_error[idx]
+    lrs = np.clip(learning_rate,0,1)[idx]
+
+    sorted_indices = np.argsort(pes)
+    prediction_error_sorted = pes[sorted_indices]
+    learning_rate_sorted = lrs[sorted_indices]
+
+    return prediction_error_sorted, learning_rate_sorted
+
+
+def plot_lrs(states, scale=0.1):
+    epochs = states.shape[0]
+    pess, lrss, area = [],[], []
+    for c in range(2):
+        pes,lrs = [],[]
+        for e in range(epochs):
+            pe, lr = get_lrs_v2(states[e, c])
+
+            pes.append(pe)
+            lrs.append(lr)
+
+        pes = np.concatenate(pes)
+        lrs = np.concatenate(lrs)
+        sorted_indices = np.argsort(pes)
+        prediction_error_sorted = pes[sorted_indices]
+        learning_rate_sorted = lrs[sorted_indices]
+
+        pess.append(prediction_error_sorted)
+        lrss.append(learning_rate_sorted)
+        area.append(np.trapz(learning_rate_sorted, prediction_error_sorted))
+    
+
+    plt.figure(figsize=(3,2.5))
+    colors = ['orange', 'brown']
+    labels = ['CP', 'OB']
+    for i in range(2):
+        window_size = int(len(lrss[i])*scale)
+        smoothed_learning_rate = uniform_filter1d(lrss[i], size=window_size)
+        plt.plot(pess[i], smoothed_learning_rate, color=colors[i], linewidth=2,label=labels[i])
+    plt.legend()
+    plt.xlabel('Prediction error')
+    plt.ylabel('Learning rate')
+    # plt.title(f'CB={area[0]:.1f}, OB={area[1]:.1f}, A={(area[0]-area[1]):.1f}')
+    plt.tight_layout()
+    return pess, lrss, area
+
+_,_,area = plot_lrs(all_states,scale=0.1)
+
+
+def plot_states(states):
+    contexts = ["Change-point","Oddball"]
+    for c, context in enumerate(contexts):
+        [trials, bucket_positions, bag_positions, helicopter_positions, hazard_triggers] = states[c]
+
+        plt.figure(figsize=(4, 2.5))
+        # plt.plot(self.trials, self.bucket_positions, label='Bucket Position', color='blue')
+        plt.scatter(trials, bag_positions, label='Bag Position', color='red', marker='o', linestyle='-.', alpha=1, edgecolors='k')
+        plt.plot(trials, helicopter_positions, label='Helicopter', color='green', linewidth=4)
+        plt.plot(trials, bucket_positions, label='Bucket Position', color='orange', alpha=1, linewidth=2)
+
+        plt.ylim(-10, 310)  # Set y-axis limit from 0 to 300
+        plt.xlabel('Trial')
+        plt.ylabel('Position')
+        plt.title(f"{context}\n$\gamma={gamma}, \\beta_\delta={tds}, p_{{reset}}={prm}, t_{{rollout}}={troll}$")
+        plt.legend(frameon=True)
+        plt.tight_layout()
+
+plot_states(all_states[-1])
 
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 import numpy as np
 
-def plot_combined_state_space(Hs, Rs, Os, contexts):
-    plt.figure(figsize=(12, 6))
+def plot_combined_state_space(Hs, Rs, Os):
+    contexts = ["Change-point","Oddball"]
+    plt.figure(figsize=(4, 8))
     
     for i, (h_list, r_list, o_list, context) in enumerate(zip(Hs, Rs, Os, contexts)):
         # Convert lists to numpy arrays
@@ -129,6 +197,7 @@ def plot_combined_state_space(Hs, Rs, Os, contexts):
         # Perform PCA for dimensionality reduction to 2D
         pca = PCA(n_components=2)
         h_proj = pca.fit_transform(h_array)
+        pc1, pc2 = pca.explained_variance_ratio_
 
         # Calculate differences between consecutive hidden states for vector field
         vectors = h_proj[1:] - h_proj[:-1]
@@ -142,7 +211,7 @@ def plot_combined_state_space(Hs, Rs, Os, contexts):
         sizes = 20# + ((r_array - 0) / (1 - 0)) * (200 - 20)  # Scale sizes from 20 to 200
 
         # Plot PCA projection with vector field
-        plt.subplot(1, len(contexts), i+1)
+        plt.subplot(len(contexts),1, i+1)
         
         # Draw paths with a quiver plot
         plt.quiver(h_proj[:-1, 0], h_proj[:-1, 1],
@@ -160,14 +229,17 @@ def plot_combined_state_space(Hs, Rs, Os, contexts):
         plt.scatter([],[], label='Bag Drop', color='g')
         plt.scatter([],[], label='Bucket Mvmt', color='gray')
 
-        plt.title(f'Combined State Space - {context}')
-        plt.xlabel('PC 1')
-        plt.ylabel('PC 2')
+        plt.title(context)
+        plt.suptitle(f'$\gamma={gamma}, \\beta_\delta={tds}, p_{{reset}}={prm}, t_{{mem}}={troll}$')
+        plt.title(f"{context}")
+        plt.xlabel(f'PC 1 (Var={pc1:.3f})')
+        plt.ylabel(f'PC 2, (Var={pc2:.3f})')
         plt.grid(True)
-        plt.legend()
+        if i>0:
+            plt.legend()
 
     plt.tight_layout()
     plt.show()
 
 # Call the combined function with hidden states, rewards, hazard indications, and contexts
-plot_combined_state_space(Hs, Rs, Os, contexts)
+plot_combined_state_space(Hs, Rs, Os)

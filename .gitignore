@@ -5,6 +5,9 @@ __pycache__
 *.pkl*
 *npy
 **.DS_Store
-figs
 model_params
 state_data
+model_params*
+figs*
+analysis
+cleanrl

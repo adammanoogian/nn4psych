@@ -2,6 +2,45 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import linregress
 from scipy.ndimage import uniform_filter1d
+import torch.nn as nn
+import torch
+import matplotlib.pyplot as plt
+from torch.nn import init
+
+class ActorCritic(nn.Module):
+    def __init__(self, input_dim, hidden_dim, action_dim, gain=1.5, noise=0.0, bias=False):
+        super(ActorCritic, self).__init__()
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.gain = gain
+        self.noise = noise  # Include the noise variance as an argument
+        self.rnn = nn.RNN(input_dim, hidden_dim, batch_first=True, nonlinearity='tanh',bias=bias)
+        self.actor = nn.Linear(hidden_dim, action_dim,bias=bias)
+        self.critic = nn.Linear(hidden_dim, 1,bias=bias)
+        self.init_weights()
+
+    def init_weights(self):
+        for name, param in self.rnn.named_parameters():
+            if 'weight_ih' in name:
+                init.normal_(param, mean=0, std=1/(self.input_dim**0.5))
+            elif 'weight_hh' in name:
+                init.normal_(param, mean=0, std=self.gain / self.hidden_dim**0.5)
+            elif 'bias_ih' in name or 'bias_hh' in name:
+                init.constant_(param, 0)
+
+        for layer in [self.actor, self.critic]:
+            for name, param in layer.named_parameters():
+                if 'weight' in name:
+                    init.normal_(param, mean=0, std=1/self.hidden_dim)
+                elif 'bias' in name:
+                    init.constant_(param, 0)
+
+    def forward(self, x, hx):
+        r, h = self.rnn(x, hx)
+        r = r.squeeze(1)
+        critic_value = self.critic(r)
+
+        return self.actor(r), critic_value, h
 
 def saveload(filename, variable, opt):
     import pickle
@@ -29,7 +68,7 @@ def get_lrs(states):
     smoothed_learning_rate = uniform_filter1d(learning_rate_sorted, size=window_size)
     return prediction_error_sorted, smoothed_learning_rate
 
-def get_lrs_v2(states):
+def get_lrs_v2(states, threshold=20):
     true_state = states[2]  # bag position
     predicted_state = states[1]  # bucket position
     prediction_error = (true_state - predicted_state)[:-1]
@@ -41,7 +80,7 @@ def get_lrs_v2(states):
     learning_rate = update / prediction_error
 
     prediction_error = abs(prediction_error)
-    idx = prediction_error>20
+    idx = prediction_error>threshold
     pes = prediction_error[idx]
     lrs = np.clip(learning_rate,0,1)[idx]
 

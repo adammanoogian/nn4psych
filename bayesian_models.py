@@ -220,19 +220,21 @@ class BayesianModel:
 
         env = PIE_CP_OB(condition=self.condition, total_trials=self.total_trials)
         #all_states[epoch, tt] = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
-        obs, _ = env.reset()
-        pred_error = 0
-
+        
+        update = 0
         for t in range(self.total_trials):
-            # extract necessary trial info from env
-            # Use the model to get sim_action
-            ll, sim_action = self.flexible_normative_model(
-                δ = pred_error,
-                context = self.condition
-            )
-            obs, _, _ = env.step(action = None, direct_action = sim_action)
-            pred_error = obs[3]
+            obs, _ = env.reset()
+            pred_error = 0
 
+            for i in range(2):
+                # extract necessary trial info from env
+                # Use the model to get sim_action
+                ll, sim_action = self.flexible_normative_model(δ = pred_error, context = self.condition, agent_update=update)
+                print(obs, sim_action, env.bucket_pos)
+
+                obs, _, _ = env.step(action = None, direct_action = sim_action)
+                pred_error = abs(obs[3]) # If PE is positive, model does not know to shift back. 
+                update = sim_action - update
     
         # 0 = trial index, 1 = bucket_pos, 2 = bag_pos, 3 = helicopter_pos, 4 = hazard_trigger
         states = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
@@ -240,6 +242,22 @@ class BayesianModel:
         np.save("./data/bayesian_models/model_predictions.npy", states)
         return states
 
+def plot_states(states):
+    contexts = ["Change-point","Oddball"]
+    # for c, context in enumerate(contexts):
+    [trials, bucket_positions, bag_positions, helicopter_positions, hazard_triggers] = states#[c]
+
+    plt.figure(figsize=(4, 2.5))
+    # plt.plot(self.trials, self.bucket_positions, label='Bucket Position', color='blue')
+    plt.scatter(trials, bag_positions, label='Bag Position', color='red', marker='o', linestyle='-.', alpha=1, edgecolors='k')
+    plt.plot(trials, helicopter_positions, label='Helicopter', color='green', linewidth=4)
+    plt.plot(trials, bucket_positions, label='Bucket Position', color='orange', alpha=1, linewidth=2)
+
+    plt.ylim(-10, 310)  # Set y-axis limit from 0 to 300
+    plt.xlabel('Trial')
+    plt.ylabel('Position')
+    # plt.legend(frameon=True)
+    plt.tight_layout()
 
 #%%
 #run 
@@ -256,6 +274,7 @@ if __name__ == "__main__":
     model.sim_data(total_trials=100, model_name = "flexible_normative_model", condition = 'changepoint')
 
     #run pytensor fitting
+    plot_states(states)
 
     #set seed
     seed = sum(map(ord, "RL_PyMC"))

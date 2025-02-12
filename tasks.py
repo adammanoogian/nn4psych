@@ -6,14 +6,15 @@ import matplotlib.pyplot as plt
 import copy
 
 class DiscretePredictiveInferenceEnv(gym.Env):
-    def __init__(self, condition="change-point"):
+    def __init__(self, num_actions, condition="change-point", ):
         super(DiscretePredictiveInferenceEnv, self).__init__()
         
-        self.action_space = spaces.Discrete(5)        
+        self.action_space = spaces.Discrete(num_actions)        
+        self.action_space = spaces.Discrete(num_actions)        
         # Observation: currentCurrent bucket position, last bag position, and prediction error
         self.observation_space = spaces.Box(low=np.array([0, 0, 0]), 
-                                            high=np.array([4, 4, 4]), dtype=np.float32)
-        
+                                            high=np.full(3,num_actions), dtype=np.float32)
+
         # Initialize variables
         self.helicopter_pos = 2
         self.bucket_pos = 2
@@ -48,25 +49,19 @@ class DiscretePredictiveInferenceEnv(gym.Env):
 
     def step(self, action):
         # Update bucket position based on action
-        if action == 0:
-            self.bucket_pos = 0
-        elif action == 1:
-            self.bucket_pos = 1
-        elif action == 2:
-            self.bucket_pos = 2
-        elif action == 3:
-            self.bucket_pos = 3
-        elif action == 4:
-            self.bucket_pos = 4
+        self.bucket_pos = action
+        self.bucket_pos = action
         
         # Determine bag position based on task type
         if self.task_type == "change-point":
             if np.random.rand() < self.change_point_hazard:
-                self.helicopter_pos = np.random.randint(0, 4)
+                self.helicopter_pos = np.random.randint(0, (num_actions-1) )
+                self.helicopter_pos = np.random.randint(0, (num_actions-1) )
             self.bag_pos = self._generate_bag_position()  # Bag follows the stable helicopter position
         else:  # "oddball"
             if np.random.rand() < self.oddball_hazard:
-                self.bag_pos = np.random.randint(0, 4)  # Oddball event
+                self.bag_pos = np.random.randint(0, (num_actions - 1) )  # Oddball event
+                self.bag_pos = np.random.randint(0, (num_actions - 1) )  # Oddball event
             else:
                 self.bag_pos = self._generate_bag_position()
         
@@ -77,7 +72,8 @@ class DiscretePredictiveInferenceEnv(gym.Env):
         self.helicopter_positions.append(self.helicopter_pos)
 
         # Calculate reward
-        reward = 1-abs(self.bag_pos - self.bucket_pos)
+        reward = -abs(self.bag_pos - self.bucket_pos) #max reward is 0
+        reward = -abs(self.bag_pos - self.bucket_pos) #max reward is 0
         
         # Increment trial count
         self.trial += 1
@@ -97,7 +93,7 @@ class DiscretePredictiveInferenceEnv(gym.Env):
         if self.helicopter_pos == 0:
             if np.random.rand() < 0.2:
                 bag_pos += 1
-        elif self.helicopter_pos == 4:
+        elif self.helicopter_pos == num_actions:
             if np.random.rand() < 0.2:
                 bag_pos -= 1
         else: # 1,2,3: 80% chance to stay, 10% move left, or 10% right
@@ -169,11 +165,16 @@ class ContinuousPredictiveInferenceEnv(gym.Env):
         return np.array([self.bucket_pos, self.bag_pos, self.bag_pos - self.bucket_pos], dtype=np.float32)
 
     def step(self, action):
-        # Update bucket position based on action
+        #Update bucket position based on action (incrementally move left or right)
+        #Update bucket position based on action (incrementally move left or right)
         if action == 0:  # Move left
             self.bucket_pos = max(0, self.bucket_pos - 30)
         elif action == 1:  # Move right
             self.bucket_pos = min(300, self.bucket_pos + 30)
+        # or update bucket position independently on action
+        # self.bucket_pos = (action / 10 ) * 300
+        # or update bucket position independently on action
+        # self.bucket_pos = (action / 10 ) * 300
         
         # Determine bag position based on task type
         if self.task_type == "change-point":
@@ -193,13 +194,20 @@ class ContinuousPredictiveInferenceEnv(gym.Env):
         self.helicopter_positions.append(self.helicopter_pos)
 
         # Calculate reward
-        reward = -abs(self.bag_pos - self.bucket_pos)
-        
+        reward = -abs(self.bag_pos - self.bucket_pos) #is this supposed to be "1 - PE"
+        # calc PE 
+        self.pred_error = 1 - abs(self.bag_pos - self.bucket_pos)
+        self.error = self.bag_pos - self.bucket_pos
+        reward = -abs(self.bag_pos - self.bucket_pos) #is this supposed to be "1 - PE"
+        # calc PE 
+        self.pred_error = 1 - abs(self.bag_pos - self.bucket_pos)
+        self.error = self.bag_pos - self.bucket_pos
         # Increment trial count
         self.trial += 1
         
         # Compute the new observation
-        observation = np.array([self.bucket_pos, self.bag_pos, self.bag_pos - self.bucket_pos], dtype=np.float32)
+        observation = np.array([self.bucket_pos, self.bag_pos, self.error], dtype=np.float32)
+        observation = np.array([self.bucket_pos, self.bag_pos, self.error], dtype=np.float32)
         
         # Determine if the episode should end (e.g., after 100 trials)
         done = self.trial >= self.total_trials
@@ -230,7 +238,7 @@ class ContinuousPredictiveInferenceEnv(gym.Env):
 
 
 class PIE_CP_OB:
-    def __init__(self, condition="change-point", total_trials=200,max_time=300, train_cond=False, 
+    def __init__(self, condition="changepoint", total_trials=200,max_time=300, train_cond=False, 
                  max_displacement=15, reward_size=7.5, step_cost=0.0, alpha=1):
         super(PIE_CP_OB, self).__init__()
         
@@ -262,7 +270,7 @@ class PIE_CP_OB:
         self.task_type = condition
         self.train_cond = train_cond  # either True or False, if True, helicopter position is shown to agent. if False helicopter position is 0
 
-        if condition == "change-point":
+        if condition == "changepoint":
             self.context =  np.array([1,0])
         elif condition == "oddball":
             self.context =  np.array([0,1])
@@ -297,7 +305,7 @@ class PIE_CP_OB:
         self.hazard_trigger = 0
         self.velocity = 0
 
-        if self.task_type == "change-point":
+        if self.task_type == "changepoint":
             if np.random.rand() < self.change_point_hazard:
                 self.helicopter_pos = np.random.randint(self.min_obs_size + self.bound_helicopter,self.max_obs_size-self.bound_helicopter)  # change helicopter position based on hazard rate
                 self.hazard_trigger = 1
