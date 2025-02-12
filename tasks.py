@@ -7,11 +7,14 @@ import copy
 
 class DiscretePredictiveInferenceEnv(gym.Env):
     def __init__(self, num_actions, condition="change-point", ):
+    def __init__(self, num_actions, condition="change-point", ):
         super(DiscretePredictiveInferenceEnv, self).__init__()
         
         self.action_space = spaces.Discrete(num_actions)        
+        self.action_space = spaces.Discrete(num_actions)        
         # Observation: currentCurrent bucket position, last bag position, and prediction error
         self.observation_space = spaces.Box(low=np.array([0, 0, 0]), 
+                                            high=np.full(3,num_actions), dtype=np.float32)
                                             high=np.full(3,num_actions), dtype=np.float32)
         
         # Initialize variables
@@ -49,14 +52,17 @@ class DiscretePredictiveInferenceEnv(gym.Env):
     def step(self, action):
         # Update bucket position based on action
         self.bucket_pos = action
+        self.bucket_pos = action
         
         # Determine bag position based on task type
         if self.task_type == "change-point":
             if np.random.rand() < self.change_point_hazard:
                 self.helicopter_pos = np.random.randint(0, (num_actions-1) )
+                self.helicopter_pos = np.random.randint(0, (num_actions-1) )
             self.bag_pos = self._generate_bag_position()  # Bag follows the stable helicopter position
         else:  # "oddball"
             if np.random.rand() < self.oddball_hazard:
+                self.bag_pos = np.random.randint(0, (num_actions - 1) )  # Oddball event
                 self.bag_pos = np.random.randint(0, (num_actions - 1) )  # Oddball event
             else:
                 self.bag_pos = self._generate_bag_position()
@@ -68,6 +74,7 @@ class DiscretePredictiveInferenceEnv(gym.Env):
         self.helicopter_positions.append(self.helicopter_pos)
 
         # Calculate reward
+        reward = -abs(self.bag_pos - self.bucket_pos) #max reward is 0
         reward = -abs(self.bag_pos - self.bucket_pos) #max reward is 0
         
         # Increment trial count
@@ -88,6 +95,7 @@ class DiscretePredictiveInferenceEnv(gym.Env):
         if self.helicopter_pos == 0:
             if np.random.rand() < 0.2:
                 bag_pos += 1
+        elif self.helicopter_pos == num_actions:
         elif self.helicopter_pos == num_actions:
             if np.random.rand() < 0.2:
                 bag_pos -= 1
@@ -161,10 +169,13 @@ class ContinuousPredictiveInferenceEnv(gym.Env):
 
     def step(self, action):
         #Update bucket position based on action (incrementally move left or right)
+        #Update bucket position based on action (incrementally move left or right)
         if action == 0:  # Move left
             self.bucket_pos = max(0, self.bucket_pos - 30)
         elif action == 1:  # Move right
             self.bucket_pos = min(300, self.bucket_pos + 30)
+        # or update bucket position independently on action
+        # self.bucket_pos = (action / 10 ) * 300
         # or update bucket position independently on action
         # self.bucket_pos = (action / 10 ) * 300
         
@@ -190,10 +201,15 @@ class ContinuousPredictiveInferenceEnv(gym.Env):
         # calc PE 
         self.pred_error = 1 - abs(self.bag_pos - self.bucket_pos)
         self.error = self.bag_pos - self.bucket_pos
+        reward = -abs(self.bag_pos - self.bucket_pos) #is this supposed to be "1 - PE"
+        # calc PE 
+        self.pred_error = 1 - abs(self.bag_pos - self.bucket_pos)
+        self.error = self.bag_pos - self.bucket_pos
         # Increment trial count
         self.trial += 1
         
         # Compute the new observation
+        observation = np.array([self.bucket_pos, self.bag_pos, self.error], dtype=np.float32)
         observation = np.array([self.bucket_pos, self.bag_pos, self.error], dtype=np.float32)
         
         # Determine if the episode should end (e.g., after 100 trials)
