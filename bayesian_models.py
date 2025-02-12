@@ -124,18 +124,21 @@ class BayesianModel:
         env = PIE_CP_OB(condition=self.condition, total_trials=self.total_trials, max_time=300,
                         train_cond=False, max_displacement=10, reward_size=20, step_cost=0.0, alpha=1)
         #all_states[epoch, tt] = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
-
+        
+        update = 0
         for t in range(self.total_trials):
             obs, _ = env.reset()
             pred_error = 0
+
             for i in range(2):
                 # extract necessary trial info from env
                 # Use the model to get sim_action
-                ll, sim_action = self.flexible_normative_model(δ = pred_error, context = self.condition)
+                ll, sim_action = self.flexible_normative_model(δ = pred_error, context = self.condition, agent_update=update)
                 print(obs, sim_action, env.bucket_pos)
 
                 obs, _, _ = env.step(action = None, direct_action = sim_action)
                 pred_error = abs(obs[3]) # If PE is positive, model does not know to shift back. 
+                update = sim_action - update
     
         # 0 = trial index, 1 = bucket_pos, 2 = bag_pos, 3 = helicopter_pos, 4 = hazard_trigger
         states = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
