@@ -7,7 +7,6 @@ import copy
 
 class DiscretePredictiveInferenceEnv(gym.Env):
     def __init__(self, num_actions, condition="change-point", ):
-    def __init__(self, num_actions, condition="change-point", ):
         super(DiscretePredictiveInferenceEnv, self).__init__()
         
         self.action_space = spaces.Discrete(num_actions)        
@@ -15,8 +14,7 @@ class DiscretePredictiveInferenceEnv(gym.Env):
         # Observation: currentCurrent bucket position, last bag position, and prediction error
         self.observation_space = spaces.Box(low=np.array([0, 0, 0]), 
                                             high=np.full(3,num_actions), dtype=np.float32)
-                                            high=np.full(3,num_actions), dtype=np.float32)
-        
+
         # Initialize variables
         self.helicopter_pos = 2
         self.bucket_pos = 2
@@ -95,7 +93,6 @@ class DiscretePredictiveInferenceEnv(gym.Env):
         if self.helicopter_pos == 0:
             if np.random.rand() < 0.2:
                 bag_pos += 1
-        elif self.helicopter_pos == num_actions:
         elif self.helicopter_pos == num_actions:
             if np.random.rand() < 0.2:
                 bag_pos -= 1
