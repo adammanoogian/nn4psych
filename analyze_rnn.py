@@ -20,7 +20,7 @@ reward_size= 5
 max_displacement=10
 max_time = 300
 n_trials = 200
-epochs = 10
+epochs = 100
 
 input_dim = 6+3  # set this based on your observation space. observation vector is length 4 [helicopter pos, bucket pos, bag pos, bag-bucket pos], context vector is length 2.  
 hidden_dim = 64  # size of RNN
@@ -34,14 +34,15 @@ torch.manual_seed(seed)
 # model_path = "./model_params_gamma/12.0_V3_0.0ns_Nonelb_Noneub_0.7g_64n_40000e_2s.pth" # subptimal
 
 gamma = 0.95
-tds = 1.0
+tds = 0.25
 prm = 0.0
-troll = 50
+troll = 100
+idx = -3
 
 models = f"./model_params_101000/*_V3_{gamma}g_{prm}rm_{troll}bz_0.0td_{tds}tds_Nonelb_Noneup_64n_50000e_10md_5.0rz_*s.pth"
 files = glob.glob(models)
 sorted_file_paths = sorted(files, key=lambda x: float(x.split('/')[2].split('_')[0]))
-model_path = files[-1]
+model_path = sorted_file_paths[idx]
 print(model_path)
 
 
@@ -157,8 +158,6 @@ def plot_lrs(states, scale=0.1):
     plt.tight_layout()
     return pess, lrss, area
 
-_,_,area = plot_lrs(all_states,scale=0.1)
-
 
 def plot_states(states):
     contexts = ["Change-point","Oddball"]
@@ -168,17 +167,18 @@ def plot_states(states):
         plt.figure(figsize=(4, 2.5))
         # plt.plot(self.trials, self.bucket_positions, label='Bucket Position', color='blue')
         plt.scatter(trials, bag_positions, label='Bag Position', color='red', marker='o', linestyle='-.', alpha=1, edgecolors='k')
-        plt.plot(trials, helicopter_positions, label='Helicopter', color='green', linewidth=4)
-        plt.plot(trials, bucket_positions, label='Bucket Position', color='orange', alpha=1, linewidth=2)
+        plt.plot(trials, helicopter_positions, label='Helicopter', color='green', linewidth=3)
+        plt.plot(trials, bucket_positions, label='Bucket Position', color='orange', alpha=1, linewidth=3)
 
         plt.ylim(-10, 310)  # Set y-axis limit from 0 to 300
         plt.xlabel('Trial')
         plt.ylabel('Position')
         plt.title(f"{context}\n$\gamma={gamma}, \\beta_\delta={tds}, p_{{reset}}={prm}, t_{{rollout}}={troll}$")
-        plt.legend(frameon=True)
+        plt.legend(frameon=True, fontsize=8)
         plt.tight_layout()
+        plt.savefig(f'./analysis/{context}_states.png')
+        plt.savefig(f'./analysis/{context}_states.svg')
 
-plot_states(all_states[-1])
 
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
@@ -241,5 +241,13 @@ def plot_combined_state_space(Hs, Rs, Os):
     plt.tight_layout()
     plt.show()
 
+
+_,_,area = plot_lrs(all_states,scale=0.05)
+
+
+for e in range(5):
+    plot_states(all_states[e])
+
+
 # Call the combined function with hidden states, rewards, hazard indications, and contexts
-plot_combined_state_space(Hs, Rs, Os)
+# plot_combined_state_space(Hs, Rs, Os)

@@ -1,7 +1,7 @@
 #%%
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--analysis', type=str, required=False, help='analysis', default='rollout')
+parser.add_argument('--analysis', type=str, required=False, help='analysis', default='gamma')
 args, unknown = parser.parse_known_args()
 print(args)
 
@@ -155,22 +155,23 @@ def plot_param_area(param, areas, xlabel, validms, logx=False, legend=False):
 
 
 analysis = args.analysis
-epochs = 1
+epochs = 3
 seeds = 50
 
 data_dir = "./model_params_2/"
+V = '5'
 bias = False
 
 
 if analysis == 'gamma':
     # influence of gamma
 
-    gammas = [0.999, 0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1] # 0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1
+    gammas = [0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1] # 0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1
     areas = np.zeros([len(gammas), seeds, 2])
     validms = np.zeros(len(gammas), dtype=int)
     for g, gamma in enumerate(gammas):
         
-        file_names= data_dir+f"*_V5_{gamma}g_0.0rm_50bz_0.0td_1.0tds_64n_50000e_10md_5.0rz_*s.pth"
+        file_names= data_dir+f"*_V{V}_{gamma}g_0.0rm_50bz_0.0td_1.0tds_64n_50000e_10md_5.0rz_*s.pth"
         # file_names= data_dir+f"*_V3_{gamma}g_0.0rm_100bz_0.0td_1.0tds_Nonelb_Noneup_64n_50000e_10md_5.0rz_*s.pth"
         models = glob.glob(file_names)
         print(gamma, len(models))

@@ -193,8 +193,8 @@ def compute_gae(buffer, gamma, lambda_gae, device):
             next_value = values[t + 1]
 
         delta = rewards[t] + gamma * next_value * next_non_terminal - values[t]
-        # gae = delta + gamma * lambda_gae * next_non_terminal * gae
-        advantages.insert(0, delta)
+        gae = delta + gamma * lambda_gae * next_non_terminal * gae
+        advantages.insert(0, gae)
 
     advantages = torch.tensor(advantages, dtype=torch.float32).to(device)
     returns = advantages + torch.tensor(values, dtype=torch.float32).to(device)

@@ -1,7 +1,7 @@
 #%%
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--analysis', type=str, required=False, help='analysis', default='rollout')
+parser.add_argument('--analysis', type=str, required=False, help='analysis', default='preset')
 args, unknown = parser.parse_known_args()
 print(args)
 
@@ -155,7 +155,7 @@ def plot_param_area(param, areas, xlabel, validms, logx=False, legend=False):
 
 
 analysis = args.analysis
-epochs = 1
+epochs = 10
 seeds = 50
 
 data_dir = "./model_params_2/"

@@ -11,3 +11,9 @@ model_params*
 figs*
 analysis
 cleanrl
+cleanrl
+normative_model
+toy
+v0
+v1
+v2

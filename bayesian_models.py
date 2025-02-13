@@ -167,8 +167,8 @@ def plot_states(states):
 #run 
 if __name__ == "__main__":
     states = np.load('./data/env_data_change-point.npy') #[trials, bucket_position, bag_position, helicopter_position]
-    # model = BayesianModel(states, model_type = 'changepoint')
-    # model.run_mle()
+    model = BayesianModel(states, model_type = 'changepoint')
+    model.run_mle()
 
     # #run simulation
     model = BayesianModel(states, model_type = 'changepoint')
