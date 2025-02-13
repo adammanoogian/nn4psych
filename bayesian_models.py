@@ -5,9 +5,10 @@ Fit Bayesian models to the RNN-AC simulated data
 
 import matplotlib.pyplot as plt
 import numpy as np
-#import pymc as pm
-#import pytensor
-#import pytensor.tensor as pt
+import arviz as az
+import pytensor
+import pytensor.tensor as pt
+import pymc as pm
 import scipy
 import scipy.stats as stats
 import utils
@@ -37,6 +38,9 @@ class BayesianModel:
 
 
     def get_llik(self, x, *args, model_name = 'normative'):
+        '''
+        Get nll for MLE
+        '''
         #take args from minimizer
         Ω, τ = x
         actions, δ = args
@@ -54,10 +58,46 @@ class BayesianModel:
             #store necessary data 
             logp_actions[t] = logp_action
             #update states for next trial
-            
-
         return -np.sum(logp_actions[1:]) 
+    
+    def get_pytensor_llik(self, Ω, τ):
+        """
+        PyTensor function estimate log-likelihood 
+        for use with PyMC sampling.
 
+        """
+        def step(δ_t, agent_upd_t, prev_logp, Ω, τ):
+            '''
+            Step function for scan, serves as lambda expression in pytensor.scan
+            agent_update and pe are drawn for each trial
+            params stay constant
+            logp is accumulated and returns sum
+            '''
+            current_logp, _ = self.PYMC_flexible_normative_model(
+                Ω=Ω, τ=τ, δ=δ_t, agent_update=agent_upd_t, context=self.model_type
+            )
+            #accum logp
+            logp = pt.set_subtensor(prev_logp[δ_t], current_logp)
+            return logp
+
+        #transform variables into pytensor variables
+        pe_         = pt.as_tensor_variable(self.prediction_error, dtype="int32")
+        updates_    = pt.as_tensor_variable(self.update, dtype="int32")
+
+        #init ll vector
+        logp_series = pt.zeros(len(self.prediction_error), dtype = "float64")
+
+        #compute ll for each trial
+        logp_series, param_updates = pytensor.scan( #where is param update? 
+            fn = step,
+            sequences = [pe_, updates_], 
+            outputs_info = [logp_series],
+            non_sequences = [Ω, τ]
+        )
+        #neg ll of entire sequence?
+        ll = pt.sum(logp_series[1:])
+        
+        return ll 
 
     def flexible_normative_model(
         self,
@@ -75,12 +115,14 @@ class BayesianModel:
         δ: float = .5,       #δ = prediction error
         agent_update: float = 50,  #participant update
         context: str = "change_point"): 
-
-
+        """
+        Flexible normative model that can be used for both changepoint and oddball conditions.
+        """
         #eq 4 - needs hardset priors in
         U_val = stats.uniform.pdf(δ, 0, 300) ** LW
         N_val = stats.norm.pdf(δ, 0, σ) ** LW
         Ω = utils.calculate_omega(H, U_val, N_val)
+
         #eq 5 - in oddball, relative uncertainty requires drift rate D (?)
         τ = utils.calculate_tau(τ, UU)
 
@@ -110,6 +152,61 @@ class BayesianModel:
 
         return ll, sim_action
     
+    def PYMC_flexible_normative_model(
+        self,
+        #params
+        Ω: float = .20,   #Ω = changepoint probability
+        τ: float = .125,  #τ = relative uncertainty
+        UU: float = .001,     #UU = uncertainty underestimation 
+        σ_motor: float = .001, 
+        σ_LR: float = .90, 
+        #priors 
+        H: float = .2,      #H = changepoint or oddball prob dependening on the condition
+        LW: float = .5,      #LW = likelihood weight
+        σ: float = .125,      #σ = total var on predictive dist
+        #data
+        δ: float = .5,       #δ = prediction error
+        agent_update: float = 50,  #participant update
+        context: str = "changepoint"): 
+        """
+        Flexible normative model that can be used for both changepoint and oddball conditions.
+        -for fitting with PYMC min function
+        """
+
+        #eq 4 - in logspace 
+        U_val = LW * pm.logp(pm.Uniform.dist(lower = 0, upper = 300), δ)
+        N_val = LW * pm.logp(pm.Normal.dist(mu = 0, sigma = σ), δ)
+        Ω =  pm.logaddexp(pm.math.log(H) + U_val,
+                                pm.math.log(1 - H) + N_val)
+
+        #eq 5 - in oddball, relative uncertainty requires drift rate D (?)
+        τ = utils.calculate_tau(τ, UU)
+
+        if context == 'changepoint':
+            #eq 2
+            alpha = utils.calculate_alpha_changepoint(Ω, τ)
+        elif context == 'oddball':
+            #eq 3
+            alpha = utils.calculate_alpha_oddball(τ, Ω)
+        else:
+            raise ValueError("model_type must be either 'changepoint' or 'oddball'")   
+
+        #eq 1
+        normative_update = utils.calculate_normative_update(alpha, δ)
+        
+        #eq 7, variability of update
+        σ_update = utils.calculate_sigma_update(σ_motor, normative_update, σ_LR)
+
+        #eq 6
+        L_normative = pm.logp(pm.Normal.dist(mu = normative_update, sigma = σ_update), agent_update)
+        #make log likelihood
+        #ll = np.log(L_normative)
+        ll = L_normative
+        #sample for simulation
+        sim_action = normative_update
+
+        return ll, sim_action
+
     def sim_data(self, 
                  total_trials:int = 100, 
                  model_name:str   = "flexible_normative_model",
@@ -121,8 +218,7 @@ class BayesianModel:
         self.model_name = model_name
         self.condition = condition
 
-        env = PIE_CP_OB(condition=self.condition, total_trials=self.total_trials, max_time=300,
-                        train_cond=False, max_displacement=10, reward_size=20, step_cost=0.0, alpha=1)
+        env = PIE_CP_OB(condition=self.condition, total_trials=self.total_trials)
         #all_states[epoch, tt] = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
         
         update = 0
@@ -166,21 +262,76 @@ def plot_states(states):
 #%%
 #run 
 if __name__ == "__main__":
-    states = np.load('./data/env_data_change-point.npy') #[trials, bucket_position, bag_position, helicopter_position]
+    #load data and init model
+    states = np.load('./data/pt_rnn_context/env_data.npy') #[trials, bucket_position, bag_position, helicopter_position]
+    #states = np.load('./data/env_data_change-point.npy') #[trials, bucket_position, bag_position, helicopter_position]
     model = BayesianModel(states, model_type = 'changepoint')
+    
+    #run MLE
     model.run_mle()
 
     # #run simulation
-    model = BayesianModel(states, model_type = 'changepoint')
-    states = model.sim_data(total_trials=200, model_name = "flexible_normative_model", condition = 'changepoint')
+    model.sim_data(total_trials=100, model_name = "flexible_normative_model", condition = 'changepoint')
 
+    #run pytensor fitting
     plot_states(states)
 
+    #set seed
+    seed = sum(map(ord, "RL_PyMC"))
+    rng = np.random.default_rng(seed)
+
+    with pm.Model() as m:
+        #priors
+        Ω = pm.LogitNormal('Ω', mu = 0, sigma = .5)
+        τ = pm.LogitNormal('τ', mu = 0, sigma = .5 )
+
+        like = pm.Potential(name = "like",
+                           var = model.get_pytensor_llik(Ω, τ)) #need to put in actions and pe here?
 
 
+        #sample
+        #trace = pm.sample(1000, tune=1000, target_accept=0.95, return_inferencedata=False)
 
+        tr = pm.sample(random_seed = rng)
+    
+    #plot pytensor fitting 
+    az.plot_trace(data = tr)
+    az.plot_posterior(data = tr, ref_val = [.2, .125]) 
 
+    #debug code
+    #pytensor test with true priors
 
+    def step_test(δ_t, agent_upd_t, logp_series, Ω, τ):
+        '''
+        Step function for scan, serves as lambda expression in pytensor.scan
+        agent_update and pe are drawn for each trial
+        params stay constant
+        logp is accumulated and returns sum
+        '''
+        current_logp, _ = model.PYMC_flexible_normative_model(
+            Ω=Ω, τ=τ, δ=δ_t, agent_update=agent_upd_t, context=model.model_type
+        )
+        #accum logp
+        return current_logp #fix to be like guide
+
+    # Transform the variables into appropriate PyTensor objects
+    pe_ = pt.as_tensor_variable(model.prediction_error, dtype="int32")
+    updates_ = pt.as_tensor_variable(model.update, dtype="int32")
+
+    omega = pt.scalar("omega")
+    tau = pt.scalar("tau")
+
+    logp_series = pt.ones(len(model.prediction_error), dtype = "float64")
+
+    # Compute the Q values for each trial
+    logp_series, _ = pytensor.scan(
+        fn= step_test,
+        sequences=[pe_, updates_], 
+        outputs_info=[logp_series],
+        non_sequences=[omega, tau]
+    )
+    
+    ll = pt.sum(logp_series[1:])
 
 
 
@@ -208,3 +359,15 @@ if __name__ == "__main__":
 
 # #make log likelihood
 # ll = -log(L_normative)
+
+
+    # pytensor_llik = pytensor.function(
+    #     inputs = [Ω, τ],
+    #     outputs = ll,
+    #     on_unused_input="ignore"
+    #     )
+
+
+    # true_switch = .2 #changepoint rate
+    # true_noise = .125 #heli to bag noise 
+    # result = pytensor_llik(true_switch, true_noise)
