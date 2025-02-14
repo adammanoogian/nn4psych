@@ -21,7 +21,8 @@ def fit(params, bucket_positions, bag_positions, context, prior=None, output='np
     sigma = norm2beta(params[5]) 
     drift_scale = norm2alpha(params[6]) # drift scale: the rate at which the helicopter was assumed to be drifting in the oddball condition
     # TODO: there is also `sigma_persev` and `S` (Equation 8), but ignoring for now
-    
+    # that's a separate model so wouldn't worry about that for now
+
     # make sure params are in range
     all_bounds = [0, 1]
     for p in [H, LW, UU, sigma_motor, sigma_LR, drift_scale]:
@@ -57,6 +58,10 @@ def fit(params, bucket_positions, bag_positions, context, prior=None, output='np
         else:
             tau[t] = tau[t-1] / UU
         
+        #adam suggestion- take out the trial dependency & also the context dependency (because we had a random walk in CP)
+        # sigma[t] = tau[t] + drift_scale
+        # tau[t] = tau[t-1] / UU
+       
         if context == 'changepoint':
             learning_rate[t] = omega[t] + tau[t] - (omega[t] * tau[t])
         elif context == 'oddball':
