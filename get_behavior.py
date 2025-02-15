@@ -79,17 +79,20 @@ bias = False
 if analysis == 'gamma' or "all":
     # influence of gamma
 
-    gammas = [0.99, 0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1] # 0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1
+    gammas = [0.99, 0.95, 0.9, 0.8, 0.7, 0.5, 0.25, 0.1] # 0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1
     all_param_states = {'gammas':gammas,'states':[]}
 
     gamma_dict = {}
     gamma_cp_list = [] 
     gamma_ob_list = []
+    gamma_models = []
     
     for g, gamma in enumerate(gammas):
         
         file_names= data_dir+f"*_V3_{gamma}g_0.0rm_100bz_0.0td_1.0tds_Nonelb_Noneup_64n_50000e_10md_5.0rz_*s.pth"
         models = glob.glob(file_names)
+        models = [f for f in models if float(f.split("\\")[-1].split("_")[0]) > 5] # remove items in file_names that begin with "-"
+
         print(gamma, len(models))
 
         for m, model in enumerate(models):
@@ -100,6 +103,7 @@ if analysis == 'gamma' or "all":
             gamma_dict[m, g] = {"gamma", gamma}
             gamma_cp_list.append(all_states[0,0])
             gamma_ob_list.append(all_states[0,1])   
+            gamma_models.append(model)
 
             with open(os.path.join(save_dir, "gamma_all_param_states.pkl"), "wb") as f:
                 pickle.dump(all_param_states, f)
@@ -119,11 +123,13 @@ if analysis == 'rollout' or 'all':
     rollout_dict = {}
     rollout_cp_list = [] 
     rollout_ob_list = []
+    rollout_models = []
     
     for g, rollout in enumerate(rollouts):
 
         file_names= data_dir+f"*_V3_0.95g_0.0rm_{rollout}bz_0.0td_1.0tds_Nonelb_Noneup_64n_50000e_10md_5.0rz_*s.pth"
         models = glob.glob(file_names)
+        models = [f for f in models if float(f.split("\\")[-1].split("_")[0]) > 5] # remove items in file_names that begin with "-"
         print(rollout, len(models))
 
         for m,model in enumerate(models):
@@ -133,7 +139,8 @@ if analysis == 'rollout' or 'all':
 
             rollout_dict[m, g] = {"rollout", rollout}
             rollout_cp_list.append(all_states[0,0])
-            rollout_ob_list.append(all_states[0,1])   
+            rollout_ob_list.append(all_states[0,1]) 
+            rollout_models.append(model)  
 
             with open(os.path.join(save_dir, "rollout_all_param_states.pkl"), "wb") as f:
                 pickle.dump(all_param_states, f)
@@ -154,11 +161,13 @@ if analysis == 'preset' or 'all':
     preset_dict = {}
     preset_cp_list = [] 
     preset_ob_list = []
+    preset_models = []
     
     for g, preset in enumerate(presets):
 
         file_names = data_dir+f"*_V3_0.95g_{preset}rm_100bz_0.0td_1.0tds_Nonelb_Noneup_64n_50000e_10md_5.0rz_*s.pth"
         models = glob.glob(file_names)
+        models = [f for f in models if float(f.split("\\")[-1].split("_")[0]) > 5] # remove items in file_names that begin with "-"
         print(preset, len(models))
 
         for m,model in enumerate(models):
@@ -168,6 +177,7 @@ if analysis == 'preset' or 'all':
             preset_dict[m, g] = {"preset", preset}
             preset_cp_list.append(all_states[0,0])
             preset_ob_list.append(all_states[0,1])   
+            preset_models.append(model)
 
             with open(os.path.join(save_dir, "preset_all_param_states.pkl"), "wb") as f:
                 pickle.dump(all_param_states, f)
@@ -181,18 +191,21 @@ if analysis == 'preset' or 'all':
 if analysis == 'scale' or 'all':
     # influence of rollout
 
-    scales = [0.1, 0.25, 0.5,0.75, 0.9, 1.0, 1.1, 1.25, 1.5] # 0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1
+    scales =  [0.25, 0.5,0.75, 1.0, 1.25, 1.5] # 0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1
     all_param_states = {'scales':scales,'states':[]}
 
     scale_dict = {}
     scale_cp_list = [] 
     scale_ob_list = []
+    scale_models = []
     
     for g, scale in enumerate(scales):
 
         # file_names= data_dir+f"*_V5_0.95g_0.0rm_50bz_0.0td_{scale}tds_64n_50000e_10md_5.0rz_*s.pth"
         file_names = data_dir+f"*_V3_0.95g_0.0rm_100bz_0.0td_{scale}tds_Nonelb_Noneup_64n_50000e_10md_5.0rz_*s.pth" 
         models = glob.glob(file_names)
+        models = [f for f in models if float(f.split("\\")[-1].split("_")[0]) > 5] # remove items in file_names that begin with "-"
+        print(scale, len(models))
 
 
         for m,model in enumerate(models):
@@ -202,6 +215,7 @@ if analysis == 'scale' or 'all':
             scale_dict[m, g] = {"scale", scale}
             scale_cp_list.append(all_states[0,0])
             scale_ob_list.append(all_states[0,1])   
+            scale_models.append(model)
 
             with open(os.path.join(save_dir, "scale_all_param_states.pkl"), "wb") as f:
                 pickle.dump(all_param_states, f)
@@ -214,14 +228,16 @@ if analysis == 'scale' or 'all':
 
 #combined_dict doesn't work because of overlapping keys
 
-# if analysis == 'all': 
-#     combined_dict = {**gamma_dict, **rollout_dict, **preset_dict, **scale_dict}
-#     cp_array = [gamma_cp_list, rollout_cp_list, preset_cp_list, scale_cp_list]
-#     ob_array = [gamma_ob_list, rollout_ob_list, preset_ob_list, scale_ob_list]
+if analysis == 'all': 
+    cp_array  = [gamma_cp_list, rollout_cp_list, preset_cp_list, scale_cp_list]
+    ob_array  = [gamma_ob_list, rollout_ob_list, preset_ob_list, scale_ob_list]
+    mod_array = [gamma_models, rollout_models, preset_models, scale_models]
 
-#     with open(os.path.join(save_dir, "combined_dict.pkl"), "wb") as f:
-#         pickle.dump(combined_dict, f)
-#     with open(os.path.join(save_dir, "combined_cp_array.pkl"), "wb") as f:
-#         pickle.dump(cp_array, f)
-#     with open(os.path.join(save_dir, "combined_ob_array.pkl"), "wb") as f:
-#         pickle.dump(ob_array, f)
+    with open(os.path.join(save_dir, "combined_cp_array_filtered.pkl"), "wb") as f:
+        pickle.dump(cp_array, f)
+    with open(os.path.join(save_dir, "combined_ob_array_filtered.pkl"), "wb") as f:
+        pickle.dump(ob_array, f)
+
+    with open(os.path.join(save_dir, "combined_mod_array_filtered.pkl"), "wb") as f:
+        pickle.dump(mod_array, f)
+        
