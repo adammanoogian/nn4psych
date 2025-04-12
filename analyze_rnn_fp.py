@@ -188,63 +188,6 @@ for epoch in range(epochs):
             [env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
 
 
-def get_lrs_v2(states, threshold=20):
-    true_state = states[2]  # bag position
-    predicted_state = states[1]  # bucket position
-    prediction_error = (true_state - predicted_state)[:-1]
-    update = np.diff(predicted_state)
-
-    idx = prediction_error != 0
-    prediction_error = prediction_error[idx]
-    update = update[idx]
-    learning_rate = update / prediction_error
-
-    prediction_error = abs(prediction_error)
-    idx = prediction_error > threshold
-    pes = prediction_error[idx]
-    lrs = np.clip(learning_rate, 0, 1)[idx]
-
-    sorted_indices = np.argsort(pes)
-    prediction_error_sorted = pes[sorted_indices]
-    learning_rate_sorted = lrs[sorted_indices]
-
-    return prediction_error_sorted, learning_rate_sorted
-
-
-def plot_lrs(states, scale=0.1):
-    epochs = states.shape[0]
-    pess, lrss, area = [], [], []
-    for c in range(2):
-        pes, lrs = [], []
-        for e in range(epochs):
-            pe, lr = get_lrs_v2(states[e, c])
-
-            pes.append(pe)
-            lrs.append(lr)
-
-        pes = np.concatenate(pes)
-        lrs = np.concatenate(lrs)
-        sorted_indices = np.argsort(pes)
-        prediction_error_sorted = pes[sorted_indices]
-        learning_rate_sorted = lrs[sorted_indices]
-
-        pess.append(prediction_error_sorted)
-        lrss.append(learning_rate_sorted)
-        area.append(np.trapz(learning_rate_sorted, prediction_error_sorted))
-
-    plt.figure(figsize=(3, 2))
-    colors = ['orange', 'brown']
-    labels = ['CP', 'OB']
-    for i in range(2):
-        window_size = int(len(lrss[i]) * scale)
-        smoothed_learning_rate = uniform_filter1d(lrss[i], size=window_size)
-        plt.plot(pess[i], smoothed_learning_rate, color=colors[i], linewidth=2, label=labels[i])
-    plt.legend()
-    plt.xlabel('Prediction error')
-    plt.ylabel('Learning rate')
-    plt.title(f'CB={area[0]:.1f}, OB={area[1]:.1f}, A={(area[0] - area[1]):.1f}')
-    plt.tight_layout()
-    return pess, lrss, area
 
 
 # _, _, area = plot_lrs(all_states, scale=0.25)

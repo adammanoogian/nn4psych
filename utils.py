@@ -150,3 +150,33 @@ def calculate_sigma_update(sigma_motor, normative_update, sigma_LR):
         sigma_update = sigma_motor + normative_update[t] * sigma_LR
     """
     return sigma_motor + normative_update * sigma_LR
+
+def unpickle_state_vector(file_dir:str = "data/rnn_behav/model_params_101000/", RNN_param: str="None"):
+    """
+    Unpickle the state vector made by get_vector.
+    
+    Parameters:
+        state_vector (str): Path to the state vector file.
+    
+    Returns:
+        numpy.ndarray: Unpickled state vector.
+    """
+    import os
+    import pickle
+
+    #available RNN params = "gamma", "preset", "rollout", "scale", "combined"
+
+    with open(os.path.join(file_dir, f"{RNN_param}_cp_list.pkl"), 'rb') as f:
+        cp_array = pickle.load(f)
+
+    with open(os.path.join(file_dir, f"{RNN_param}_ob_list.pkl"), 'rb') as f:
+        ob_array = pickle.load(f)
+
+    with open(os.path.join(file_dir, f"{RNN_param}_dict.pkl"), 'rb') as f:
+        model_list = pickle.load(f)
+
+    # # each array has: [trials, bucket_positions, bag_positions, helicopter_positions, hazard_triggers]
+    # agent_list_cp = [[x[1], x[2], 'changepoint'] for x in cp_array]
+    # agent_list_ob = [[x[1], x[2], 'oddball'] for x in ob_array]
+
+    return cp_array, ob_array, model_list
