@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import linregress
 from scipy.ndimage import uniform_filter1d
+import scipy.stats as stats
 
 #out of date - use get_area in get_behavior.py to get data
 #or run for loop in analyze_rnn with set weights to get data
@@ -230,19 +231,13 @@ def plot_lrs(states, scale=0.1):
 
 def plot_lrs_v2_batch(behav_dict, scale=0.1):
     """
-    nassar2021 fig2
-    For each RNN parameter in behav_dict, group runs by the parameter value (extracted from model_list),
-    then create one figure with one subplot per unique parameter value.
-    In each subplot, plot CP (solid) and OB (dashed) curves for each run.
+    Modified to include error bars and confidence intervals for averaged data across all runs.
     """
-    #run cap option (just take a few runs)
-    run_cap = 3
     for rnn_param, data in behav_dict.items():
         model_groups = data['model_list']
         # Group runs by parameter value (from the model_groups values)
         group_dict = {}
         for key, val in model_groups.items():
-            # key is a tuple (e.g. (run_index, group_index)) and val is a set containing a numeric value and a string
             param_val = next((x for x in val if isinstance(x, (int, float))), None)
             if param_val is None:
                 continue
@@ -250,46 +245,50 @@ def plot_lrs_v2_batch(behav_dict, scale=0.1):
             run_id = key[0]
             group_dict.setdefault(param_val, []).append(run_id)
 
-        # Apply run_cap to limit the number of runs per unique parameter value
-        for param_val in group_dict:
-            group_dict[param_val] = group_dict[param_val][:run_cap]
-
         unique_param_vals = sorted(group_dict.keys())
         n_plots = len(unique_param_vals)
         fig, axs = plt.subplots(n_plots, 1, figsize=(8, 4 * n_plots))
         if n_plots == 1:
             axs = [axs]
 
-        cmap = plt.cm.viridis
-
         for ax, param_val in zip(axs, unique_param_vals):
             runs = group_dict[param_val]
-            run_indices = np.array(runs, dtype=float)
-            norm = plt.Normalize(vmin=run_indices.min(), vmax=run_indices.max())
 
-            for run in runs:
-                # Plot CP data (solid)
-                pe_cp = data['pe_sorted_cp'][run]
-                lr_cp = data['lr_sorted_cp'][run]
-                window_size_cp = max(1, int(len(lr_cp) * scale))
-                smoothed_lr_cp = uniform_filter1d(lr_cp, size=window_size_cp)
-                color = cmap(norm(run))
-                ax.plot(pe_cp, smoothed_lr_cp, linestyle='-', color=color, linewidth=2, label=f"Run {run} CP")
+            # Aggregate data across all runs for CP and OB
+            pe_cp_all = np.concatenate([data['pe_sorted_cp'][run] for run in runs])
+            lr_cp_all = np.concatenate([data['lr_sorted_cp'][run] for run in runs])
+            pe_ob_all = np.concatenate([data['pe_sorted_ob'][run] for run in runs])
+            lr_ob_all = np.concatenate([data['lr_sorted_ob'][run] for run in runs])
 
-                # Plot OB data (dashed)
-                pe_ob = data['pe_sorted_ob'][run]
-                lr_ob = data['lr_sorted_ob'][run]
-                window_size_ob = max(1, int(len(lr_ob) * scale))
-                smoothed_lr_ob = uniform_filter1d(lr_ob, size=window_size_ob)
-                ax.plot(pe_ob, smoothed_lr_ob, linestyle='--', color=color, linewidth=2, label=f"Run {run} OB")
+            # Sort and smooth the data for CP
+            sorted_indices_cp = np.argsort(pe_cp_all)
+            pe_cp_sorted = pe_cp_all[sorted_indices_cp]
+            lr_cp_sorted = lr_cp_all[sorted_indices_cp]
+            window_size_cp = max(1, int(len(lr_cp_sorted) * scale))
+            smoothed_lr_cp = uniform_filter1d(lr_cp_sorted, size=window_size_cp)
 
-            area_cp_vals = [data['area_cp'][run] for run in runs]
-            area_ob_vals = [data['area_ob'][run] for run in runs]
-            avg_area_cp = np.mean(area_cp_vals)
-            avg_area_ob = np.mean(area_ob_vals)
+            # Sort and smooth the data for OB
+            sorted_indices_ob = np.argsort(pe_ob_all)
+            pe_ob_sorted = pe_ob_all[sorted_indices_ob]
+            lr_ob_sorted = lr_ob_all[sorted_indices_ob]
+            window_size_ob = max(1, int(len(lr_ob_sorted) * scale))
+            smoothed_lr_ob = uniform_filter1d(lr_ob_sorted, size=window_size_ob)
+
+            # Calculate confidence intervals for CP and OB
+            ci_cp = stats.sem(lr_cp_sorted) * stats.t.ppf((1 + 0.95) / 2., len(lr_cp_sorted) - 1)
+            ci_ob = stats.sem(lr_ob_sorted) * stats.t.ppf((1 + 0.95) / 2., len(lr_ob_sorted) - 1)
+
+            # Plot CP data (solid) with error bars
+            ax.errorbar(pe_cp_sorted, smoothed_lr_cp, yerr=ci_cp, fmt='-', color='blue', linewidth=2, label='CP')
+
+            # Plot OB data (dashed) with error bars
+            ax.errorbar(pe_ob_sorted, smoothed_lr_ob, yerr=ci_ob, fmt='--', color='green', linewidth=2, label='OB')
+
+            # Calculate and display average areas
+            avg_area_cp = np.trapz(smoothed_lr_cp, pe_cp_sorted)
+            avg_area_ob = np.trapz(smoothed_lr_ob, pe_ob_sorted)
             avg_area_diff = avg_area_cp - avg_area_ob
             ax.set_title(f"{rnn_param} = {param_val}, avg area CP={avg_area_cp:.2f}, OB={avg_area_ob:.2f}, diff={avg_area_diff:.2f}")
-            ax.set_title(f"{rnn_param} = {param_val}, avg area CP={avg_area_cp:.2f}, OB={avg_area_ob:.2f}")
             ax.set_xlabel('Prediction Error')
             ax.set_ylabel('Learning Rate')
             ax.grid(True)
@@ -298,7 +297,7 @@ def plot_lrs_v2_batch(behav_dict, scale=0.1):
         fig.tight_layout()
         plt.show()
     
-def plot_lr_bins_post_hazard_batch(behav_dict, num_runs=1):
+def plot_lr_bins_post_hazard_batch(behav_dict):
     """
     nassar2021 fig3a-d (modified)
     For each RNN parameter, group runs by the unique parameter value (extracted from model_list),
@@ -306,7 +305,7 @@ def plot_lr_bins_post_hazard_batch(behav_dict, num_runs=1):
     showing histograms of learning rate frequencies (bin size = 0.1) using at most num_runs runs.
     """
     bins = np.arange(0, 1.1, 0.1)
-    
+
     for rnn_param, data in behav_dict.items():
         # Group runs by unique parameter value
         group_dict = {}
@@ -317,10 +316,6 @@ def plot_lr_bins_post_hazard_batch(behav_dict, num_runs=1):
             run_id = key[0]
             group_dict.setdefault(param_val, []).append(run_id)
 
-        # Limit runs per unique parameter value to num_runs
-        for param_val in group_dict:
-            group_dict[param_val] = group_dict[param_val][:num_runs]
-
         unique_param_vals = sorted(group_dict.keys())
         n_plots = len(unique_param_vals)
         # Create subplots with 2 columns: one for CP and one for OB
@@ -330,29 +325,33 @@ def plot_lr_bins_post_hazard_batch(behav_dict, num_runs=1):
 
         for i, param_val in enumerate(unique_param_vals):
             runs = group_dict[param_val]
-            # Get unsorted learning rates for CP and OB
+            # Aggregate learning rates for CP and OB across all runs
             cp_lr_all = np.concatenate([data['lr_unsorted_cp'][run] for run in runs])
             ob_lr_all = np.concatenate([data['lr_unsorted_ob'][run] for run in runs])
-            
+
+            # Compute histogram probabilities for CP and OB
+            cp_hist, _ = np.histogram(cp_lr_all, bins=bins, density=True)
+            ob_hist, _ = np.histogram(ob_lr_all, bins=bins, density=True)
+
             # Left subplot: CP histogram
             ax_cp = axs[i, 0]
-            ax_cp.hist(cp_lr_all, bins=bins, alpha=0.7, label='CP', edgecolor='black')
+            ax_cp.bar(bins[:-1], cp_hist, width=0.1, alpha=0.7, label='CP', edgecolor='black')
             ax_cp.set_title(f'{rnn_param} = {param_val} CP')
             ax_cp.set_xlabel('Learning Rate')
-            ax_cp.set_ylabel('Frequency')
+            ax_cp.set_ylabel('Probability')
             ax_cp.legend()
             ax_cp.grid(True)
-            
+
             # Right subplot: OB histogram
             ax_ob = axs[i, 1]
-            ax_ob.hist(ob_lr_all, bins=bins, alpha=0.7, label='OB', edgecolor='black')
+            ax_ob.bar(bins[:-1], ob_hist, width=0.1, alpha=0.7, label='OB', edgecolor='black')
             ax_ob.set_title(f'{rnn_param} = {param_val} OB')
             ax_ob.set_xlabel('Learning Rate')
-            ax_ob.set_ylabel('Frequency')
+            ax_ob.set_ylabel('Probability')
             ax_ob.legend()
             ax_ob.grid(True)
-        
-        fig.suptitle(f'{rnn_param}: Learning Rate Histogram (CP and OB) Across Unique Parameter Values', fontsize=16)
+
+        fig.suptitle(f'{rnn_param}: Learning Rate Histogram (CP and OB) Averaged Across Runs', fontsize=16)
         fig.tight_layout(rect=[0, 0, 1, 0.95])
         plt.show()
 
@@ -374,23 +373,12 @@ def compute_hazard_distance(hazard_triggers):
 
 def plot_lr_curve_post_hazard(behav_data):
     """
-    For each unique RNN parameter value, using one run per unique value, plot 6 subplots:
-      - Left column: CP data for one run corresponding to the unique parameter value.
-      - Right column: OB data for that run.
-    Rows:
-      Row 1: Non-updates (lr < 0.1)
-      Row 2: Moderate updates (0.1 ≤ lr < 0.9)
-      Row 3: Large updates (lr ≥ 0.9)
-      
-    Each subplot shows the frequency (or probability for CP) of hazard distance values.
-    Hazard distance is computed from the hazard trigger array (index 4) in the states array.
+    Modified to average data across all runs for each unique parameter value.
     """
-
     for rnn_param, data in behav_data.items():
         # Group runs by unique parameter value using the model_list
         group_dict = {}
         for key, val in data['model_list'].items():
-            # Extract the numeric value from the model_list tuple (if present)
             param_val = next((x for x in val if isinstance(x, (int, float))), None)
             if param_val is None:
                 continue
@@ -398,23 +386,14 @@ def plot_lr_curve_post_hazard(behav_data):
             group_dict.setdefault(param_val, []).append(run_id)
 
         unique_param_vals = sorted(group_dict.keys())
-        # For each unique parameter value, select one run (the first)
         for param_val in unique_param_vals:
-            run = group_dict[param_val][0]
+            runs = group_dict[param_val]
 
-            cp_data = data['cp_array'][run]
-            ob_data = data['ob_array'][run]
-
-            # Compute hazard distances using the hazard trigger array (index 4)
-            cp_hd = compute_hazard_distance(cp_data[4])
-            ob_hd = compute_hazard_distance(ob_data[4])
-
-            # Determine common x-axis limits from both CP and OB data
-            max_hd = max(np.max(cp_hd), np.max(ob_hd))
-
-            # Get learning rate vectors for CP and OB for the selected run
-            cp_lr = data['lr_unsorted_cp'][run]
-            ob_lr = data['lr_unsorted_ob'][run]
+            # Aggregate hazard distances and learning rates for CP and OB across all runs
+            cp_hd_all = np.concatenate([compute_hazard_distance(data['cp_array'][run][4]) for run in runs])
+            ob_hd_all = np.concatenate([compute_hazard_distance(data['ob_array'][run][4]) for run in runs])
+            cp_lr_all = np.concatenate([data['lr_unsorted_cp'][run] for run in runs])
+            ob_lr_all = np.concatenate([data['lr_unsorted_ob'][run] for run in runs])
 
             categories = {
                 'Non-updates': lambda lr: lr < 0.1,
@@ -422,53 +401,35 @@ def plot_lr_curve_post_hazard(behav_data):
                 'Large updates': lambda lr: lr >= 0.9
             }
 
-            # Create figure with 3 rows (update categories) and 2 columns (CP and OB)
-            fig, axs = plt.subplots(nrows=3, ncols=2, figsize=(12, 12))
-            fig.suptitle(f'{rnn_param} = {param_val}: LR Post-Hazard Analysis', fontsize=16)
+            fig, axs = plt.subplots(nrows=3, ncols=2, figsize=(12, 12), sharey=True)
+            fig.suptitle(f'{rnn_param} = {param_val}: LR Post-Hazard Analysis (Averaged)', fontsize=16)
 
-            # Loop through each update category to build subplots
             for row_idx, (cat_label, condition) in enumerate(categories.items()):
-                # Find indices where learning rates satisfy the condition for CP and OB
-                cp_inds = np.where(condition(cp_lr))[0]
-                ob_inds = np.where(condition(ob_lr))[0]
+                cp_inds = np.where(condition(cp_lr_all))[0]
+                ob_inds = np.where(condition(ob_lr_all))[0]
 
-                # Filter the corresponding hazard distances
-                cp_hd_filtered = cp_hd[cp_inds]
-                ob_hd_filtered = ob_hd[ob_inds]
+                cp_hd_filtered = cp_hd_all[cp_inds]
+                ob_hd_filtered = ob_hd_all[ob_inds]
 
-                # Count frequency of hazard distances for CP and convert to probabilities
-                cp_counts = {}
-                for hd in cp_hd_filtered:
-                    cp_counts[hd] = cp_counts.get(hd, 0) + 1
-                total_cp = sum(cp_counts.values())
-                cp_keys = sorted(cp_counts.keys())
-                cp_values = [cp_counts[k] / total_cp for k in cp_keys] if total_cp > 0 else []
+                cp_counts = np.bincount(cp_hd_filtered, minlength=max(cp_hd_all) + 1)
+                ob_counts = np.bincount(ob_hd_filtered, minlength=max(ob_hd_all) + 1)
 
-                # Count frequency of hazard distances for OB
-                ob_counts = {}
-                for hd in ob_hd_filtered:
-                    ob_counts[hd] = ob_counts.get(hd, 0) + 1
-                ob_keys = sorted(ob_counts.keys())
-                total_ob = sum(ob_counts.values())
-                ob_values = [ob_counts[k] / total_ob for k in ob_keys] if total_ob > 0 else []
+                cp_probs = cp_counts / cp_counts.sum() if cp_counts.sum() > 0 else cp_counts
+                ob_probs = ob_counts / ob_counts.sum() if ob_counts.sum() > 0 else ob_counts
 
-                # Plot CP histogram on the left column
                 ax_cp = axs[row_idx, 0]
-                ax_cp.bar(cp_keys, cp_values, color='blue', alpha=0.7)
+                ax_cp.bar(range(len(cp_probs)), cp_probs, color='blue', alpha=0.7)
                 ax_cp.set_title(f'CP - {cat_label}')
                 ax_cp.set_xlabel('Hazard Distance')
-                ax_cp.set_ylabel('P(update)')
+                ax_cp.set_ylabel('Probability')
                 ax_cp.grid(True)
-                ax_cp.set_xlim(0, max_hd)
 
-                # Plot OB histogram on the right column
                 ax_ob = axs[row_idx, 1]
-                ax_ob.bar(ob_keys, ob_values, color='green', alpha=0.7)
+                ax_ob.bar(range(len(ob_probs)), ob_probs, color='green', alpha=0.7)
                 ax_ob.set_title(f'OB - {cat_label}')
                 ax_ob.set_xlabel('Hazard Distance')
-                ax_ob.set_ylabel('Count')
+                ax_ob.set_ylabel('Probability')
                 ax_ob.grid(True)
-                ax_ob.set_xlim(0, max_hd)
 
             plt.tight_layout(rect=[0, 0, 1, 0.96])
             plt.show()
@@ -511,8 +472,8 @@ def get_batch_behav(RNN_param_list = ["gamma", "preset", "rollout", "scale"]):
 
 behav_dict = get_batch_behav()
 plot_lrs_v2_batch(behav_dict, scale=0.1)
-plot_lr_bins_post_hazard_batch(behav_dict, num_runs=3)
-plot_lr_curve_post_hazard(behav_dict)
+# plot_lr_bins_post_hazard_batch(behav_dict)
+# plot_lr_curve_post_hazard(behav_dict)
 
 
 
