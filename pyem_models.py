@@ -102,3 +102,29 @@ def fit(params, bucket_positions, bag_positions, context, prior=None, output='np
                      'negll'                :sum_negll,
                      'BIC'                  : nparams * np.log(ntrials) + 2*sum_negll}
         return subj_dict
+
+#%% run pyem model
+import os
+import pickle
+
+#pull data from get_behavior.py
+file_dir = "data/rnn_behav/model_params_101000/"
+
+# load file_dir/gamma_cp_list.pkl
+with open(os.path.join(file_dir, 'gamma_cp_list.pkl'), 'rb') as f:
+    cp_array = pickle.load(f)
+
+# load file_dir/gamma_ob_list.pkl
+with open(os.path.join(file_dir, 'gamma_ob_list.pkl'), 'rb') as f:
+    ob_array = pickle.load(f)
+
+## load model_list_ob
+with open(os.path.join(file_dir, 'gamma_dict.pkl'), 'rb') as f:
+    model_list = pickle.load(f)
+
+# # each array has: [trials, bucket_positions, bag_positions, helicopter_positions, hazard_triggers]
+agent_list_cp = [[x[1], x[2], 'changepoint'] for x in cp_array]
+agent_list_ob = [[x[1], x[2], 'oddball'] for x in ob_array]
+
+# outfit_cp = EMfit(agent_list_cp, fit, ['H', 'LW', 'UU', 'sigma_motor', 'sigma_LR'], mstep_maxit=20, convergence_custom='relative_npl', verbose=2)
+# outfit_ob = EMfit(agent_list_ob, fit, ['H', 'LW', 'UU', 'sigma_motor', 'sigma_LR', 'sigma_LR'], mstep_maxit=20, convergence_custom='relative_npl', verbose=2)
