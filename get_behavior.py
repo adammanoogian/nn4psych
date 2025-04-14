@@ -65,18 +65,16 @@ def get_area(model_path, epochs=100, reset_memory=0.0):
     return np.array(all_states)
 
 
-
-
 analysis = 'all'
-epochs = 1 #must adjust format of saved variables if you increase from 1
+epochs = 30 #must adjust format of saved variables if you increase from 1
 
 data_dir = "./model_params_101000/"
-save_dir = "data/rnn_behav/model_params_101000/"
+save_dir = "data/rnn_behav/model_params_101000/30epochs/"
 os.makedirs(save_dir, exist_ok=True)
 bias = False
 
 
-if analysis == 'gamma' or "all":
+if analysis == 'gamma' or analysis == "all":
     # influence of gamma
 
     gammas = [0.99, 0.95, 0.9, 0.8, 0.7, 0.5, 0.25, 0.1] # 0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1
@@ -115,7 +113,7 @@ if analysis == 'gamma' or "all":
                 pickle.dump(gamma_ob_list, f)
 
 
-if analysis == 'rollout' or 'all':
+if analysis == 'rollout' or analysis == 'all':
     # influence of rollout
     rollouts = [5, 10,20, 30, 40, 50, 75, 100, 150, 200] # 0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1
     all_param_states = {'rollouts':rollouts,'states':[]}
@@ -152,8 +150,8 @@ if analysis == 'rollout' or 'all':
                 pickle.dump(rollout_ob_list, f)
 
 # introduce variables into sampling
-if analysis == 'preset' or 'all':
-    # influence of rollout
+if analysis == 'preset' or analysis == 'all':
+    # influence of preset
 
     presets = [0.0,0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0] # 0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1
     all_param_states = {'presets':presets,'states':[]}
@@ -188,8 +186,8 @@ if analysis == 'preset' or 'all':
             with open(os.path.join(save_dir, "preset_ob_list.pkl"), "wb") as f:
                 pickle.dump(preset_ob_list, f)
 
-if analysis == 'scale' or 'all':
-    # influence of rollout
+if analysis == 'scale' or analysis == 'all':
+    # influence of scale
 
     scales =  [0.25, 0.5,0.75, 1.0, 1.25, 1.5] # 0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1
     all_param_states = {'scales':scales,'states':[]}

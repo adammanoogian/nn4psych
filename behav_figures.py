@@ -164,8 +164,8 @@ def plot_lr_after_hazard(learning_rate, hazard_distance, condition="change-point
     plt.show()
     plt.savefig(f'plots/interactions_line_graph_{condition}.png')
 
-
-def get_lrs_v2(states, threshold=20):
+#% v2 plots - modified to work from batch_data
+def get_lrs_v2(states, threshold=0):
     '''
     -takes in state vector
     -threshold is the cutoff for prediction error to be considered a learning rate
@@ -173,16 +173,20 @@ def get_lrs_v2(states, threshold=20):
     '''
     true_state = states[2]  # bag position
     predicted_state = states[1]  # bucket position
-    prediction_error = (true_state - predicted_state)[:-1]
+    prediction_error = abs((true_state - predicted_state)[:-1])
     update = np.diff(predicted_state)
 
-    idx = prediction_error != 0
-    prediction_error = prediction_error[idx]
-    update = update[idx]
-    learning_rate = update / prediction_error
+    #index 1 - nonzero division check
+    # idx = prediction_error != 0
+    # prediction_error = prediction_error[idx]
+    # update = update[idx]
+    # learning_rate = abs(update / prediction_error)
+    #option 2 - just clip the prediction error to avoid division by zero
+    prediction_error = np.clip(prediction_error, 1, None)
+    learning_rate = abs(update / prediction_error)
 
-    prediction_error = abs(prediction_error)
-    idx = prediction_error > threshold
+    #index 2- pe threshold
+    idx = prediction_error >= threshold
     pes = prediction_error[idx]
     lrs = np.clip(learning_rate, 0, 1)[idx]
     #sort for easy plotting
@@ -193,6 +197,7 @@ def get_lrs_v2(states, threshold=20):
     area = np.trapz(learning_rate_sorted, prediction_error_sorted)
 
     return prediction_error_sorted, learning_rate_sorted, pes, lrs, area
+
 
 def plot_lrs(states, scale=0.1):
     epochs = states.shape[0]
@@ -355,20 +360,44 @@ def plot_lr_bins_post_hazard_batch(behav_dict):
         fig.tight_layout(rect=[0, 0, 1, 0.95])
         plt.show()
 
-def compute_hazard_distance(hazard_triggers):
+def compute_hazard_distance(hazard_triggers, until_next=False):
     """
     Compute hazard distance from hazard trigger array.
-    For each trial, the hazard distance is reset to 0 when a hazard is triggered (value==1),
-    and otherwise is incremented by 1.
-    returns: hazard distance array. same size as hazard_triggers.
+    
+    When until_next is False (default):
+      For each trial, the hazard distance is reset to 0 when a hazard is triggered (value==1),
+      and otherwise is incremented by 1.
+      
+    When until_next is True:
+      The returned hazard distance represents the number of trials until the next trigger.
+      
+    returns: hazard distance array; same size (and dtype) as hazard_triggers.
     """
-    hd = np.zeros(len(hazard_triggers), dtype=int)
-    current = 0
-    for i, trigger in enumerate(hazard_triggers):
-        if trigger == 1:
-            current = 0
-        hd[i] = current
-        current += 1
+    n = len(hazard_triggers)
+    hd = np.zeros(n, dtype=int)
+    
+    if not until_next:
+        current = 0
+        for i, trigger in enumerate(hazard_triggers):
+            if trigger == 1:
+                current = 0
+            hd[i] = current
+            current += 1
+    else:
+        # Compute distance until the next hazard trigger by iterating backwards.
+        current = None
+        for i in range(n - 1, -1, -1):
+            if hazard_triggers[i] == 1:
+                current = 0
+                hd[i] = 0
+            else:
+                if current is None:
+                    # No hazard ahead: count distance to the end.
+                    current = n - 1 - i
+                else:
+                    current += 1
+                hd[i] = current
+                
     return hd
 
 def plot_lr_curve_post_hazard(behav_data):
@@ -434,6 +463,149 @@ def plot_lr_curve_post_hazard(behav_data):
             plt.tight_layout(rect=[0, 0, 1, 0.96])
             plt.show()
 
+
+def compute_update_ratios(lrs):
+    """
+    Compute the proportion of non-updates and moderate updates.
+    Non-update: lr < 0.1, Moderate update: 0.1 <= lr < 0.9.
+    """
+    if len(lrs) == 0:
+        return 0, 0
+    p_non = np.mean(lrs < 0.1)
+    p_med = np.mean((lrs >= 0.1) & (lrs < 0.9))
+    p_total = np.mean(lrs >= 0.9)
+    return p_med, p_non, p_total
+
+def plot_update_ratio(behav_data):
+    """
+    nassar2021 fig3 k/l
+    Plots p(moderate update) (x-axis) against p(non-update) (y-axis).
+    Generate 4 x 2 subplots (for each RNN parameter and each condition: CP and OB).
+    One dot per hyperparameter value, colored by the hyperparameter range.
+    """
+    # Collect all RNN parameter names
+    rnn_params = list(behav_data.keys())
+    n_params = len(rnn_params)
+    
+    fig, axs = plt.subplots(n_params, 2, figsize=(10, 4 * n_params), sharex=True, sharey=True)
+    if n_params == 1:
+        axs = np.array([axs])
+    
+    # For each RNN parameter
+    for row_idx, rnn_param in enumerate(rnn_params):
+        data = behav_data[rnn_param]
+        # Group runs by hyperparameter value from model_list (keys are assumed to contain run_id and param value)
+        group_dict = {}
+        for key, val in data['model_list'].items():
+            # Extract the hyperparameter value (the first numeric value in the list)
+            param_val = next((x for x in val if isinstance(x, (int, float))), None)
+            if param_val is None:
+                continue
+            run_id = key[0]
+            group_dict.setdefault(param_val, []).append(run_id)
+        
+        # Determine range of hyperparameter values for colormap normalization
+        hp_vals = sorted(group_dict.keys())
+        norm = plt.Normalize(min(hp_vals), max(hp_vals))
+        cmap = plt.get_cmap("viridis")
+        
+        # For both CP and OB conditions
+        for col_idx, cond in enumerate(["cp", "ob"]):
+            ax = axs[row_idx, col_idx]
+            for hp in hp_vals:
+                runs = group_dict[hp]
+                # Aggregate unsorted learning rates for the condition across runs
+                lr_list = [data[f'lr_unsorted_{cond}'][run] for run in runs]
+                lr_all = np.concatenate(lr_list)
+                p_med, p_non, p_total = compute_update_ratios(lr_all)
+                ax.scatter(p_med, p_non, s=100, color=cmap(norm(hp)), label=f'{hp:.2f}')
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.set_xlabel('p(Moderate Update)')
+            ax.set_ylabel('p(Non Update)')
+            ax.set_title(f'{rnn_param.upper()} - {"CP" if cond=="cp" else "OB"}')
+            ax.grid(True)
+            # Show colorbar only once per row (if desired)
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            sm.set_array([])
+            cbar = plt.colorbar(sm, ax=ax)
+            cbar.set_label('Hyperparameter Value')
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_all_update_ratios(behav_dict, hazard_distance_filter=None):
+    '''
+    3D plot of update ratios for all RNN parameters across conditions.
+    Allows filtering of data based on a specific hazard distance.
+    '''
+    rnn_params = list(behav_dict.keys())
+    n_params = len(rnn_params)
+    fig, axs = plt.subplots(n_params, 2, figsize=(12, 6 * n_params), subplot_kw={'projection': '3d'})
+    if n_params == 1:
+        axs = np.array([axs])
+
+    for row_idx, rnn_param in enumerate(rnn_params):
+        data = behav_dict[rnn_param]
+        # Group runs by hyperparameter value extracted from model_list
+        group_dict = {}
+        for key, val in data['model_list'].items():
+            hp_val = next((x for x in val if isinstance(x, (int, float))), None)
+            if hp_val is None:
+                continue
+            run_id = key[0]
+            group_dict.setdefault(hp_val, []).append(run_id)
+
+        hp_vals = sorted(group_dict.keys())
+        norm = plt.Normalize(min(hp_vals), max(hp_vals))
+        cmap = plt.get_cmap("viridis")
+
+        # For CP and OB conditions
+        for col_idx, cond in enumerate(["cp", "ob"]):
+            ax = axs[row_idx, col_idx]
+            # For each hyperparameter value, compute p(total update), p(moderate update), and p(non update)
+            for hp in hp_vals:
+                runs = group_dict[hp]
+                lr_list = []
+                hd = []
+                for run in runs:
+                    lr_list.append(data[f'lr_unsorted_{cond}'][run])
+                    # Convert hazard flags to hazard distances
+                    hd.append(compute_hazard_distance(data[f'{cond}_array'][run][4]))
+
+                lr_all = np.concatenate(lr_list)
+                hd_all = np.concatenate(hd)
+
+                # Apply hazard distance filter if provided
+                if hazard_distance_filter is not None:
+                    mask = (hd_all >= hazard_distance_filter[0]) & (hd_all <= hazard_distance_filter[1])
+                    lr_all = lr_all[mask]
+
+                # Use compute_update_ratios to calculate proportions
+                p_mod, p_non, p_total = compute_update_ratios(lr_all)
+                ax.scatter(p_total, p_mod, p_non, s=150, alpha=0.8, color=cmap(norm(hp)), label=f'{hp:.2f}')
+
+            # Add colorbar for hyperparameter values
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            sm.set_array([])
+            cbar = plt.colorbar(sm, ax=ax, pad=0.05, shrink=0.5)
+            cbar.set_label('Hyperparameter Value')
+
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.set_zlim(0, 1)
+            ax.set_xlabel('p(Total Update)')
+            ax.set_ylabel('p(Moderate Update)')
+            ax.set_zlabel('p(Non Update)')
+            title = f'{rnn_param.upper()} - {"CP" if cond == "cp" else "OB"}'
+            if hazard_distance_filter is not None:
+                title += f" (Hazard Distance = {hazard_distance_filter})"
+            ax.set_title(title)
+
+    fig.tight_layout()
+    plt.show()
+
 # %% Setup data from get_behavior.py
 
 import utils as utils
@@ -444,9 +616,9 @@ def get_batch_behav(RNN_param_list = ["gamma", "preset", "rollout", "scale"]):
     '''
     -takes in a list of RNN parameters to analyze made from get_behavior.py
     -returns a dictionary of the data for each parameter
-    #to-do: average out the runs for each parameter (need same task.env if unsorted) 
     '''
 #np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
+#get_lrs_v2 returns vector clipped by prediction error threshold
     results = {}
     for rnn_param in RNN_param_list:
         cp_array, ob_array, model_list = utils.unpickle_state_vector(RNN_param=rnn_param)
@@ -472,10 +644,11 @@ def get_batch_behav(RNN_param_list = ["gamma", "preset", "rollout", "scale"]):
 
 behav_dict = get_batch_behav()
 plot_lrs_v2_batch(behav_dict, scale=0.1)
-# plot_lr_bins_post_hazard_batch(behav_dict)
-# plot_lr_curve_post_hazard(behav_dict)
-
-
+plot_lr_bins_post_hazard_batch(behav_dict)
+plot_lr_curve_post_hazard(behav_dict)
+plot_update_ratio(behav_dict)
+plot_all_update_ratios(behav_dict)
+plot_all_update_ratios(behav_dict, hazard_distance_filter= [1,3])
 
 #%% Run analysis on data
 
