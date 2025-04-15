@@ -1,3 +1,7 @@
+'''
+This script compiles the state data from multiple .npz files into a single .pickle file.
+'''
+
 import numpy as np
 
 def saveload(filename, variable, opt):
@@ -10,8 +14,6 @@ def saveload(filename, variable, opt):
         with open(f"{filename}.pickle", "rb") as file:
             return pickle.load(file)
     
-
-
 loadmodel = 1
 max_displacement = 20
 reward_size = 10
@@ -29,7 +31,6 @@ perf = np.zeros([seeds, epochs, num_contexts, 3, trials])
 for seed in range(seeds):
 
     exptname = f"noheli_{loadmodel}pre_{max_displacement}md_{reward_size}rs_{hidden_dim}n_{learning_rate}lr_{seed}s"
-
 
     npz_file = np.load(f'./state_data/{exptname}.npz')
 

@@ -32,7 +32,7 @@ import scipy.stats as stats
 #         current += 1
 #     return prediction_error, update, learning_rate, true_state, predicted_state,hazard_distance, hazard_trials
 
-#Plots
+#v1 plots - largely out of usage
 
 def plot_update_by_prediction_error(prediction_error, update, condition="change-point"):
     # Plot update x pe
@@ -117,7 +117,6 @@ def plot_learning_rate_histogram(learning_rate, condition="change-point"):
     plt.grid(True)
     plt.show()
     plt.savefig(f'plots/learning_rate_histogram_{condition}.png')
-
 
 def plot_lr_after_hazard(learning_rate, hazard_distance, condition="change-point"):
 
@@ -612,36 +611,74 @@ import utils as utils
 from scipy.ndimage import uniform_filter1d
 import numpy as np
 
-def get_batch_behav(RNN_param_list = ["gamma", "preset", "rollout", "scale"]):
+def get_batch_behav(file_dir='data/rnn_behav/model_params_101000', RNN_param_list = ["gamma", "preset", "rollout", "scale"]):
     '''
     -takes in a list of RNN parameters to analyze made from get_behavior.py
     -returns a dictionary of the data for each parameter
+
+    previously: 
+        cp_array_'condition' = [state_vector - 5, trials - 200]
+        state_vector = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
+    new: 
+        now going to be cp_array_'condition' = [epoch, state_vector, trials] [30,5,200]
+        results = [rnn param, epoch] = {cp_array etc...}
+
+    -get_lrs_v2 returns vector clipped by prediction error threshold
+
     '''
-#np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
-#get_lrs_v2 returns vector clipped by prediction error threshold
     results = {}
     for rnn_param in RNN_param_list:
-        cp_array, ob_array, model_list = utils.unpickle_state_vector(RNN_param=rnn_param)
-        pe_sorted_cp, lr_sorted_cp, pe_unsorted_cp, lr_unsorted_cp, area_cp = zip(*[get_lrs_v2(cp_array[i]) for i in range(len(model_list))])
-        pe_sorted_ob, lr_sorted_ob, pe_unsorted_ob, lr_unsorted_ob, area_ob = zip(*[get_lrs_v2(ob_array[i]) for i in range(len(model_list))])
-        
-        results[rnn_param] = {
-            'cp_array': cp_array,
-            'pe_sorted_cp': pe_sorted_cp,
-            'lr_sorted_cp': lr_sorted_cp,
-            'pe_unsorted_cp': pe_unsorted_cp,
-            'lr_unsorted_cp': lr_unsorted_cp,
-            'area_cp': area_cp,
-            'ob_array': ob_array,
-            'pe_sorted_ob': pe_sorted_ob,
-            'lr_sorted_ob': lr_sorted_ob,
-            'pe_unsorted_ob': pe_unsorted_ob,
-            'lr_unsorted_ob': lr_unsorted_ob,
-            'area_ob': area_ob,
-            'model_list': model_list
-        }
+        cp_array, ob_array, model_list = utils.unpickle_state_vector(file_dir = file_dir, RNN_param=rnn_param)
+
+
+        #filter model_list here
+
+
+
+
+        if len(cp_array[0]) == 5: # 5 state variables
+            pe_sorted_cp, lr_sorted_cp, pe_unsorted_cp, lr_unsorted_cp, area_cp = zip(*[get_lrs_v2(cp_array[i]) for i in range(len(model_list))])
+            pe_sorted_ob, lr_sorted_ob, pe_unsorted_ob, lr_unsorted_ob, area_ob = zip(*[get_lrs_v2(ob_array[i]) for i in range(len(model_list))])
+
+            results[rnn_param] = {
+                'cp_array': cp_array,
+                'pe_sorted_cp': pe_sorted_cp,
+                'lr_sorted_cp': lr_sorted_cp,
+                'pe_unsorted_cp': pe_unsorted_cp,
+                'lr_unsorted_cp': lr_unsorted_cp,
+                'area_cp': area_cp,
+                'ob_array': ob_array,
+                'pe_sorted_ob': pe_sorted_ob,
+                'lr_sorted_ob': lr_sorted_ob,
+                'pe_unsorted_ob': pe_unsorted_ob,
+                'lr_unsorted_ob': lr_unsorted_ob,
+                'area_ob': area_ob,
+                'model_list': model_list
+            }
+        elif len(cp_array[0]) == 30: #30 epochs 
+            for epoch in range(len(cp_array[0])):
+                pe_sorted_cp, lr_sorted_cp, pe_unsorted_cp, lr_unsorted_cp, area_cp = zip(*[get_lrs_v2(cp_array[i]) for i in range(len(model_list))])
+                pe_sorted_ob, lr_sorted_ob, pe_unsorted_ob, lr_unsorted_ob, area_ob = zip(*[get_lrs_v2(ob_array[i]) for i in range(len(model_list))])
+
+                results[rnn_param, epoch] = {
+                    'cp_array': cp_array,
+                    'pe_sorted_cp': pe_sorted_cp,
+                    'lr_sorted_cp': lr_sorted_cp,
+                    'pe_unsorted_cp': pe_unsorted_cp,
+                    'lr_unsorted_cp': lr_unsorted_cp,
+                    'area_cp': area_cp,
+                    'ob_array': ob_array,
+                    'pe_sorted_ob': pe_sorted_ob,
+                    'lr_sorted_ob': lr_sorted_ob,
+                    'pe_unsorted_ob': pe_unsorted_ob,
+                    'lr_unsorted_ob': lr_unsorted_ob,
+                    'area_ob': area_ob,
+                    'model_list': model_list
+                }
+
     return results
 
+# behav_dict = get_batch_behav(file_dir='data/rnn_behav/model_params_101000/30_epochs')
 behav_dict = get_batch_behav()
 plot_lrs_v2_batch(behav_dict, scale=0.1)
 plot_lr_bins_post_hazard_batch(behav_dict)
