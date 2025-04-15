@@ -9,9 +9,13 @@ from scipy.ndimage import uniform_filter1d
 from scipy import stats
 
 def extract_states(states):
-
+    '''
+    out of date - use extract_states_v2 instead
+    '''
     # originally by Adam
     # Extract prediction error (PE) and state (s) and predicted state (s_hat)
+
+
     true_state = states[2]  # bag position
     predicted_state = states[1]  # bucket position
     prediction_error = abs(true_state - predicted_state)
@@ -153,7 +157,7 @@ def calculate_sigma_update(sigma_motor, normative_update, sigma_LR):
 
 def unpickle_state_vector(file_dir:str = "data/rnn_behav/model_params_101000/", RNN_param: str="None"):
     """
-    Unpickle the state vector made by get_vector.
+    Unpickle the state vector made by get_behavior.py.
     
     Parameters:
         state_vector (str): Path to the state vector file.
@@ -180,3 +184,57 @@ def unpickle_state_vector(file_dir:str = "data/rnn_behav/model_params_101000/", 
     # agent_list_ob = [[x[1], x[2], 'oddball'] for x in ob_array]
 
     return cp_array, ob_array, model_list
+
+def filter_data(data_dir = "./model_params_101000/", threshold = 10):
+    '''
+    returns - index of models that meet the performance filter 
+    '''
+    gamma_idx = {}
+    rollout_idx = {}
+    preset_idx = {}
+    scale_idx = {}
+
+    #all possible hyper parameters
+    gammas  = [0.99, 0.95, 0.9, 0.8, 0.7, 0.5, 0.25, 0.1]
+    rollouts = [5, 10, 20, 30, 50, 75, 100, 150, 200]  # skipped 40
+    presets = [0.0, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0]
+    scales  = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
+
+    # Define a dictionary of hyperparameter configurations (value list and file pattern)
+    param_configs = {
+        "gamma": (
+            gammas,
+            "*_V3_{val}g_0.0rm_100bz_0.0td_1.0tds_Nonelb_Noneup_64n_50000e_10md_5.0rz_*s.pth"
+        ),
+        "rollout": (
+            rollouts,
+            "*_V3_0.95g_0.0rm_{val}bz_0.0td_1.0tds_Nonelb_Noneup_64n_50000e_10md_5.0rz_*s.pth"
+        ),
+        "preset": (
+            presets,
+            "*_V3_0.95g_{val}rm_100bz_0.0td_1.0tds_Nonelb_Noneup_64n_50000e_10md_5.0rz_*s.pth"
+        ),
+        "scale": (
+            scales,
+            "*_V3_0.95g_0.0rm_100bz_0.0td_{val}tds_Nonelb_Noneup_64n_50000e_10md_5.0rz_*s.pth"
+        )
+    }
+
+    for param_type, (values, pattern) in param_configs.items():
+        for val in values:
+            file_names = data_dir + pattern.format(val=val)
+            models = glob.glob(file_names)
+            # Initial cutoff: only keep models with performance metric > 5 (previously done)
+            initial_filtered = [m for m in models if float(m.split("\\")[-1].split("_")[0]) > 5]
+            # Create a boolean index array based on the second cutoff (performance > threshold)
+            idx = [float(m.split("\\")[-1].split("_")[0]) > threshold for m in initial_filtered]
+            if param_type == "gamma":
+                gamma_idx[val] = idx
+            elif param_type == "rollout":
+                rollout_idx[val] = idx
+            elif param_type == "preset":
+                preset_idx[val] = idx
+            elif param_type == "scale":
+                scale_idx[val] = idx
+
+    return gamma_idx, rollout_idx, preset_idx, scale_idx

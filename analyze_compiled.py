@@ -1,3 +1,7 @@
+'''
+compiles and plots data from best run
+'''
+
 #%%
 import numpy as np
 import matplotlib.pyplot as plt

@@ -66,12 +66,15 @@ def get_area(model_path, epochs=100, reset_memory=0.0):
 
 
 analysis = 'all'
-epochs = 30 #must adjust format of saved variables if you increase from 1
+epochs = 30 #different format if more than 1 epoch (need to standardize this later)
+#current format was made for pyem, but only saves 1st epoch
 
 data_dir = "./model_params_101000/"
-save_dir = "data/rnn_behav/model_params_101000/30epochs/"
+save_dir = "data/rnn_behav/model_params_101000/30_epochs/"
 os.makedirs(save_dir, exist_ok=True)
 bias = False
+
+#Model performance threshold 
 
 
 if analysis == 'gamma' or analysis == "all":
@@ -99,8 +102,12 @@ if analysis == 'gamma' or analysis == "all":
             all_param_states['states'].append(all_states)
 
             gamma_dict[m, g] = {"gamma", gamma}
-            gamma_cp_list.append(all_states[0,0])
-            gamma_ob_list.append(all_states[0,1])   
+            if epochs == 1:
+                gamma_cp_list.append(all_states[0,0])
+                gamma_ob_list.append(all_states[0,1])  
+            else:
+                gamma_cp_list.append(all_states[:,0])
+                gamma_ob_list.append(all_states[:,1]) 
             gamma_models.append(model)
 
             with open(os.path.join(save_dir, "gamma_all_param_states.pkl"), "wb") as f:
@@ -115,7 +122,7 @@ if analysis == 'gamma' or analysis == "all":
 
 if analysis == 'rollout' or analysis == 'all':
     # influence of rollout
-    rollouts = [5, 10,20, 30, 40, 50, 75, 100, 150, 200] # 0.99,0.95, 0.9,0.8,0.7, 0.5, 0.25, 0.1
+    rollouts = [5, 10, 20, 30, 50, 75, 100, 150, 200] # took out 40 as running into action taking issues
     all_param_states = {'rollouts':rollouts,'states':[]}
 
     rollout_dict = {}
@@ -136,8 +143,12 @@ if analysis == 'rollout' or analysis == 'all':
             all_param_states['states'].append(all_states)
 
             rollout_dict[m, g] = {"rollout", rollout}
-            rollout_cp_list.append(all_states[0,0])
-            rollout_ob_list.append(all_states[0,1]) 
+            if epochs == 1:
+                rollout_cp_list.append(all_states[0,0])
+                rollout_ob_list.append(all_states[0,1])  
+            else:
+                rollout_cp_list.append(all_states[:,0])
+                rollout_ob_list.append(all_states[:,1])
             rollout_models.append(model)  
 
             with open(os.path.join(save_dir, "rollout_all_param_states.pkl"), "wb") as f:
@@ -173,8 +184,12 @@ if analysis == 'preset' or analysis == 'all':
             all_param_states['states'].append(all_states)
 
             preset_dict[m, g] = {"preset", preset}
-            preset_cp_list.append(all_states[0,0])
-            preset_ob_list.append(all_states[0,1])   
+            if epochs == 1:
+                preset_cp_list.append(all_states[0,0])
+                preset_ob_list.append(all_states[0,1])  
+            else:
+                preset_cp_list.append(all_states[:,0])
+                preset_ob_list.append(all_states[:,1])
             preset_models.append(model)
 
             with open(os.path.join(save_dir, "preset_all_param_states.pkl"), "wb") as f:
@@ -211,8 +226,12 @@ if analysis == 'scale' or analysis == 'all':
             all_param_states['states'].append(all_states)
 
             scale_dict[m, g] = {"scale", scale}
-            scale_cp_list.append(all_states[0,0])
-            scale_ob_list.append(all_states[0,1])   
+            if epochs == 1:
+                scale_cp_list.append(all_states[0,0])
+                scale_ob_list.append(all_states[0,1])  
+            else: 
+                scale_cp_list.append(all_states[:,0])
+                scale_ob_list.append(all_states[:,1])
             scale_models.append(model)
 
             with open(os.path.join(save_dir, "scale_all_param_states.pkl"), "wb") as f:
@@ -235,7 +254,5 @@ if analysis == 'all':
         pickle.dump(cp_array, f)
     with open(os.path.join(save_dir, "combined_ob_array_filtered.pkl"), "wb") as f:
         pickle.dump(ob_array, f)
-
     with open(os.path.join(save_dir, "combined_mod_array_filtered.pkl"), "wb") as f:
         pickle.dump(mod_array, f)
-        
