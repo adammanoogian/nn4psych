@@ -9,7 +9,7 @@ model_params
 state_data
 model_params*
 figs*
-analysis
+/analysis
 cleanrl
 cleanrl
 normative_model
