@@ -12,7 +12,7 @@ figs*
 /analysis
 cleanrl
 cleanrl
-normative_model
+/normative_model
 /toy
 /v0
 /v1

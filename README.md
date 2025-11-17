@@ -88,9 +88,11 @@ python scripts/analyze_hyperparams_unified.py --param rollout --model_dir ./mode
 
 ```
 nn4psych/
+├── config.py                 # Project-level configuration (paths, params)
 ├── nn4psych/                 # Main package
 │   ├── models/              # Neural network models
-│   │   └── actor_critic.py  # Consolidated ActorCritic (was 8 copies!)
+│   │   ├── actor_critic.py  # Consolidated ActorCritic (was 8 copies!)
+│   │   └── bayesian/        # Bayesian fitting models
 │   ├── envs/                # Task environments
 │   │   └── predictive_inference.py  # PIE_CP_OB_v2
 │   ├── training/            # Training infrastructure
@@ -104,12 +106,30 @@ nn4psych/
 │   │   └── plotting.py     # Visualization
 │   └── configs/             # Default configs
 │       └── default.yaml
-├── scripts/                  # Example scripts
-│   ├── train_example.py     # Training example
-│   └── analyze_hyperparams_unified.py
+├── scripts/                  # Executable scripts
+│   ├── training/            # Model training
+│   │   └── train_rnn_canonical.py  # Canonical training script (was v5)
+│   ├── data_pipeline/       # Data processing pipeline
+│   │   ├── 00_run_full_pipeline.py
+│   │   ├── 01_extract_model_behavior.py
+│   │   ├── 02_compute_learning_metrics.py
+│   │   └── 03_analyze_hyperparameter_sweeps.py
+│   └── analysis/            # Analysis & visualization
+│       ├── train_example.py
+│       ├── visualize_learning_rates.py
+│       └── analyze_hyperparams_unified.py
+├── output/                   # Processed data outputs
+│   ├── behavioral_summary/
+│   ├── model_performance/
+│   └── parameter_exploration/
+├── figures/                  # Generated plots
 ├── tests/                    # Unit tests
-├── archive/                  # Archived legacy code
+├── validation/               # Parameter recovery & integration tests
+├── archive/                  # Archived legacy code (v0, v1, v2, etc.)
+├── docs/                     # Documentation
+│   └── ANALYSIS_PIPELINE.md
 ├── pyproject.toml           # Package configuration
+├── config.py                # Project paths and parameters
 └── README.md
 ```
 
