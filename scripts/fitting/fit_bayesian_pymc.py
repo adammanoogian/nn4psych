@@ -18,7 +18,7 @@ import arviz as az
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from nn4psych.models.bayesian import BayesianModel
+from bayesian.bayesian_models import BayesianModel
 from config import OUTPUT_DIR, BEHAVIORAL_FIGURES_DIR
 
 

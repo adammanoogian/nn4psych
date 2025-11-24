@@ -15,7 +15,7 @@ from torch.distributions import Categorical
 
 # Import from the new modular package
 from nn4psych.models import ActorCritic
-from nn4psych.envs import PIE_CP_OB_v2
+from envs import PIE_CP_OB_v2
 from nn4psych.training.configs import ExperimentConfig, create_default_config
 from nn4psych.utils.io import save_model
 

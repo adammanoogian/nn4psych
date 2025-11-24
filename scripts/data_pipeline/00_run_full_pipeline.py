@@ -31,6 +31,30 @@ PIPELINE_STAGES = [
             ('03_analyze_hyperparameter_sweeps.py', 'Analyze hyperparameter sweep results'),
         ]
     },
+    {
+        'stage': '04 - BEHAVIORAL VISUALIZATION',
+        'scripts': [
+            ('04_visualize_behavioral_summary.py', 'Generate behavioral analysis figures'),
+        ]
+    },
+    {
+        'stage': '05 - HYPERPARAMETER VISUALIZATION',
+        'scripts': [
+            ('05_visualize_hyperparameter_effects.py', 'Visualize hyperparameter effects on learning'),
+        ]
+    },
+    {
+        'stage': '06 - HUMAN DATA COMPARISON',
+        'scripts': [
+            ('06_compare_with_human_data.py', 'Compare model with Nassar 2021 human data'),
+        ]
+    },
+    {
+        'stage': '07 - DYNAMICAL SYSTEMS ANALYSIS',
+        'scripts': [
+            ('07_analyze_fixed_points.py', 'Fixed point and stability analysis'),
+        ]
+    },
 ]
 
 

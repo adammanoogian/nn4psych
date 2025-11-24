@@ -28,7 +28,7 @@ pip install -e ".[all]"        # All optional dependencies
 
 ```python
 from nn4psych.models import ActorCritic
-from nn4psych.envs import PIE_CP_OB_v2
+from envs import PIE_CP_OB_v2
 from nn4psych.training.configs import create_default_config
 
 # Create configuration
@@ -87,49 +87,69 @@ python scripts/analyze_hyperparams_unified.py --param rollout --model_dir ./mode
 ## Package Structure
 
 ```
-nn4psych/
-├── config.py                 # Project-level configuration (paths, params)
-├── nn4psych/                 # Main package
-│   ├── models/              # Neural network models
-│   │   ├── actor_critic.py  # Consolidated ActorCritic (was 8 copies!)
-│   │   └── bayesian/        # Bayesian fitting models
-│   ├── envs/                # Task environments
-│   │   └── predictive_inference.py  # PIE_CP_OB_v2
-│   ├── training/            # Training infrastructure
-│   │   └── configs.py       # Configuration dataclasses
-│   ├── analysis/            # Analysis tools
-│   │   ├── behavior.py      # Behavior extraction
-│   │   └── hyperparams.py   # Unified hyperparam analysis (was 5 scripts!)
-│   ├── utils/               # Utilities
-│   │   ├── io.py           # I/O functions
-│   │   ├── metrics.py      # Learning rate calculations
-│   │   └── plotting.py     # Visualization
-│   └── configs/             # Default configs
-│       └── default.yaml
-├── scripts/                  # Executable scripts
-│   ├── training/            # Model training
-│   │   └── train_rnn_canonical.py  # Canonical training script (was v5)
-│   ├── data_pipeline/       # Data processing pipeline
-│   │   ├── 00_run_full_pipeline.py
-│   │   ├── 01_extract_model_behavior.py
-│   │   ├── 02_compute_learning_metrics.py
-│   │   └── 03_analyze_hyperparameter_sweeps.py
-│   └── analysis/            # Analysis & visualization
-│       ├── train_example.py
-│       ├── visualize_learning_rates.py
-│       └── analyze_hyperparams_unified.py
-├── output/                   # Processed data outputs
+nn4psych/                          # Project root
+├── src/                           # ⭐ Source code (src layout)
+│   └── nn4psych/                  # Main package (no naming confusion!)
+│       ├── models/
+│       │   └── actor_critic.py   # Consolidated ActorCritic
+│       ├── training/
+│       │   └── configs.py
+│       ├── analysis/
+│       │   ├── behavior.py
+│       │   └── hyperparams.py
+│       ├── utils/
+│       │   ├── io.py
+│       │   ├── metrics.py
+│       │   └── plotting.py
+│       └── configs/
+│           └── default.yaml
+│
+├── envs/                          # ⭐ Standalone environments (top-level)
+│   ├── __init__.py
+│   └── pie_environment.py        # PIE_CP_OB_v2
+│
+├── scripts/                       # Executable scripts
+│   ├── training/
+│   ├── data_pipeline/
+│   ├── analysis/
+│   │   └── bayesian/
+│   └── fitting/
+│
+├── trained_models/                # ⭐ Model weights organized
+│   ├── checkpoints/
+│   ├── best_models/
+│   ├── weights/
+│   └── README.md
+│
+├── data/                          # ⭐ Data organized by type
+│   ├── raw/                      # Immutable source data
+│   ├── processed/                # Cleaned datasets
+│   ├── intermediate/             # Temporary arrays
+│   └── README.md
+│
+├── notebooks/                     # ⭐ Jupyter notebooks organized
+│   ├── exploratory/
+│   ├── tutorials/
+│   └── README.md
+│
+├── output/                        # Analysis outputs
 │   ├── behavioral_summary/
 │   ├── model_performance/
 │   └── parameter_exploration/
-├── figures/                  # Generated plots
-├── tests/                    # Unit tests
-├── validation/               # Parameter recovery & integration tests
-├── archive/                  # Archived legacy code (v0, v1, v2, etc.)
-├── docs/                     # Documentation
-│   └── ANALYSIS_PIPELINE.md
-├── pyproject.toml           # Package configuration
-├── config.py                # Project paths and parameters
+│
+├── figures/                       # Plot outputs
+│   ├── behavioral_summary/
+│   ├── model_performance/
+│   └── parameter_exploration/
+│
+├── tests/                         # Unit tests
+├── validation/                    # Integration tests
+├── archive/                       # Legacy code
+├── docs/                          # Documentation
+│
+├── config.py                      # Project configuration
+├── pyproject.toml                 # Package metadata
+├── .gitignore
 └── README.md
 ```
 
@@ -152,10 +172,12 @@ The new package consolidates and improves upon the previous structure:
 from utils_funcs import ActorCritic, get_lrs_v2
 from tasks import PIE_CP_OB_v2
 
-# NEW
+# NEW (after src/ layout + env extraction)
 from nn4psych.models import ActorCritic
 from nn4psych.utils.metrics import get_lrs_v2
-from nn4psych.envs import PIE_CP_OB_v2
+from envs import PIE_CP_OB_v2
+# Bayesian models are in scripts/analysis/bayesian/
+from scripts.analysis.bayesian.bayesian_models import BayesianModel
 ```
 
 ## Configuration Reference

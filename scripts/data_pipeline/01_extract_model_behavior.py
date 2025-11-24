@@ -29,7 +29,7 @@ from config import (
     COLUMN_NAMES,
 )
 from nn4psych.models import ActorCritic
-from nn4psych.envs import PIE_CP_OB_v2
+from envs import PIE_CP_OB_v2
 from nn4psych.analysis.behavior import extract_behavior
 from nn4psych.utils.io import saveload
 

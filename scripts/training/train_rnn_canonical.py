@@ -7,6 +7,10 @@ similar to Nassar et al. 2021
 and for additional analyses
 '''
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--epochs', type=int, required=False, help='epochs', default=10)
@@ -35,10 +39,12 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from torch.distributions import Categorical
-from tasks import PIE_CP_OB_v2
+from envs import PIE_CP_OB_v2
 import matplotlib.pyplot as plt
 from torch.nn import init
-from utils_funcs import get_lrs_v2, saveload, plot_behavior
+from nn4psych.utils.metrics import get_lrs_v2
+from nn4psych.utils.io import saveload
+from nn4psych.utils.plotting import plot_behavior
 from scipy.stats import linregress
 from scipy.ndimage import uniform_filter1d
 from copy import deepcopy
@@ -441,7 +447,7 @@ plt.tight_layout()
 
 df_area = np.round(area[0]-area[1])
 if len(store_params)>0:
-    plt.savefig(f'./figs/{df_area}_{exptname}.png')
+    plt.savefig(f'figures/model_performance/{df_area}_{exptname}.png')
     print('Fig saved')
     # saveload('./state_data/'+exptname, [epoch_perf, all_states, all_pes, all_lrs, store_params], 'save')
     # print('Data saved')

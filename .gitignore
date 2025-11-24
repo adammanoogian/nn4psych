@@ -1,19 +1,66 @@
+# Git
 .git
+
+# Python
 __pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Data files
+*.npy
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+
+# Legacy/Temp
 *copy*
-*npy
-*.pkl*
-*npy
-**.DS_Store
-model_params
-state_data
-model_params*
-figs*
 /analysis
-cleanrl
-cleanrl
-/normative_model
 /toy
 /v0
 /v1
 /v2
+state_data
+figs*
+
+# Model files (large)
+/trained_models/*
+!/trained_models/README.md
+!/trained_models/.gitkeep
+
+# Data (configurable)
+/data/intermediate/*
+!/data/intermediate/.gitkeep
+# Keep raw and processed data READMEs
+!/data/*/README.md
+
+# Output directories
+/output/*
+!/output/.gitkeep
+/figures/*
+!/figures/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/

@@ -20,7 +20,7 @@ def sample_model():
 @pytest.fixture
 def sample_env():
     """Create a sample environment for testing."""
-    from nn4psych.envs import PIE_CP_OB_v2
+    from envs import PIE_CP_OB_v2
     return PIE_CP_OB_v2(condition="change-point", total_trials=10)
 
 

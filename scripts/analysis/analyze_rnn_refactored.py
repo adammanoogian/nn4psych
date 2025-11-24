@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Import from nn4psych package
 from nn4psych.models import ActorCritic
-from nn4psych.envs import PIE_CP_OB_v2
+from envs import PIE_CP_OB_v2
 from nn4psych.utils.metrics import get_lrs_v2
 from nn4psych.utils.io import saveload, load_model
 from nn4psych.utils.plotting import plot_behavior

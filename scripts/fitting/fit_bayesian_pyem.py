@@ -22,8 +22,8 @@ from scipy.optimize import minimize
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from nn4psych.models.bayesian import norm2beta, norm2alpha
-from nn4psych.models.bayesian.pyem_models import fit
+from bayesian.pyem_models import fit, norm2beta, norm2alpha
+from bayesian.visualization import plot_model_fit_comprehensive
 from config import OUTPUT_DIR, BEHAVIORAL_FIGURES_DIR
 
 
@@ -166,7 +166,7 @@ def plot_fit_results(
     bag_positions: np.ndarray,
 ):
     """
-    Visualize fitting results.
+    Visualize fitting results using the comprehensive plotting function.
 
     Parameters
     ----------
@@ -180,83 +180,20 @@ def plot_fit_results(
     context = results['context']
     model_outputs = results['model_outputs']
 
-    fig, axes = plt.subplots(3, 2, figsize=(14, 12))
-
-    n_trials = len(bucket_positions)
-    trials = np.arange(n_trials)
-
-    # Plot 1: Positions
-    ax = axes[0, 0]
-    ax.plot(trials, bucket_positions, label='Bucket (actual)', color='orange', linewidth=2)
-    ax.plot(trials, model_outputs['pred_bucket_placement'],
-            label='Bucket (predicted)', color='blue', linestyle='--', linewidth=2)
-    ax.scatter(trials, bag_positions, label='Bag', color='red', alpha=0.5, s=20)
-    ax.set_xlabel('Trial')
-    ax.set_ylabel('Position')
-    ax.set_title('Actual vs Predicted Positions')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-
-    # Plot 2: Learning Rate
-    ax = axes[0, 1]
-    ax.plot(trials, model_outputs['learning_rate'], color='steelblue', linewidth=2)
-    ax.set_xlabel('Trial')
-    ax.set_ylabel('Learning Rate')
-    ax.set_title('Model Learning Rate')
-    ax.set_ylim(0, 1)
-    ax.grid(True, alpha=0.3)
-
-    # Plot 3: Prediction Error
-    ax = axes[1, 0]
-    ax.plot(trials, model_outputs['pred_error'], color='crimson', linewidth=2)
-    ax.set_xlabel('Trial')
-    ax.set_ylabel('Prediction Error')
-    ax.set_title('Prediction Error')
-    ax.grid(True, alpha=0.3)
-
-    # Plot 4: Changepoint Probability (Omega)
-    ax = axes[1, 1]
-    ax.plot(trials, model_outputs['omega'], color='purple', linewidth=2)
-    ax.set_xlabel('Trial')
-    ax.set_ylabel('Changepoint Probability (Ω)')
-    ax.set_title('Changepoint Probability')
-    ax.set_ylim(0, 1)
-    ax.grid(True, alpha=0.3)
-
-    # Plot 5: Relative Uncertainty (Tau)
-    ax = axes[2, 0]
-    ax.plot(trials, model_outputs['tau'][:-1], color='teal', linewidth=2)  # tau has n+1 elements
-    ax.set_xlabel('Trial')
-    ax.set_ylabel('Relative Uncertainty (τ)')
-    ax.set_title('Relative Uncertainty')
-    ax.grid(True, alpha=0.3)
-
-    # Plot 6: Update comparison
-    ax = axes[2, 1]
-    ax.plot(trials, model_outputs['bucket_update'],
-            label='Actual Update', color='orange', linewidth=2, alpha=0.7)
-    ax.plot(trials, model_outputs['normative_update'],
-            label='Normative Update', color='blue', linewidth=2, alpha=0.7)
-    ax.set_xlabel('Trial')
-    ax.set_ylabel('Update')
-    ax.set_title('Actual vs Normative Update')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-
-    plt.suptitle(f'PyEM Model Fit: {context.capitalize()}\n' +
-                 f'H={results["fitted_params"]["H"]:.3f}, ' +
-                 f'LW={results["fitted_params"]["LW"]:.3f}, ' +
-                 f'UU={results["fitted_params"]["UU"]:.3f}',
-                 fontsize=14)
-    plt.tight_layout()
-
-    # Save figure
+    # Use the comprehensive visualization function
     output_dir = BEHAVIORAL_FIGURES_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f'pyem_fit_{context}.png'
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    plt.close()
-    print(f"Saved fit visualization: {output_path}")
+
+    fig = plot_model_fit_comprehensive(
+        model_outputs,
+        bucket_positions,
+        bag_positions,
+        helicopter_positions=None,  # Not always available
+        save_path=output_path
+    )
+    plt.close(fig)
+    print(f"Saved comprehensive fit visualization: {output_path}")
 
 
 def main():

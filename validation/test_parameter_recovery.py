@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from nn4psych.models import ActorCritic
-from nn4psych.envs import PIE_CP_OB_v2
+from envs import PIE_CP_OB_v2
 
 
 class TestParameterRecovery:

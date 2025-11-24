@@ -12,15 +12,23 @@ from pathlib import Path
 # =============================================================================
 
 PROJECT_ROOT = Path(__file__).parent
+SRC_DIR = PROJECT_ROOT / 'src'
 DATA_DIR = PROJECT_ROOT / 'data'
 RAW_DATA_DIR = DATA_DIR / 'raw'
+PROCESSED_DATA_DIR = DATA_DIR / 'processed'
+INTERMEDIATE_DATA_DIR = DATA_DIR / 'intermediate'
 OUTPUT_DIR = PROJECT_ROOT / 'output'
 FIGURE_DIR = PROJECT_ROOT / 'figures'
 SCRIPTS_DIR = PROJECT_ROOT / 'scripts'
-MODELS_DIR = PROJECT_ROOT / 'nn4psych' / 'models'
-ENVIRONMENTS_DIR = PROJECT_ROOT / 'nn4psych' / 'envs'
+MODELS_DIR = SRC_DIR / 'nn4psych' / 'models'
+ENVIRONMENT_DIR = PROJECT_ROOT / 'envs'
+BAYESIAN_DIR = SCRIPTS_DIR / 'analysis' / 'bayesian'
+TRAINED_MODELS_DIR = PROJECT_ROOT / 'trained_models'
+CHECKPOINTS_DIR = TRAINED_MODELS_DIR / 'checkpoints'
+BEST_MODELS_DIR = TRAINED_MODELS_DIR / 'best_models'
 VALIDATION_DIR = PROJECT_ROOT / 'validation'
 DOCS_DIR = PROJECT_ROOT / 'docs'
+NOTEBOOKS_DIR = PROJECT_ROOT / 'notebooks'
 
 # Create directories if they don't exist
 for dir_path in [
@@ -32,6 +40,7 @@ for dir_path in [
     FIGURE_DIR / 'behavioral_summary',
     FIGURE_DIR / 'model_performance',
     FIGURE_DIR / 'parameter_exploration',
+    FIGURE_DIR / 'dynamical_systems',
     DOCS_DIR,
     VALIDATION_DIR,
 ]:
@@ -67,7 +76,9 @@ SCALE_SWEEP_PATH = PARAMETER_EXPLORATION_DIR / 'scale_sweep_results.csv'
 
 BEHAVIORAL_FIGURES_DIR = FIGURE_DIR / 'behavioral_summary'
 PERFORMANCE_FIGURES_DIR = FIGURE_DIR / 'model_performance'
+MODEL_PERFORMANCE_FIGURES_DIR = FIGURE_DIR / 'model_performance'  # Alias
 EXPLORATION_FIGURES_DIR = FIGURE_DIR / 'parameter_exploration'
+DYNAMICAL_SYSTEMS_FIGURES_DIR = FIGURE_DIR / 'dynamical_systems'
 
 # =============================================================================
 # MODEL PARAMETERS - Default Configuration
