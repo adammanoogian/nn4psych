@@ -646,6 +646,7 @@ def create_default_multitask_config() -> MultiTaskExperimentConfig:
 
 # Registry of known task types and their default configurations
 TASK_REGISTRY: Dict[str, TaskSpecConfig] = {
+    # PIE (Predictive Inference Environment) tasks
     "change-point": TaskSpecConfig(
         name="Change-Point",
         obs_dim=6,
@@ -661,6 +662,32 @@ TASK_REGISTRY: Dict[str, TaskSpecConfig] = {
         context_id=1,
         env_type="PIE_CP_OB_v2",
         env_kwargs={"condition": "oddball"},
+    ),
+    # NeuroGym tasks (requires neurogym package)
+    # Observation/action dims are approximate; actual values determined at runtime
+    "daw-two-step": TaskSpecConfig(
+        name="Daw Two-Step",
+        obs_dim=4,  # Approximate, determined at runtime
+        action_dim=3,  # Fixation + 2 choices
+        context_id=2,
+        env_type="DawTwoStepWrapper",
+        env_kwargs={"dt": 100},
+    ),
+    "single-context-dm": TaskSpecConfig(
+        name="Single Context Decision Making",
+        obs_dim=3,  # 1 + dim_ring (default dim_ring=2)
+        action_dim=3,  # 1 + dim_ring
+        context_id=3,
+        env_type="SingleContextDecisionMakingWrapper",
+        env_kwargs={"dt": 100, "sigma": 1.0, "dim_ring": 2, "modality_context": 0},
+    ),
+    "perceptual-dm": TaskSpecConfig(
+        name="Perceptual Decision Making",
+        obs_dim=3,  # 1 + dim_ring
+        action_dim=3,  # 1 + dim_ring
+        context_id=4,
+        env_type="PerceptualDecisionMakingWrapper",
+        env_kwargs={"dt": 100, "sigma": 1.0, "dim_ring": 2},
     ),
 }
 

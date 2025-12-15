@@ -6,6 +6,10 @@ This script trains an RNN actor-critic model on multiple tasks with different
 interleaving strategies. It supports tasks with different observation and action
 spaces through task-specific encoder/decoder heads.
 
+Supported Task Types:
+- PIE tasks: change-point, oddball (Predictive Inference Environment)
+- NeuroGym tasks: daw-two-step, single-context-dm, perceptual-dm
+
 Interleaving Strategies:
 - epoch: Alternate tasks per epoch (current default approach)
 - trial: Random task per trial within epoch
@@ -13,9 +17,14 @@ Interleaving Strategies:
 - curriculum: Start with easier task, gradually add harder ones
 
 Usage:
+    # Default PIE tasks (change-point + oddball)
     python train_multitask.py --epochs 100 --interleave_mode epoch
-    python train_multitask.py --epochs 100 --interleave_mode trial --seed 42
-    python train_multitask.py --epochs 100 --interleave_mode block --block_size 50
+
+    # With neurogym tasks
+    python train_multitask.py --tasks change-point oddball daw-two-step
+
+    # Only neurogym tasks
+    python train_multitask.py --tasks daw-two-step single-context-dm --epochs 50
 """
 
 import sys
@@ -25,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import argparse
 import json
 from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Union
 from copy import deepcopy
 from enum import Enum
 
@@ -46,6 +55,24 @@ from src.nn4psych.models.multitask_actor_critic import (
 )
 from nn4psych.utils.metrics import get_lrs_v2
 from nn4psych.utils.plotting import plot_behavior
+
+# Optional neurogym import
+try:
+    from envs.neurogym_wrapper import (
+        NeurogymWrapper,
+        DawTwoStepWrapper,
+        SingleContextDecisionMakingWrapper,
+        PerceptualDecisionMakingWrapper,
+        create_neurogym_env,
+        NEUROGYM_AVAILABLE,
+    )
+except ImportError:
+    NEUROGYM_AVAILABLE = False
+    NeurogymWrapper = None
+    DawTwoStepWrapper = None
+    SingleContextDecisionMakingWrapper = None
+    PerceptualDecisionMakingWrapper = None
+    create_neurogym_env = None
 
 
 class InterleaveMode(Enum):
@@ -242,19 +269,43 @@ class MultiTaskTrainer:
         print(f"Parameter count: {self.model.get_parameter_count()}")
         print(f"Tasks: {self.task_ids}")
 
-    def create_env(self, task_id: str, train_cond: bool) -> PIE_CP_OB_v2:
-        """Create environment for a task."""
+    def create_env(self, task_id: str, train_cond: bool) -> Union[PIE_CP_OB_v2, 'NeurogymWrapper']:
+        """
+        Create environment for a task.
+
+        Supports both PIE environments and NeuroGym wrapped environments.
+        """
         spec = self.task_specs[task_id]
-        return spec.env_class(
-            total_trials=self.config.trials_per_task,
-            max_time=self.config.max_time,
-            train_cond=train_cond,
-            max_displacement=self.config.max_displacement,
-            reward_size=self.config.reward_size,
-            step_cost=self.config.step_cost,
-            alpha=self.config.alpha,
-            **spec.env_kwargs,
-        )
+        env_class = spec.env_class
+
+        # Check if this is a PIE environment
+        if env_class == PIE_CP_OB_v2:
+            return env_class(
+                total_trials=self.config.trials_per_task,
+                max_time=self.config.max_time,
+                train_cond=train_cond,
+                max_displacement=self.config.max_displacement,
+                reward_size=self.config.reward_size,
+                step_cost=self.config.step_cost,
+                alpha=self.config.alpha,
+                **spec.env_kwargs,
+            )
+        # Check if this is a NeuroGym wrapper
+        elif NEUROGYM_AVAILABLE and issubclass(env_class, NeurogymWrapper):
+            env = env_class(
+                context_id=spec.context_id,
+                total_trials=self.config.trials_per_task,
+                **spec.env_kwargs,
+            )
+            # Set number of tasks for context vector
+            env.set_num_tasks(self.num_tasks)
+            return env
+        else:
+            # Generic case - try to instantiate with standard args
+            return env_class(
+                total_trials=self.config.trials_per_task,
+                **spec.env_kwargs,
+            )
 
     def compute_gae(
         self,
@@ -885,30 +936,172 @@ class MultiTaskTrainer:
         print(f"Results saved to {filepath}")
 
 
+# =============================================================================
+# Task Specification Factory
+# =============================================================================
+
+# Available task configurations
+AVAILABLE_TASKS = {
+    # PIE tasks
+    'change-point': {
+        'name': 'Change-Point',
+        'obs_dim': 6,
+        'action_dim': 3,
+        'env_class': PIE_CP_OB_v2,
+        'env_kwargs': {'condition': 'change-point'},
+        'type': 'pie',
+    },
+    'oddball': {
+        'name': 'Oddball',
+        'obs_dim': 6,
+        'action_dim': 3,
+        'env_class': PIE_CP_OB_v2,
+        'env_kwargs': {'condition': 'oddball'},
+        'type': 'pie',
+    },
+}
+
+# Add neurogym tasks if available
+if NEUROGYM_AVAILABLE:
+    AVAILABLE_TASKS.update({
+        'daw-two-step': {
+            'name': 'Daw Two-Step',
+            'obs_dim': 4,  # Approximate, updated at runtime
+            'action_dim': 3,
+            'env_class': DawTwoStepWrapper,
+            'env_kwargs': {'dt': 100},
+            'type': 'neurogym',
+        },
+        'single-context-dm': {
+            'name': 'Single Context DM',
+            'obs_dim': 3,  # 1 + dim_ring
+            'action_dim': 3,  # 1 + dim_ring
+            'env_class': SingleContextDecisionMakingWrapper,
+            'env_kwargs': {'dt': 100, 'sigma': 1.0, 'dim_ring': 2, 'modality_context': 0},
+            'type': 'neurogym',
+        },
+        'perceptual-dm': {
+            'name': 'Perceptual DM',
+            'obs_dim': 3,
+            'action_dim': 3,
+            'env_class': PerceptualDecisionMakingWrapper,
+            'env_kwargs': {'dt': 100, 'sigma': 1.0, 'dim_ring': 2},
+            'type': 'neurogym',
+        },
+    })
+
+
+def get_actual_task_dimensions(task_id: str) -> Tuple[int, int]:
+    """
+    Get actual observation and action dimensions by creating a temporary environment.
+
+    Parameters
+    ----------
+    task_id : str
+        Task identifier.
+
+    Returns
+    -------
+    Tuple[int, int]
+        (obs_dim, action_dim)
+    """
+    task_config = AVAILABLE_TASKS[task_id]
+
+    if task_config['type'] == 'pie':
+        # PIE environments have fixed dimensions
+        return task_config['obs_dim'], task_config['action_dim']
+
+    elif task_config['type'] == 'neurogym' and NEUROGYM_AVAILABLE:
+        # Create temporary environment to get actual dimensions
+        env_class = task_config['env_class']
+        temp_env = env_class(context_id=0, **task_config['env_kwargs'])
+        obs_dim = temp_env.obs_dim
+        action_dim = temp_env.action_dim
+        return obs_dim, action_dim
+
+    return task_config['obs_dim'], task_config['action_dim']
+
+
+def create_task_specs(task_ids: List[str]) -> Dict[str, TaskSpec]:
+    """
+    Create task specifications from a list of task IDs.
+
+    Parameters
+    ----------
+    task_ids : List[str]
+        List of task identifiers.
+
+    Returns
+    -------
+    Dict[str, TaskSpec]
+        Dictionary mapping task IDs to TaskSpec objects.
+
+    Raises
+    ------
+    ValueError
+        If a task ID is not recognized.
+    """
+    task_specs = {}
+
+    for idx, task_id in enumerate(task_ids):
+        if task_id not in AVAILABLE_TASKS:
+            available = list(AVAILABLE_TASKS.keys())
+            raise ValueError(
+                f"Unknown task '{task_id}'. Available tasks: {available}"
+            )
+
+        config = AVAILABLE_TASKS[task_id]
+
+        # Get actual dimensions for neurogym tasks
+        obs_dim, action_dim = get_actual_task_dimensions(task_id)
+
+        task_specs[task_id] = TaskSpec(
+            obs_dim=obs_dim,
+            action_dim=action_dim,
+            context_id=idx,
+            env_class=config['env_class'],
+            env_kwargs=config['env_kwargs'],
+            name=config['name'],
+        )
+
+    return task_specs
+
+
 def create_default_task_specs() -> Dict[str, TaskSpec]:
     """Create default task specifications for CP and OB tasks."""
-    return {
-        'change-point': TaskSpec(
-            obs_dim=6,
-            action_dim=3,
-            context_id=0,
-            env_class=PIE_CP_OB_v2,
-            env_kwargs={'condition': 'change-point'},
-            name='Change-Point',
-        ),
-        'oddball': TaskSpec(
-            obs_dim=6,
-            action_dim=3,
-            context_id=1,
-            env_class=PIE_CP_OB_v2,
-            env_kwargs={'condition': 'oddball'},
-            name='Oddball',
-        ),
-    }
+    return create_task_specs(['change-point', 'oddball'])
+
+
+def list_available_tasks() -> List[str]:
+    """List all available task IDs."""
+    return list(AVAILABLE_TASKS.keys())
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Multi-Task RNN Training')
+    parser = argparse.ArgumentParser(
+        description='Multi-Task RNN Training',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Default PIE tasks (change-point + oddball)
+  python train_multitask.py --epochs 100 --interleave_mode epoch
+
+  # With neurogym tasks
+  python train_multitask.py --tasks change-point oddball daw-two-step
+
+  # Only neurogym tasks
+  python train_multitask.py --tasks daw-two-step single-context-dm --epochs 50
+
+  # List available tasks
+  python train_multitask.py --list_tasks
+        """
+    )
+
+    # Task selection
+    parser.add_argument('--tasks', nargs='+', type=str, default=None,
+                        help='Task IDs to train on (default: change-point oddball)')
+    parser.add_argument('--list_tasks', action='store_true',
+                        help='List available tasks and exit')
 
     # Training params
     parser.add_argument('--epochs', type=int, default=100)
@@ -933,12 +1126,13 @@ def main():
                         choices=['epoch', 'trial', 'block', 'curriculum'])
     parser.add_argument('--block_size', type=int, default=50)
 
-    # Task params
+    # Task params (for PIE tasks)
     parser.add_argument('--maxdisp', type=float, default=10.0)
     parser.add_argument('--rewardsize', type=float, default=5.0)
 
     # Training curriculum
-    parser.add_argument('--ratio', type=float, default=0.5)
+    parser.add_argument('--ratio', type=float, default=0.5,
+                        help='Fraction of epochs with visible helicopter (PIE tasks)')
     parser.add_argument('--presetmem', type=float, default=0.0)
 
     # Misc
@@ -946,6 +1140,18 @@ def main():
     parser.add_argument('--save_dir', type=str, default='model_params')
 
     args = parser.parse_args()
+
+    # Handle --list_tasks
+    if args.list_tasks:
+        print("\nAvailable Tasks:")
+        print("-" * 50)
+        for task_id, config in AVAILABLE_TASKS.items():
+            print(f"  {task_id:20s} - {config['name']}")
+            print(f"    Type: {config['type']}, Obs: {config['obs_dim']}D, Act: {config['action_dim']}")
+        print("-" * 50)
+        if not NEUROGYM_AVAILABLE:
+            print("\nNote: NeuroGym tasks require 'pip install neurogym'")
+        return
 
     # Create config
     config = MultiTaskConfig(
@@ -969,14 +1175,32 @@ def main():
         save_dir=args.save_dir,
     )
 
+    # Determine which tasks to use
+    if args.tasks is not None:
+        task_ids = args.tasks
+    else:
+        task_ids = ['change-point', 'oddball']  # Default
+
     print("=" * 60)
     print("Multi-Task RNN Training")
     print("=" * 60)
+    print(f"Tasks: {task_ids}")
+    print(f"NeuroGym available: {NEUROGYM_AVAILABLE}")
     print(f"Config: {config.to_dict()}")
     print("=" * 60)
 
     # Create task specs
-    task_specs = create_default_task_specs()
+    try:
+        task_specs = create_task_specs(task_ids)
+    except ValueError as e:
+        print(f"\nError: {e}")
+        print("\nUse --list_tasks to see available tasks")
+        return
+
+    # Print task specifications
+    print("\nTask Specifications:")
+    for task_id, spec in task_specs.items():
+        print(f"  {task_id}: obs={spec.obs_dim}D, act={spec.action_dim}, ctx={spec.context_id}")
 
     # Create trainer
     trainer = MultiTaskTrainer(
