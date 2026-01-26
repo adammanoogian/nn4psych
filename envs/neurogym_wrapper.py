@@ -318,7 +318,7 @@ class DawTwoStepWrapper(NeurogymWrapper):
 
 class SingleContextDecisionMakingWrapper(NeurogymWrapper):
     """
-    Wrapper for the Single Context Decision Making task.
+    Wrapper for the Context Decision Making task.
 
     In this task, the agent receives simultaneous inputs from two modalities
     (e.g., color and motion of a random dot pattern) and must make a decision
@@ -362,11 +362,10 @@ class SingleContextDecisionMakingWrapper(NeurogymWrapper):
     ):
         self.modality_context = modality_context
         super().__init__(
-            env_name='SingleContextDecisionMaking-v0',
+            env_name='ContextDecisionMaking-v0',
             context_id=context_id,
             total_trials=total_trials,
             dt=dt,
-            context=modality_context,
             sigma=sigma,
             dim_ring=dim_ring,
             **kwargs,
@@ -459,7 +458,8 @@ def create_neurogym_env(
     # Map environment names to specialized wrappers
     wrapper_map = {
         'DawTwoStep-v0': DawTwoStepWrapper,
-        'SingleContextDecisionMaking-v0': SingleContextDecisionMakingWrapper,
+        'ContextDecisionMaking-v0': SingleContextDecisionMakingWrapper,
+        'SingleContextDecisionMaking-v0': SingleContextDecisionMakingWrapper,  # Alias
         'PerceptualDecisionMaking-v0': PerceptualDecisionMakingWrapper,
     }
 
@@ -541,8 +541,8 @@ NEUROGYM_TASK_DEFAULTS = {
         'env_kwargs': {'dt': 100},
         'description': 'Two-step decision making task for model-based vs model-free learning',
     },
-    'SingleContextDecisionMaking-v0': {
-        'name': 'Single Context Decision Making',
+    'ContextDecisionMaking-v0': {
+        'name': 'Context Decision Making',
         'obs_dim': 3,  # 1 + dim_ring (default dim_ring=2)
         'action_dim': 3,  # 1 + dim_ring
         'env_kwargs': {'dt': 100, 'sigma': 1.0, 'dim_ring': 2},
