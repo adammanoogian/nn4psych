@@ -75,34 +75,34 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TRAIN-01 | TBD | Pending |
-| TRAIN-02 | TBD | Pending |
-| TRAIN-03 | TBD | Pending |
-| TRAIN-04 | TBD | Pending |
-| CIRC-01 | TBD | Pending |
-| CIRC-02 | TBD | Pending |
-| CIRC-03 | TBD | Pending |
-| CIRC-04 | TBD | Pending |
-| CIRC-05 | TBD | Pending |
-| BAYES-01 | TBD | Pending |
-| BAYES-02 | TBD | Pending |
-| BAYES-03 | TBD | Pending |
-| BAYES-04 | TBD | Pending |
-| BAYES-05 | TBD | Pending |
-| BAYES-06 | TBD | Pending |
-| COMP-01 | TBD | Pending |
-| COMP-02 | TBD | Pending |
-| COMP-03 | TBD | Pending |
-| ORG-01 | TBD | Pending |
-| ORG-02 | TBD | Pending |
-| ORG-03 | TBD | Pending |
-| ORG-04 | TBD | Pending |
+| ORG-01 | Phase 1 | Pending |
+| ORG-02 | Phase 1 | Pending |
+| ORG-03 | Phase 1 | Pending |
+| ORG-04 | Phase 1 | Pending |
+| TRAIN-01 | Phase 2 | Pending |
+| TRAIN-02 | Phase 2 | Pending |
+| TRAIN-03 | Phase 2 | Pending |
+| TRAIN-04 | Phase 2 | Pending |
+| CIRC-01 | Phase 3 | Pending |
+| CIRC-02 | Phase 3 | Pending |
+| CIRC-03 | Phase 3 | Pending |
+| CIRC-04 | Phase 3 | Pending |
+| CIRC-05 | Phase 3 | Pending |
+| BAYES-01 | Phase 4 | Pending |
+| BAYES-02 | Phase 4 | Pending |
+| BAYES-03 | Phase 4 | Pending |
+| BAYES-04 | Phase 4 | Pending |
+| BAYES-05 | Phase 4 | Pending |
+| BAYES-06 | Phase 4 | Pending |
+| COMP-01 | Phase 5 | Pending |
+| COMP-02 | Phase 5 | Pending |
+| COMP-03 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 22 total
-- Mapped to phases: 0
-- Unmapped: 22
+- Mapped to phases: 22
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-18*
-*Last updated: 2026-03-18 after initial definition*
+*Last updated: 2026-03-18 — traceability complete after roadmap creation*
