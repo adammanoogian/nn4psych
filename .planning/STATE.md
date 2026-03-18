@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** RNN agent trainable on multiple cognitive tasks with analyzable hidden representations comparable to human data via Bayesian model fitting
-**Current focus:** Phase 1 — Infrastructure and Organization
+**Current focus:** Phase 2 — Bayesian Fitting and Behavior Analysis
 
 ## Current Position
 
-Phase: 1 of 5 (Infrastructure and Organization)
-Plan: 1 of 3 in current phase (01-01 complete)
-Status: In progress
-Last activity: 2026-03-18 — Completed 01-01-PLAN.md (bayesian subpackage migration)
+Phase: 1 of 5 (Infrastructure and Organization) — COMPLETE
+Plan: 3 of 3 in phase 01 (01-03 complete)
+Status: Phase 1 complete — ready to begin Phase 2
+Last activity: 2026-03-18 — Completed 01-03-PLAN.md (JAX tracing fix, public env API, parameterized dims)
 
-Progress: [█░░░░░░░░░] ~7% (1/~13 total plans)
+Progress: [███░░░░░░░] ~23% (3/~13 total plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 9 min
-- Total execution time: ~0.15 hours
+- Total plans completed: 3
+- Average duration: ~8 min
+- Total execution time: ~0.4 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-infrastructure-and-organization | 1/3 | 9 min | 9 min |
+| 01-infrastructure-and-organization | 3/3 COMPLETE | ~24 min | ~8 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (9 min)
-- Trend: —
+- Last 5 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min)
+- Trend: consistent ~7-9 min per plan
 
 *Updated after each plan completion*
 
@@ -50,20 +50,24 @@ Recent decisions affecting current work:
 - [01-01]: cross_validate_k_fold() removed — was PyEM-only; NumPyro CV deferred to Phase 4
 - [01-01]: batch_fit_bayesian.py not rewritten; TODO comment added; Phase 4 work
 - [01-01]: Original bayesian/ root NOT deleted — Plan 01-02 handles archiving
+- [01-03]: jax.lax.cond with operand=None and lambda _: pattern for closed-over variable branches
+- [01-03]: is_changepoint = jnp.bool_(context == 'changepoint') outside step_fn — JAX tracer-compatible
+- [01-03]: NeurogymWrapper.reset_epoch() resets self.trial = 0 plus all history lists
+- [01-03]: env_params defaults to {} inside batch_extract_behavior (not as default arg) to avoid mutable default anti-pattern
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-- [Phase 1 prereq]: JAX tracing bug in numpyro_models.py (line ~149) — Python string `context` inside jax.lax.scan silently ignores oddball condition; must fix before any Bayesian fitting
-- [Phase 1 prereq]: extract_behavior uses private env API (_reset_state, get_state_history) — will break on NeuroGym; must fix before Phase 2
+- [RESOLVED 01-03]: JAX tracing bug in numpyro_models.py — FIXED with jax.lax.cond
+- [RESOLVED 01-03]: extract_behavior private env API — FIXED with reset_epoch() public method
 - [Phase 3 planning]: Latent circuit rank selection for context-DM task needs verification against engellab/latentcircuit repo (research flag)
 - [Phase 4 planning]: Nassar 2021 .mat file nested indexing not directly inspected — must run describe_mat_structure() before writing data loading code (research flag)
 
 ## Session Continuity
 
-Last session: 2026-03-18T20:09:50Z
-Stopped at: Completed 01-01-PLAN.md — src/nn4psych/bayesian/ created, scripts updated
+Last session: 2026-03-18T20:19:00Z
+Stopped at: Completed 01-03-PLAN.md — Phase 1 complete
 Resume file: None
