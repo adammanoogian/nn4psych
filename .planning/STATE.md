@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 
 ## Current Position
 
-Phase: 1 of 5 (Infrastructure and Organization) — COMPLETE
-Plan: 3 of 3 in phase 01 (01-03 complete)
-Status: Phase 1 complete — ready to begin Phase 2
-Last activity: 2026-03-18 — Completed 01-03-PLAN.md (JAX tracing fix, public env API, parameterized dims)
+Phase: 2 of 5 (RNN Training Verification) — In progress
+Plan: 1 of 3 in phase 02 (02-01 complete)
+Status: In progress — Phase 2 Plan 1 complete
+Last activity: 2026-03-18 — Completed 02-01-PLAN.md (training script bug fixes, obs_dim correction, neurogym dep)
 
-Progress: [███░░░░░░░] ~23% (3/~13 total plans)
+Progress: [████░░░░░░] ~31% (4/~13 total plans)
 
 ## Performance Metrics
 
@@ -28,10 +28,11 @@ Progress: [███░░░░░░░] ~23% (3/~13 total plans)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-infrastructure-and-organization | 3/3 COMPLETE | ~24 min | ~8 min |
+| 02-rnn-training-verification | 1/3 | ~12 min | ~12 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min)
-- Trend: consistent ~7-9 min per plan
+- Last 5 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min), 02-01 (12 min)
+- Trend: ~7-12 min per plan
 
 *Updated after each plan completion*
 
@@ -54,6 +55,9 @@ Recent decisions affecting current work:
 - [01-03]: is_changepoint = jnp.bool_(context == 'changepoint') outside step_fn — JAX tracer-compatible
 - [01-03]: NeurogymWrapper.reset_epoch() resets self.trial = 0 plus all history lists
 - [01-03]: env_params defaults to {} inside batch_extract_behavior (not as default arg) to avoid mutable default anti-pattern
+- [02-01]: evaluate() method also needs hasattr guard — 4 sites total not 3; auto-fixed as Rule 1 bug
+- [02-01]: obs_dim for ContextDecisionMaking is 1 + 2*dim_ring (not 1 + dim_ring); fixation + 2 modalities x ring_units
+- [02-01]: neurogym installed in actinf-py-scripts conda env (v2.2.0); is the project's working Python environment
 
 ### Pending Todos
 
@@ -68,6 +72,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-18T20:19:00Z
-Stopped at: Completed 01-03-PLAN.md — Phase 1 complete
+Last session: 2026-03-18T21:15:00Z
+Stopped at: Completed 02-01-PLAN.md — Phase 2, Plan 1 complete
 Resume file: None
