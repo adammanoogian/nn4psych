@@ -46,12 +46,12 @@ Plans:
   2. Training on DawTwoStep and SingleContextDecisionMaking runs to completion without error
   3. ContextDecisionMaking-v0 task loads from NeuroGym with a gym-compatible interface and the agent receives correct observations
   4. Training on context-DM task runs to completion and hidden state arrays save to data/processed/rnn_behav/ as .npy files
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: Integrate ContextDecisionMaking-v0 from NeuroGym, verify gym wrapper compatibility
-- [ ] 02-02: Verify end-to-end training on PIE and NeuroGym tasks; confirm behavior extraction outputs correct shapes
-- [ ] 02-03: Train and verify RNN on context-DM task; confirm hidden states and behavioral outputs saved to data/processed/
+- [ ] 02-01-PLAN.md — Fix 4 blocking bugs (main guard, NeuroGym state crash, GAE tensor, obs_dim mismatch), add neurogym dependency (Wave 1)
+- [ ] 02-02-PLAN.md — Implement extract_behavior_with_hidden(), verify PIE + NeuroGym training end-to-end (Wave 2)
+- [ ] 02-03-PLAN.md — Create context-DM training script, train on ContextDecisionMaking-v0, save hidden states to data/processed/rnn_behav/ (Wave 2)
 
 ### Phase 3: Latent Circuit Inference
 **Goal**: The latent circuit inference pipeline fits Q, w_rec, w_in, w_out from context-DM RNN hidden states with 100-initialization ensemble validation, and the inferred circuit passes both activity-level and connectivity-level checks.
