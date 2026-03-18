@@ -30,12 +30,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A test with oddball condition runs through the NumPyro scan without silently using changepoint equations (JAX tracing bug resolved)
   4. `extract_behavior` runs on a NeuroGym environment using only public gym API without AttributeError
   5. `pip install -e ".[bayesian]"` installs JAX 0.9.1, NumPyro 0.20.0, ArviZ 1.0.0 and no PyMC/PyTensor
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 01-01: Reorganize directory structure to project_utils conventions and consolidate bayesian/ into src/nn4psych/bayesian/
-- [ ] 01-02: Update pyproject.toml (Python >= 3.11, JAX/NumPyro/ArviZ deps, remove PyMC), archive PyEM models
-- [ ] 01-03: Fix JAX tracing bug in numpyro_models.py, enforce JAX CPU-only config, refactor extract_behavior to public gym API, fix hardcoded dimensions
+- [ ] 01-01-PLAN.md — Move bayesian/ to src/nn4psych/bayesian/, create NumPyro-only __init__.py with JAX CPU enforcement, update script imports (Wave 1)
+- [ ] 01-02-PLAN.md — Update pyproject.toml deps (NumPyro/JAX, remove PyMC), bump Python >=3.11, archive PyMC/PyEM files (Wave 1)
+- [ ] 01-03-PLAN.md — Fix JAX tracing bug (jax.lax.cond), add reset_epoch() to envs, fix extract_behavior private API, parameterize batch dims (Wave 2)
 
 ### Phase 2: RNN Training Verification
 **Goal**: The RNN ActorCritic trains and converges on all three task types (PIE, NeuroGym tasks, context-DM), and behavior and hidden states can be extracted for downstream analysis.
