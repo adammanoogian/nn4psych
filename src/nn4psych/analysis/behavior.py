@@ -15,7 +15,7 @@ from nn4psych.utils.metrics import get_lrs_v2
 
 def extract_behavior(
     model: ActorCritic,
-    env: PIE_CP_OB_v2,
+    env,  # PIE_CP_OB_v2 or NeurogymWrapper — must have reset_epoch() and get_state_history()
     n_epochs: int = 100,
     n_trials: int = 200,
     reset_memory: bool = True,
@@ -63,7 +63,7 @@ def extract_behavior(
                     h = model.get_initial_hidden(batch_size=1, device=device)
 
             # Reset environment for epoch
-            env._reset_state()
+            env.reset_epoch()
 
             # Run trials
             reward = 0.0  # Initialize reward
@@ -173,6 +173,10 @@ def batch_extract_behavior(
     n_epochs: int = 100,
     reset_memory: bool = True,
     show_progress: bool = True,
+    input_dim: int = 9,
+    hidden_dim: int = 64,
+    action_dim: int = 3,
+    env_params: Optional[Dict] = None,
 ) -> Dict[str, List]:
     """
     Extract behavior from multiple models.
@@ -187,6 +191,14 @@ def batch_extract_behavior(
         Whether to reset memory between epochs.
     show_progress : bool, optional
         Whether to show progress bar.
+    input_dim : int, optional
+        Model input dimension. Default is 9.
+    hidden_dim : int, optional
+        Model hidden dimension. Default is 64.
+    action_dim : int, optional
+        Model action dimension. Default is 3.
+    env_params : dict, optional
+        Additional keyword arguments passed to PIE_CP_OB_v2 constructor.
 
     Returns
     -------
@@ -197,15 +209,17 @@ def batch_extract_behavior(
 
     iterator = tqdm(model_paths, desc="Extracting behavior") if show_progress else model_paths
 
+    _env_params = env_params or {}
+
     for model_path in iterator:
         # Load model
-        model = ActorCritic(9, 64, 3)
+        model = ActorCritic(input_dim, hidden_dim, action_dim)
         checkpoint = torch.load(model_path, map_location='cpu')
         model.load_state_dict(checkpoint)
 
         # Extract for both conditions
-        env_cp = PIE_CP_OB_v2(condition='change-point')
-        env_ob = PIE_CP_OB_v2(condition='oddball')
+        env_cp = PIE_CP_OB_v2(condition='change-point', **_env_params)
+        env_ob = PIE_CP_OB_v2(condition='oddball', **_env_params)
 
         states_cp = extract_behavior(model, env_cp, n_epochs=n_epochs, reset_memory=reset_memory)
         states_ob = extract_behavior(model, env_ob, n_epochs=n_epochs, reset_memory=reset_memory)

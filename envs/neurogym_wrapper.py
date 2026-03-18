@@ -137,6 +137,19 @@ class NeurogymWrapper:
         self.observations_history = []
         self.trial_lengths = []
 
+    def reset_epoch(self) -> None:
+        """Reset epoch-level tracking for new evaluation epoch.
+
+        Call this before running a new epoch of trials. Resets trial counter,
+        accumulated histories, and tracking variables.
+        """
+        self.trial = 0
+        self.trials = []
+        self.rewards_history = []
+        self.actions_history = []
+        self.trial_lengths = []
+        self.observations_history = []
+
     def normalize_states(self, obs: np.ndarray) -> np.ndarray:
         """
         Normalize observations to approximately [0, 1] range.

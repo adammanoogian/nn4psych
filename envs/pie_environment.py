@@ -143,6 +143,14 @@ class PIE_CP_OB_v2:
         self.helicopter_positions = []
         self.hazard_triggers = []
 
+    def reset_epoch(self) -> None:
+        """Reset environment state at the start of a new evaluation epoch.
+
+        Call this before running a new epoch of trials. Resets position
+        history, trial counter, and generates new initial positions.
+        """
+        self._reset_state()
+
     def normalize_states(self, x: np.ndarray) -> np.ndarray:
         """
         Normalize states to [0, 1] range.
