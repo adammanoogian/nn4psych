@@ -29,7 +29,7 @@ from tqdm import tqdm
 # Add project root
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from bayesian.numpyro_models import run_mcmc, summarize_posterior, get_map_estimate
+from nn4psych.bayesian.numpyro_models import run_mcmc, summarize_posterior, get_map_estimate
 from config import OUTPUT_DIR
 
 # Condition mapping (from extract_nassar_trials.py)

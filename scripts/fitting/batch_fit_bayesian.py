@@ -26,9 +26,9 @@ import json
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from bayesian import fit_bayesian_model, norm2alpha, norm2beta
-from bayesian.model_comparison import calculate_bic, calculate_aic
-from bayesian.visualization import (
+# TODO: This script needs updating for NumPyro — PyEM fit_bayesian_model was removed
+from nn4psych.bayesian.model_comparison import calculate_bic, calculate_aic
+from nn4psych.bayesian.visualization import (
     plot_model_fit_comprehensive,
     plot_parameter_distributions
 )

@@ -30,7 +30,7 @@ import arviz as az
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from bayesian.numpyro_models import (
+from nn4psych.bayesian.numpyro_models import (
     run_mcmc,
     summarize_posterior,
     posterior_predictive,
