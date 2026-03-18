@@ -91,6 +91,143 @@ def extract_behavior(
     return all_states
 
 
+def extract_behavior_with_hidden(
+    model: ActorCritic,
+    env,  # PIE_CP_OB_v2 or NeurogymWrapper — must have reset_epoch() and get_state_history()
+    n_epochs: int = 1,
+    n_trials: int = 200,
+    reset_memory: bool = True,
+    preset_memory: float = 0.0,
+    device: Optional[torch.device] = None,
+) -> dict:
+    """
+    Extract behavioral data AND hidden states for downstream analysis.
+
+    Runs the model through the environment for n_epochs x n_trials, recording
+    the RNN hidden state at every timestep. Hidden states are padded to
+    max trial length with NaN values.
+
+    Parameters
+    ----------
+    model : ActorCritic
+        Trained model to evaluate.
+    env : PIE_CP_OB_v2 or NeurogymWrapper
+        Task environment. Must have reset_epoch(), reset(), step(),
+        normalize_states(), context, and get_state_history() methods.
+    n_epochs : int, optional
+        Number of epochs to run. Default is 1.
+    n_trials : int, optional
+        Number of trials per epoch. Default is 200.
+    reset_memory : bool, optional
+        Whether to reset hidden state between epochs. Default is True.
+    preset_memory : float, optional
+        Value to preset hidden state to. Default is 0.0.
+    device : torch.device, optional
+        Device to run model on.
+
+    Returns
+    -------
+    dict
+        Dictionary with keys:
+        - 'states': list of epoch state tuples (from get_state_history())
+        - 'hidden': np.ndarray, shape (n_epochs * n_trials, max_T, hidden_dim)
+          Hidden states padded with NaN to max trial length.
+        - 'trial_lengths': np.ndarray, shape (n_epochs * n_trials,)
+          Actual number of timesteps per trial.
+        - 'actions': list of lists, one per trial, each containing action ints.
+        - 'rewards': list of lists, one per trial, each containing reward floats.
+    """
+    if device is None:
+        device = next(model.parameters()).device
+
+    hidden_dim = model.hidden_dim
+    model.eval()
+
+    all_states = []
+    all_hidden = []       # list of (T_trial, hidden_dim) arrays
+    all_lengths = []      # int per trial
+    all_actions = []      # list of action lists per trial
+    all_rewards = []      # list of reward lists per trial
+
+    with torch.no_grad():
+        for epoch in range(n_epochs):
+            # Reset hidden state
+            if reset_memory:
+                h = model.reset_hidden(batch_size=1, device=device, preset_value=preset_memory)
+            else:
+                if epoch == 0:
+                    h = model.get_initial_hidden(batch_size=1, device=device)
+
+            # Reset environment for epoch
+            env.reset_epoch()
+
+            # Run trials
+            reward = 0.0
+            for trial in range(n_trials):
+                obs, done = env.reset()
+                norm_obs = env.normalize_states(obs)
+                state = np.concatenate([norm_obs, env.context, [reward]])
+
+                trial_hidden = []
+                trial_actions = []
+                trial_rewards = []
+
+                while not done:
+                    # Forward pass
+                    x = torch.tensor(state, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
+                    actor_logits, _, h = model(x, h)
+
+                    # Record hidden state (squeeze to (hidden_dim,))
+                    trial_hidden.append(h.squeeze().cpu().numpy().copy())
+
+                    # Select action
+                    action_probs = torch.softmax(actor_logits, dim=-1)
+                    action = torch.argmax(action_probs, dim=-1).item()
+
+                    # Step environment
+                    obs, reward, done = env.step(action)
+                    norm_obs = env.normalize_states(obs)
+                    state = np.concatenate([norm_obs, env.context, [reward]])
+
+                    trial_actions.append(action)
+                    trial_rewards.append(reward)
+
+                # Store trial data
+                if len(trial_hidden) > 0:
+                    all_hidden.append(np.stack(trial_hidden))  # (T_trial, hidden_dim)
+                else:
+                    # Edge case: trial ended immediately (0 steps)
+                    all_hidden.append(np.empty((0, hidden_dim)))
+                all_lengths.append(len(trial_hidden))
+                all_actions.append(trial_actions)
+                all_rewards.append(trial_rewards)
+
+            # Store epoch state history
+            states = env.get_state_history()
+            all_states.append(states)
+
+    # Pad hidden states to (n_total_trials, max_T, hidden_dim)
+    n_total = len(all_hidden)
+    max_T = max(all_lengths) if all_lengths else 0
+
+    if max_T > 0 and n_total > 0:
+        hidden_padded = np.full((n_total, max_T, hidden_dim), np.nan)
+        for i, h_trial in enumerate(all_hidden):
+            T = h_trial.shape[0]
+            if T > 0:
+                hidden_padded[i, :T, :] = h_trial
+    else:
+        hidden_padded = np.empty((n_total, 0, hidden_dim))
+
+    return {
+        'states': all_states,
+        'hidden': hidden_padded,
+        'trial_lengths': np.array(all_lengths, dtype=np.int32),
+        'actions': all_actions,
+        'rewards': all_rewards,
+    }
+
+
 def get_area(
     model_path: Path,
     epochs: int = 100,
