@@ -675,7 +675,7 @@ TASK_REGISTRY: Dict[str, TaskSpecConfig] = {
     ),
     "single-context-dm": TaskSpecConfig(
         name="Single Context Decision Making",
-        obs_dim=3,  # 1 + dim_ring (default dim_ring=2)
+        obs_dim=5,  # 1 + 2*dim_ring (default dim_ring=2): 1 fixation + 2 modalities x 2 ring units
         action_dim=3,  # 1 + dim_ring
         context_id=3,
         env_type="SingleContextDecisionMakingWrapper",

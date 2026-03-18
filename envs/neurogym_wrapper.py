@@ -556,7 +556,7 @@ NEUROGYM_TASK_DEFAULTS = {
     },
     'ContextDecisionMaking-v0': {
         'name': 'Context Decision Making',
-        'obs_dim': 3,  # 1 + dim_ring (default dim_ring=2)
+        'obs_dim': 5,  # 1 + 2*dim_ring (default dim_ring=2): 1 fixation + 2 modalities x 2 ring
         'action_dim': 3,  # 1 + dim_ring
         'env_kwargs': {'dt': 100, 'sigma': 1.0, 'dim_ring': 2},
         'description': 'Context-dependent perceptual decision making',

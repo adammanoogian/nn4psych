@@ -334,7 +334,9 @@ class MultiTaskTrainer:
             )
             advantages.insert(0, delta)
 
-        advantages = torch.tensor(advantages, dtype=torch.float32).to(self.device)
+        advantages = torch.stack(
+            [a.detach() if isinstance(a, torch.Tensor) else torch.tensor(a, dtype=torch.float32) for a in advantages]
+        ).to(self.device)
         returns = advantages + torch.tensor(
             [v.item() for v in values], dtype=torch.float32
         ).to(self.device)
@@ -478,16 +480,26 @@ class MultiTaskTrainer:
                     losses.append(loss)
 
             # Get environment state history
-            states = np.array([
-                env.trials,
-                env.bucket_positions,
-                env.bag_positions,
-                env.helicopter_positions,
-                env.hazard_triggers,
-            ])
-
-            # Calculate distances
-            distances = np.abs(states[3] - states[1])  # heli - bucket
+            if hasattr(env, 'bucket_positions'):
+                # PIE environment — structured state arrays
+                states = np.array([
+                    env.trials,
+                    env.bucket_positions,
+                    env.bag_positions,
+                    env.helicopter_positions,
+                    env.hazard_triggers,
+                ])
+                distances = np.abs(states[3] - states[1])  # heli - bucket
+            else:
+                # NeurogymWrapper — trial-based tracking
+                n_completed = len(env.trials)
+                states = {
+                    'trials': env.trials,
+                    'rewards': env.rewards_history,
+                    'trial_lengths': env.trial_lengths,
+                }
+                # For NeuroGym, distance metric is not applicable; use zeros
+                distances = np.zeros(n_completed) if n_completed > 0 else np.array([0])
 
             results[task_id] = {
                 'returns': np.array(returns),
@@ -585,14 +597,26 @@ class MultiTaskTrainer:
         # Finalize results
         for task_id in self.task_ids:
             env = envs[task_id]
-            states = np.array([
-                env.trials,
-                env.bucket_positions,
-                env.bag_positions,
-                env.helicopter_positions,
-                env.hazard_triggers,
-            ])
-            distances = np.abs(states[3] - states[1])
+            if hasattr(env, 'bucket_positions'):
+                # PIE environment — structured state arrays
+                states = np.array([
+                    env.trials,
+                    env.bucket_positions,
+                    env.bag_positions,
+                    env.helicopter_positions,
+                    env.hazard_triggers,
+                ])
+                distances = np.abs(states[3] - states[1])  # heli - bucket
+            else:
+                # NeurogymWrapper — trial-based tracking
+                n_completed = len(env.trials)
+                states = {
+                    'trials': env.trials,
+                    'rewards': env.rewards_history,
+                    'trial_lengths': env.trial_lengths,
+                }
+                # For NeuroGym, distance metric is not applicable; use zeros
+                distances = np.zeros(n_completed) if n_completed > 0 else np.array([0])
 
             results[task_id]['returns'] = np.array(results[task_id]['returns'])
             results[task_id]['times'] = np.array(results[task_id]['times'])
@@ -673,14 +697,26 @@ class MultiTaskTrainer:
         # Finalize
         for task_id in self.task_ids:
             env = envs[task_id]
-            states = np.array([
-                env.trials,
-                env.bucket_positions,
-                env.bag_positions,
-                env.helicopter_positions,
-                env.hazard_triggers,
-            ])
-            distances = np.abs(states[3] - states[1])
+            if hasattr(env, 'bucket_positions'):
+                # PIE environment — structured state arrays
+                states = np.array([
+                    env.trials,
+                    env.bucket_positions,
+                    env.bag_positions,
+                    env.helicopter_positions,
+                    env.hazard_triggers,
+                ])
+                distances = np.abs(states[3] - states[1])  # heli - bucket
+            else:
+                # NeurogymWrapper — trial-based tracking
+                n_completed = len(env.trials)
+                states = {
+                    'trials': env.trials,
+                    'rewards': env.rewards_history,
+                    'trial_lengths': env.trial_lengths,
+                }
+                # For NeuroGym, distance metric is not applicable; use zeros
+                distances = np.zeros(n_completed) if n_completed > 0 else np.array([0])
 
             results[task_id]['returns'] = np.array(results[task_id]['returns'])
             results[task_id]['times'] = np.array(results[task_id]['times'])
@@ -836,18 +872,30 @@ class MultiTaskTrainer:
 
         self.model.train()
 
-        states = np.array([
-            env.trials,
-            env.bucket_positions,
-            env.bag_positions,
-            env.helicopter_positions,
-            env.hazard_triggers,
-        ])
+        if hasattr(env, 'bucket_positions'):
+            # PIE environment — structured state arrays
+            states = np.array([
+                env.trials,
+                env.bucket_positions,
+                env.bag_positions,
+                env.helicopter_positions,
+                env.hazard_triggers,
+            ])
+            distances = np.abs(states[3] - states[1])
+        else:
+            # NeurogymWrapper — trial-based tracking
+            n_completed = len(env.trials)
+            states = {
+                'trials': env.trials,
+                'rewards': env.rewards_history,
+                'trial_lengths': env.trial_lengths,
+            }
+            distances = np.zeros(n_completed) if n_completed > 0 else np.array([0])
 
         return {
             'returns': np.array(returns),
             'times': np.array(times),
-            'distances': np.abs(states[3] - states[1]),
+            'distances': distances,
             'states': states,
         }
 
@@ -974,7 +1022,7 @@ if NEUROGYM_AVAILABLE:
         },
         'single-context-dm': {
             'name': 'Single Context DM',
-            'obs_dim': 3,  # 1 + dim_ring
+            'obs_dim': 5,  # 1 + 2*dim_ring (default dim_ring=2): 1 fixation + 2 modalities x 2 ring units
             'action_dim': 3,  # 1 + dim_ring
             'env_class': SingleContextDecisionMakingWrapper,
             'env_kwargs': {'dt': 100, 'sigma': 1.0, 'dim_ring': 2, 'modality_context': 0},
