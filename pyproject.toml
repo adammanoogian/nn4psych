@@ -47,8 +47,11 @@ bayesian = [
     "numpyro>=0.13.0",
     "arviz>=0.17.0",
 ]
+neurogym = [
+    "neurogym @ git+https://github.com/neurogym/neurogym",
+]
 all = [
-    "nn4psych[dev,bayesian]",
+    "nn4psych[dev,bayesian,neurogym]",
 ]
 
 [project.urls]
