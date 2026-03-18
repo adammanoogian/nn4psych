@@ -100,15 +100,13 @@ def compute_normative_model(
 
     n_trials = len(pred_errors)
 
-    # Initialize arrays
-    learning_rate = jnp.zeros(n_trials)
-    omega = jnp.zeros(n_trials)
-    tau = jnp.zeros(n_trials + 1)
-    normative_update = jnp.zeros(n_trials)
-
     # Initial uncertainty
     tau_0 = 0.5 / UU
-    tau = tau.at[0].set(tau_0)
+
+    # Convert context string to JAX bool BEFORE step_fn so it is a
+    # compile-time constant captured as a closed-over tracer-compatible value.
+    # Using jnp.bool_ ensures JAX can trace through jax.lax.cond correctly.
+    is_changepoint = jnp.bool_(context == 'changepoint')
 
     def step_fn(carry, t):
         """Single trial update using JAX scan for efficiency."""
@@ -146,12 +144,15 @@ def compute_normative_model(
         # ===================================================================
         # EQUATIONS 2 & 3: Learning Rate (α_t)
         # ===================================================================
-        if context == 'changepoint':
-            # Eq. 2: α_t = Ω_t + τ_t - (Ω_t × τ_t)
-            lr_t = omega_t + tau_prev - (omega_t * tau_prev)
-        else:  # oddball
-            # Eq. 3: α_t = τ_t - (Ω_t × τ_t)
-            lr_t = tau_prev - (omega_t * tau_prev)
+        # Use jax.lax.cond for JAX-compatible conditional
+        # (Python if/else is evaluated at trace time, not runtime — the
+        #  oddball branch would be silently dead code inside jax.lax.scan)
+        lr_t = jax.lax.cond(
+            is_changepoint,
+            lambda _: omega_t + tau_prev - (omega_t * tau_prev),   # Eq. 2: changepoint
+            lambda _: tau_prev - (omega_t * tau_prev),              # Eq. 3: oddball
+            operand=None,
+        )
 
         # ===================================================================
         # EQUATION 1: Normative Update
