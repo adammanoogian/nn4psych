@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** RNN agent trainable on multiple cognitive tasks with analyzable hidden representations comparable to human data via Bayesian model fitting
-**Current focus:** Phase 2 — Bayesian Fitting and Behavior Analysis
+**Current focus:** Phase 2 — RNN Training Verification
 
 ## Current Position
 
