@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 1 of 5 (Infrastructure and Organization)
-Plan: 1 of 3 in current phase (01-02 complete)
+Plan: 1 of 3 in current phase (01-01 complete)
 Status: In progress
-Last activity: 2026-03-18 — Completed 01-02-PLAN.md (pyproject.toml + PyMC archive)
+Last activity: 2026-03-18 — Completed 01-01-PLAN.md (bayesian subpackage migration)
 
 Progress: [█░░░░░░░░░] ~7% (1/~13 total plans)
 
@@ -20,17 +20,17 @@ Progress: [█░░░░░░░░░] ~7% (1/~13 total plans)
 
 **Velocity:**
 - Total plans completed: 1
-- Average duration: 4 min
-- Total execution time: ~0.07 hours
+- Average duration: 9 min
+- Total execution time: ~0.15 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-infrastructure-and-organization | 1/3 | 4 min | 4 min |
+| 01-infrastructure-and-organization | 1/3 | 9 min | 9 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (4 min)
+- Last 5 plans: 01-01 (9 min)
 - Trend: —
 
 *Updated after each plan completion*
@@ -46,9 +46,10 @@ Recent decisions affecting current work:
 - [Init]: PyEM models to be archived, not maintained
 - [Init]: Latent circuit inference (Langdon & Engel 2025) chosen over standard dim reduction
 - [Init]: Context-DM task required — primary task for latent circuit analysis
-- [01-02]: Merged [jax] extra into [bayesian] — no standalone JAX use case in this project
-- [01-02]: Fitting scripts archived alongside model files so archive/bayesian_pymc/ is self-contained
-- [01-02]: bayesian/ directory cleanup deferred to plan 01-03 (after plan 01-01 completes)
+- [01-01]: compare_contexts() now accepts pre-computed negll floats — caller computes negll from own model
+- [01-01]: cross_validate_k_fold() removed — was PyEM-only; NumPyro CV deferred to Phase 4
+- [01-01]: batch_fit_bayesian.py not rewritten; TODO comment added; Phase 4 work
+- [01-01]: Original bayesian/ root NOT deleted — Plan 01-02 handles archiving
 
 ### Pending Todos
 
@@ -63,6 +64,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T20:04:09Z
-Stopped at: Completed 01-02-PLAN.md — pyproject.toml updated, PyMC/PyEM archived
+Last session: 2026-03-18T20:09:50Z
+Stopped at: Completed 01-01-PLAN.md — src/nn4psych/bayesian/ created, scripts updated
 Resume file: None
