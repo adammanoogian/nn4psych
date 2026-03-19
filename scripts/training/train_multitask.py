@@ -382,8 +382,11 @@ class MultiTaskTrainer:
 
         hx = hx.detach()
         total_return = 0
+        steps = 0
+        max_steps = self.config.max_time * 2  # safety cap
 
-        while not done:
+        while not done and steps < max_steps:
+            steps += 1
             # Random memory reset
             if np.random.random() < self.config.preset_memory:
                 hx = (
@@ -852,8 +855,10 @@ class MultiTaskTrainer:
                 next_state = next_state.unsqueeze(0).unsqueeze(0)
 
                 total_return = 0
+                eval_steps = 0
 
-                while not done:
+                while not done and eval_steps < self.config.max_time * 2:
+                    eval_steps += 1
                     actor_logits, _, hx = self.model(next_state, hx, task_id)
                     probs = Categorical(logits=actor_logits)
                     action = probs.sample()

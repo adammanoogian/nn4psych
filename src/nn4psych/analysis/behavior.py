@@ -21,6 +21,7 @@ def extract_behavior(
     reset_memory: bool = True,
     preset_memory: float = 0.0,
     device: Optional[torch.device] = None,
+    max_steps_per_trial: int = 1000,
 ) -> Tuple:
     """
     Extract behavioral data by running model through task.
@@ -72,7 +73,8 @@ def extract_behavior(
                 norm_obs = env.normalize_states(obs)
                 state = np.concatenate([norm_obs, env.context, [reward]])
 
-                while not done:
+                steps = 0
+                while not done and steps < max_steps_per_trial:
                     # Get model action
                     x = torch.tensor(state, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
                     actor_logits, _, h = model(x, h)
@@ -83,6 +85,7 @@ def extract_behavior(
                     obs, reward, done = env.step(action)
                     norm_obs = env.normalize_states(obs)
                     state = np.concatenate([norm_obs, env.context, [reward]])
+                    steps += 1
 
             # Store epoch data
             states = env.get_state_history()
@@ -99,6 +102,7 @@ def extract_behavior_with_hidden(
     reset_memory: bool = True,
     preset_memory: float = 0.0,
     device: Optional[torch.device] = None,
+    max_steps_per_trial: int = 1000,
 ) -> dict:
     """
     Extract behavioral data AND hidden states for downstream analysis.
@@ -172,7 +176,8 @@ def extract_behavior_with_hidden(
                 trial_actions = []
                 trial_rewards = []
 
-                while not done:
+                steps = 0
+                while not done and steps < max_steps_per_trial:
                     # Forward pass
                     x = torch.tensor(state, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
                     actor_logits, _, h = model(x, h)
@@ -191,6 +196,7 @@ def extract_behavior_with_hidden(
 
                     trial_actions.append(action)
                     trial_rewards.append(reward)
+                    steps += 1
 
                 # Store trial data
                 if len(trial_hidden) > 0:
