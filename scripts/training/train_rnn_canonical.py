@@ -192,6 +192,10 @@ def get_lrs_v3(states, threshold=20):
 def plot_lrs(states, scale=0.1):
     epochs = states.shape[0]
     pess, lrss, area = [],[], []
+    # Guard: no epochs to plot (e.g. small epoch count + large gap window)
+    if epochs == 0:
+        empty = np.array([])
+        return [empty, empty], [empty, empty], [0.0, 0.0]
     for c in range(2):
         pes,lrs = [],[]
         for e in range(epochs):
@@ -199,6 +203,15 @@ def plot_lrs(states, scale=0.1):
 
             pes.append(pe)
             lrs.append(lr)
+
+        # Guard: filter out empty arrays before concatenating
+        pes = [p for p in pes if len(p) > 0]
+        lrs = [l for l in lrs if len(l) > 0]
+        if len(pes) == 0:
+            pess.append(np.array([]))
+            lrss.append(np.array([]))
+            area.append(0.0)
+            continue
 
         pes = np.concatenate(pes)
         lrs = np.concatenate(lrs)
@@ -397,10 +410,12 @@ def main():
     for i,id in enumerate(idxs):
 
         plt.subplot(5,2,i+5)
-        pess, lrss, area = plot_lrs(all_states[id-gap:id])
+        pess, lrss, area = plot_lrs(all_states[max(0, id-gap):id+1])
 
         for c in range(2):
-            window_size = int(len(lrss[c])*0.2)
+            if len(lrss[c]) == 0:
+                continue
+            window_size = max(1, int(len(lrss[c])*0.2))
             smoothed_learning_rate = uniform_filter1d(lrss[c], size=window_size)
             plt.plot(pess[c], smoothed_learning_rate, color=colors[c], linewidth=2,label=labels[c])
 
