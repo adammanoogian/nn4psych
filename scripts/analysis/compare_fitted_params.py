@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 import scipy.io as sio
 import scipy.stats as stats
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -258,9 +260,8 @@ def plot_parameter_comparison(merged, context='changepoint', save_path=None):
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"\nSaved comparison plot: {save_path}")
-        plt.close()
-    else:
-        plt.show()
+
+    plt.close()
 
 
 def plot_patient_control_comparison(our_df, ref_df):

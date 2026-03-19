@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for headless/server execution
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -212,6 +214,11 @@ def plot_lrs(states, scale=0.1):
 
 
 def main():
+    from nn4psych.training.resources import configure_cpu_threads
+    n_threads = configure_cpu_threads()
+    if n_threads:
+        print(f"CPU threads limited to {n_threads}")
+
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--epochs', type=int, required=False, help='epochs', default=10)
@@ -322,7 +329,7 @@ def main():
                 rollout_buffer_size=rollout_size, hidden_dim=hidden_dim, device=device,
                 reset_memory=reset_memory, bias=bias
             )
-            totloss = np.tile(np.mean(totloss), 200)
+            totloss = np.tile(np.mean(totloss) if len(totloss) > 0 else 0.0, n_trials)
 
             # save performance
             all_states[epoch, tt] = np.array([env.trials, env.bucket_positions, env.bag_positions, env.helicopter_positions, env.hazard_triggers])
@@ -414,6 +421,7 @@ def main():
     if len(store_params)>0:
         Path('figures/model_performance/').mkdir(parents=True, exist_ok=True)
         plt.savefig(f'figures/model_performance/{df_area}_{exptname}.png')
+        plt.close()
         print('Fig saved')
         model_path = f'./model_params/{df_area}_{exptname}.pth'
         Path(model_path).parent.mkdir(parents=True, exist_ok=True)

@@ -14,6 +14,8 @@ Refactored to use nn4psych package structure.
 import sys
 from pathlib import Path
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.linalg import null_space
 from sklearn.decomposition import PCA
@@ -274,8 +276,6 @@ class FixedPointAnalyzer:
         if save_path:
             plt.savefig(save_path, dpi=150, bbox_inches='tight')
             print(f"Saved figure: {save_path}")
-        else:
-            plt.show()
 
         plt.close()
 

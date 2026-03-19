@@ -5,6 +5,8 @@
 
 import scipy.io as sio
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
@@ -94,7 +96,7 @@ def plot_fig6a_no_error(diff_score):
     plt.ylabel('Learning Rate')
     plt.legend()
     plt.savefig('figures/behavioral_summary/nassarfig6a.png')
-    plt.show()
+    plt.close()
 
 
 def plot_fig6b(diff_score):
@@ -111,7 +113,7 @@ def plot_fig6b(diff_score):
     plt.ylabel('Learning Rate')
     plt.legend()
     plt.savefig('figures/behavioral_summary/nassarfig6b.png')
-    plt.show()
+    plt.close()
 
 def plot_bar_graph_area_between_curves():
     plt.figure(figsize=(10, 6))
@@ -119,7 +121,7 @@ def plot_bar_graph_area_between_curves():
     plt.ylabel('Area between curves')
     plt.title('Area between CP and OB learning rate curves')
     plt.savefig('figures/model_performance/area_between_curves.png')
-    plt.show()
+    plt.close()
 
 
 

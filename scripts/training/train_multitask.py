@@ -38,6 +38,8 @@ from typing import Dict, List, Optional, Tuple, Any, Union
 from copy import deepcopy
 from enum import Enum
 
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for headless/server execution
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -1126,6 +1128,11 @@ def list_available_tasks() -> List[str]:
 
 
 def main():
+    from nn4psych.training.resources import configure_cpu_threads
+    n_threads = configure_cpu_threads()
+    if n_threads:
+        print(f"CPU threads limited to {n_threads}")
+
     parser = argparse.ArgumentParser(
         description='Multi-Task RNN Training',
         formatter_class=argparse.RawDescriptionHelpFormatter,

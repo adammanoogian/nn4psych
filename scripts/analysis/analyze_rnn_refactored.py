@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 import torch
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.stats import linregress
 from scipy.ndimage import uniform_filter1d

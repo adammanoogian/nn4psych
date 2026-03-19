@@ -21,6 +21,8 @@ from pathlib import Path
 import argparse
 import scipy.io as sio
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.stats import ttest_ind
 import json
@@ -332,6 +334,7 @@ def plot_figure_6a(lr_data: dict, save_path: Path = None):
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Saved Figure 6a: {save_path}")
 
+    plt.close()
     return fig
 
 
@@ -375,6 +378,7 @@ def plot_figure_6b(lr_data: dict, save_path: Path = None):
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Saved Figure 6b: {save_path}")
 
+    plt.close()
     return fig
 
 
@@ -419,6 +423,7 @@ def plot_area_comparison(area_subjects: dict, area_model: dict, save_path: Path 
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Saved area comparison: {save_path}")
 
+    plt.close()
     return fig
 
 

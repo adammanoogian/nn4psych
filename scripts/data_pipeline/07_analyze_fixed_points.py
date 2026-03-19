@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import argparse
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.linalg import null_space
 from sklearn.decomposition import PCA
@@ -287,10 +289,8 @@ class FixedPointAnalyzer:
             save_path.parent.mkdir(parents=True, exist_ok=True)
             plt.savefig(save_path, dpi=150, bbox_inches='tight')
             plt.savefig(save_path.with_suffix('.svg'), bbox_inches='tight')
-            plt.close()
-        else:
-            plt.show()
-            plt.close()
+
+        plt.close()
 
 
 def find_best_model(model_dir):

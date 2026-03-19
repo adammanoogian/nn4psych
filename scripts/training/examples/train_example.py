@@ -6,8 +6,11 @@ This script demonstrates how to use the new package structure for training
 RNN actor-critic models on predictive inference tasks.
 """
 
-import argparse
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+
+import argparse
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -41,6 +44,10 @@ def train(config: ExperimentConfig) -> None:
     """
     Train the model using configuration.
 
+    Uses rollout-buffer updates to keep memory bounded: gradient updates
+    happen every ``rollout_size`` steps instead of accumulating the entire
+    epoch in memory.
+
     Parameters
     ----------
     config : ExperimentConfig
@@ -60,6 +67,8 @@ def train(config: ExperimentConfig) -> None:
 
     print(f"Model: {model}")
     print(f"Total parameters: {sum(p.numel() for p in model.parameters())}")
+
+    rollout_size = config.training.rollout_size
 
     # Create environments for both conditions
     env_cp = PIE_CP_OB_v2.from_config(config.task)
@@ -91,15 +100,17 @@ def train(config: ExperimentConfig) -> None:
             # Reset environment
             env._reset_state()
 
-            # Collect rollout data
+            # Rollout buffer — cleared after each gradient update
             log_probs = []
             values = []
             rewards = []
+            step_count = 0
+            total_reward = 0.0
 
             for trial in range(config.task.total_trials):
                 obs, done = env.reset()
                 norm_obs = env.normalize_states(obs)
-                state = np.concatenate([norm_obs, env.context])
+                state = np.concatenate([norm_obs, env.context, np.array([0.0])])
 
                 while not done:
                     # Get action from model
@@ -118,37 +129,34 @@ def train(config: ExperimentConfig) -> None:
                     # Take action
                     obs, reward, done = env.step(action.item())
                     rewards.append(reward)
+                    total_reward += reward
+                    step_count += 1
 
                     # Update state
                     norm_obs = env.normalize_states(obs)
-                    state = np.concatenate([norm_obs, env.context])
+                    state = np.concatenate([norm_obs, env.context, np.array([reward])])
 
-            # Compute returns and advantages
-            returns = []
-            R = 0
-            for r in reversed(rewards):
-                R = r + config.training.gamma * R
-                returns.insert(0, R)
+                    # Gradient update when rollout buffer is full
+                    if step_count >= rollout_size:
+                        _update_from_rollout(
+                            log_probs, values, rewards,
+                            config.training.gamma, optimizer, device,
+                        )
+                        # Detach hidden state to cut the computation graph
+                        h = h.detach()
+                        log_probs = []
+                        values = []
+                        rewards = []
+                        step_count = 0
 
-            returns = torch.tensor(returns, dtype=torch.float32).to(device)
-            log_probs = torch.stack(log_probs).squeeze()
-            values = torch.stack(values).squeeze()
+            # Flush any remaining steps in the buffer
+            if len(rewards) > 0:
+                _update_from_rollout(
+                    log_probs, values, rewards,
+                    config.training.gamma, optimizer, device,
+                )
 
-            # Normalize returns
-            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
-
-            # Compute loss
-            advantage = returns - values.detach()
-            actor_loss = -(log_probs * advantage).mean()
-            critic_loss = F.mse_loss(values, returns)
-            loss = actor_loss + 0.5 * critic_loss
-
-            # Update model
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            epoch_rewards.append(np.sum(rewards))
+            epoch_rewards.append(total_reward)
 
         # Track progress
         mean_reward = np.mean(epoch_rewards)
@@ -180,8 +188,41 @@ def train(config: ExperimentConfig) -> None:
     print(f"Model saved to: {final_model_path}")
 
 
+def _update_from_rollout(log_probs, values, rewards, gamma, optimizer, device):
+    """Compute returns, advantages, and perform a single gradient step."""
+    returns = []
+    R = 0
+    for r in reversed(rewards):
+        R = r + gamma * R
+        returns.insert(0, R)
+
+    returns = torch.tensor(returns, dtype=torch.float32).to(device)
+    log_probs_t = torch.stack(log_probs).squeeze()
+    values_t = torch.stack(values).squeeze()
+
+    # Normalize returns
+    if len(returns) > 1:
+        returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+
+    # Compute loss
+    advantage = returns - values_t.detach()
+    actor_loss = -(log_probs_t * advantage).mean()
+    critic_loss = F.mse_loss(values_t, returns)
+    loss = actor_loss + 0.5 * critic_loss
+
+    # Update model
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+
 def main():
     """Main entry point."""
+    from nn4psych.training.resources import configure_cpu_threads
+    n_threads = configure_cpu_threads()
+    if n_threads:
+        print(f"CPU threads limited to {n_threads}")
+
     args = parse_args()
 
     # Load config
