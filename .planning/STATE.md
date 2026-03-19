@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 2 of 5 (RNN Training Verification) — In progress
-Plan: 1 of 3 in phase 02 (02-01 complete)
-Status: In progress — Phase 2 Plan 1 complete
-Last activity: 2026-03-18 — Completed 02-01-PLAN.md (training script bug fixes, obs_dim correction, neurogym dep)
+Plan: 2 of 3 in phase 02 (02-01, 02-02 complete)
+Status: In progress — Phase 2 Plan 2 complete
+Last activity: 2026-03-19 — Completed 02-02-PLAN.md (extract_behavior_with_hidden, end-to-end training verification)
 
-Progress: [████░░░░░░] ~31% (4/~13 total plans)
+Progress: [█████░░░░░] ~38% (5/~13 total plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: ~8 min
-- Total execution time: ~0.4 hours
+- Total plans completed: 5
+- Average duration: ~10 min
+- Total execution time: ~0.65 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-infrastructure-and-organization | 3/3 COMPLETE | ~24 min | ~8 min |
-| 02-rnn-training-verification | 1/3 | ~12 min | ~12 min |
+| 02-rnn-training-verification | 2/3 | ~27 min | ~13 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min), 02-01 (12 min)
-- Trend: ~7-12 min per plan
+- Last 5 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min), 02-01 (12 min), 02-02 (15 min)
+- Trend: ~7-15 min per plan
 
 *Updated after each plan completion*
 
@@ -58,6 +58,9 @@ Recent decisions affecting current work:
 - [02-01]: evaluate() method also needs hasattr guard — 4 sites total not 3; auto-fixed as Rule 1 bug
 - [02-01]: obs_dim for ContextDecisionMaking is 1 + 2*dim_ring (not 1 + dim_ring); fixation + 2 modalities x ring_units
 - [02-01]: neurogym installed in actinf-py-scripts conda env (v2.2.0); is the project's working Python environment
+- [02-02]: extract_behavior_with_hidden uses argmax (deterministic) not sampling — consistent with extract_behavior(); reproducible for analysis
+- [02-02]: NaN padding for hidden states (not zeros) so downstream masking can identify real zero activations vs padded timesteps
+- [02-02]: DawTwoStep NeurogymWrapper produces max_T~1000 (long trials at dt=100ms) — may need trial length filtering before latent circuit fitting in Phase 3
 
 ### Pending Todos
 
@@ -72,6 +75,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-18T21:15:00Z
-Stopped at: Completed 02-01-PLAN.md — Phase 2, Plan 1 complete
+Last session: 2026-03-19T12:29:00Z
+Stopped at: Completed 02-02-PLAN.md — Phase 2, Plan 2 complete
 Resume file: None
