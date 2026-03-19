@@ -62,12 +62,12 @@ Plans:
   2. The selected solution's QᵀW_recQ correlation with inferred w_rec is >= 0.85 (invariant subspace condition)
   3. Projecting RNN responses onto latent axes reproduces the trial-averaged dynamics (activity-level validation passes)
   4. Perturbing w_rec in latent space and mapping back to RNN weights produces a measurable predicted behavioral change
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 03-01: Implement src/nn4psych/analysis/circuit_inference.py with Q/w_rec/w_in/w_out optimization and 100-init ensemble loop
-- [ ] 03-02: Implement invariant subspace validation (QᵀW_recQ correlation check) and activity-level/connectivity-level validation
-- [ ] 03-03: Implement perturbation analysis (latent connectivity perturbation → RNN weight perturbation → behavioral prediction); wire scripts/data_pipeline/08_infer_latent_circuits.py
+- [ ] 03-01-PLAN.md — Vendor LatentNet, create collect_circuit_data(), train dual-modality model, collect u/z/y tensors (Wave 1)
+- [ ] 03-02-PLAN.md — Run 100-init LatentNet ensemble fitting, invariant subspace + activity-level validation, save validation_results.json (Wave 2)
+- [ ] 03-03-PLAN.md — Implement perturbation analysis (Q-mapped rank-one weight perturbation), wire 08_infer_latent_circuits.py pipeline (Wave 3)
 
 ### Phase 4: Bayesian Model Fitting
 **Goal**: The Nassar 2021 reduced Bayesian observer model is implemented in NumPyro/JAX, validated on synthetic data, fit per-subject to human schizophrenia data, and fit to RNN behavioral outputs — all with MCMC convergence diagnostics enforced.
