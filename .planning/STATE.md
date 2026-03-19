@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** RNN agent trainable on multiple cognitive tasks with analyzable hidden representations comparable to human data via Bayesian model fitting
-**Current focus:** Phase 3 — Latent Circuit Inference (Phase 2 complete)
+**Current focus:** Phase 3 — Latent Circuit Inference (03-01 complete)
 
 ## Current Position
 
-Phase: 2 of 5 (RNN Training Verification) — COMPLETE
-Plan: 3 of 3 in phase 02 (02-01, 02-02, 02-03 all complete)
-Status: Phase 2 complete — ready for Phase 3
-Last activity: 2026-03-19 — Completed 02-03-PLAN.md (context-DM training + hidden state extraction)
+Phase: 3 of 5 (Latent Circuit Inference) — In progress
+Plan: 1 of ~3 in phase 03 complete (03-01 done)
+Status: In progress — Phase 3, Plan 1 complete
+Last activity: 2026-03-20 — Completed 03-01-PLAN.md (vendor LatentNet, collect circuit data)
 
-Progress: [██████░░░░] ~46% (6/~13 total plans)
+Progress: [███████░░░] ~54% (7/~13 total plans)
 
 ## Performance Metrics
 
@@ -29,10 +29,11 @@ Progress: [██████░░░░] ~46% (6/~13 total plans)
 |-------|-------|-------|----------|
 | 01-infrastructure-and-organization | 3/3 COMPLETE | ~24 min | ~8 min |
 | 02-rnn-training-verification | 3/3 COMPLETE | ~42 min | ~14 min |
+| 03-latent-circuit-inference | 1/~3 | ~75 min | ~75 min |
 
 **Recent Trend:**
-- Last 6 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min), 02-01 (12 min), 02-02 (15 min), 02-03 (15 min)
-- Trend: ~7-15 min per plan
+- Last 7 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min), 02-01 (12 min), 02-02 (15 min), 02-03 (15 min), 03-01 (75 min)
+- Trend: ~7-75 min per plan (03-01 longer due to training runs)
 
 *Updated after each plan completion*
 
@@ -65,6 +66,12 @@ Recent decisions affecting current work:
 - [02-03]: Detach critic buffer values via .item() before GAE advantage computation — prevents RuntimeError: backward through graph a second time
 - [02-03]: Detach hx after optimizer.step() when rollout buffer is smaller than trial length — required for RNNs with mid-trial updates
 - [02-03]: Cast numpy int64 shape values to int() before json.dump() — numpy integers are not JSON serializable
+- [03-01]: Vendor latent_net.py rather than pip-install from local path (no pyproject.toml in engellab/latentcircuit)
+- [03-01]: z = raw actor logits (not softmax) as LatentNet target output — output_size=3
+- [03-01]: ContextDecisionMaking accuracy must be measured by cumulative trial reward, NOT last action (done never fires)
+- [03-01]: T=500 in circuit_data.npz — trials run to max_steps with all 500 timesteps captured (fixation+stim+delay+decision within 500 steps)
+- [03-01]: Dual-modality training requires 50+ epochs (not the 10x20 smoke constraint) to achieve >55% accuracy
+- [03-01]: n_trials=40 (20 per context) in circuit_data.npz per CRITICAL MEMORY CONSTRAINTS — less than batch_size=128 means 1 partial batch per fitting epoch
 
 ### Pending Todos
 
@@ -74,12 +81,14 @@ None.
 
 - [RESOLVED 01-03]: JAX tracing bug in numpyro_models.py — FIXED with jax.lax.cond
 - [RESOLVED 01-03]: extract_behavior private env API — FIXED with reset_epoch() public method
-- [Phase 3 planning]: Latent circuit rank selection for context-DM task needs verification against engellab/latentcircuit repo (research flag)
-- [Phase 3 planning]: Context-DM trials all run to max_steps (1000 timesteps) — latent circuit fitting may need to use shorter max_T or filter trials; check engellab/latentcircuit expected input format
+- [RESOLVED 03-01]: Latent circuit rank selection — start with n=8 (Tutorial default), validate with invariant subspace correlation check
+- [RESOLVED 03-01]: Context-DM trial length — T=500 (runs to max_steps); LatentNet handles arbitrary T
+- [Phase 03-02 concern]: n_trials=40 < batch_size=128 in LatentNet.fit() — only partial batches per epoch. May need to collect more trials (e.g., 300 per context) for reliable fitting. Memory should allow it sequentially.
+- [Phase 03-02 concern]: T=500 includes interleaved intertrial timesteps (only ~12-41 steps have actual task structure). Long T increases fitting time but may not degrade quality if LatentNet can learn to ignore blank periods.
 - [Phase 4 planning]: Nassar 2021 .mat file nested indexing not directly inspected — must run describe_mat_structure() before writing data loading code (research flag)
 
 ## Session Continuity
 
-Last session: 2026-03-19T12:38:00Z
-Stopped at: Completed 02-03-PLAN.md — Phase 2 complete (all 3 plans done)
+Last session: 2026-03-20T00:15:00Z
+Stopped at: Completed 03-01-PLAN.md — Phase 3 Plan 1 done (LatentNet vendor + circuit data collection)
 Resume file: None
