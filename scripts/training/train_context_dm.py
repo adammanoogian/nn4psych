@@ -121,39 +121,39 @@ def train_context_dm(args):
                 # Update when buffer is full
                 if len(buffer_rewards) >= args.rollout_size:
                     # Compute advantages (simple TD)
+                    # Use detached float values to avoid double-backward through critic graph
+                    values_detached = [v.item() for v in buffer_values]
                     advantages = []
-                    next_value = 0
-                    values = buffer_values
+                    next_value = 0.0
                     for t in reversed(range(len(buffer_rewards))):
                         if t == len(buffer_rewards) - 1:
-                            next_non_terminal = 1.0 - buffer_dones[t]
-                            next_value = values[t]
+                            next_non_terminal = 1.0 - float(buffer_dones[t])
+                            next_value = values_detached[t]
                         else:
-                            next_non_terminal = 1.0 - buffer_dones[t + 1]
-                            next_value = values[t + 1]
+                            next_non_terminal = 1.0 - float(buffer_dones[t + 1])
+                            next_value = values_detached[t + 1]
                         delta = (
                             buffer_rewards[t]
                             + args.gamma * next_value * next_non_terminal
-                            - values[t]
+                            - values_detached[t]
                         )
                         advantages.insert(0, delta)
 
-                    advantages_t = torch.stack(
-                        [a.detach() if isinstance(a, torch.Tensor) else torch.tensor(a, dtype=torch.float32) for a in advantages]
-                    ).to(device)
+                    advantages_t = torch.tensor(advantages, dtype=torch.float32).to(device)
                     returns = advantages_t + torch.tensor(
-                        [v.item() for v in values], dtype=torch.float32
+                        values_detached, dtype=torch.float32
                     ).to(device)
                     log_probs_t = torch.stack(buffer_log_probs)
                     values_t = torch.stack(buffer_values).squeeze()
 
-                    actor_loss = -(log_probs_t * advantages_t.detach()).mean()
+                    actor_loss = -(log_probs_t * advantages_t).mean()
                     critic_loss = ((returns.detach() - values_t) ** 2).mean()
                     loss = actor_loss + 0.5 * critic_loss
 
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
+                    hx = hx.detach()  # Detach hidden state after update to free graph
 
                     buffer_states.clear()
                     buffer_actions.clear()
@@ -212,16 +212,16 @@ def extract_and_save(model, args):
     model_path = out_dir / 'model_context_dm.pth'
     torch.save(model.state_dict(), model_path)
 
-    # Save metadata
+    # Save metadata (convert numpy ints to Python ints for JSON serialization)
     metadata = {
         'task': 'ContextDecisionMaking-v0',
-        'modality_context': args.modality_context,
-        'hidden_dim': args.hidden_dim,
-        'obs_dim': env.obs_dim,
-        'action_dim': env.action_dim,
-        'input_dim': env.obs_dim + 1 + 1,
-        'n_trials': result['hidden'].shape[0],
-        'max_T': result['hidden'].shape[1],
+        'modality_context': int(args.modality_context),
+        'hidden_dim': int(args.hidden_dim),
+        'obs_dim': int(env.obs_dim),
+        'action_dim': int(env.action_dim),
+        'input_dim': int(env.obs_dim + 1 + 1),
+        'n_trials': int(result['hidden'].shape[0]),
+        'max_T': int(result['hidden'].shape[1]),
         'extract_epochs': args.extract_epochs,
         'extract_trials': args.extract_trials,
         'training_epochs': args.epochs,
