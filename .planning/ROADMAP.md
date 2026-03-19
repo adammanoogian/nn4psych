@@ -13,7 +13,7 @@ nn4psych trains RNN-RL agents on cognitive tasks, extracts circuit-level mechani
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Infrastructure and Organization** - Align project structure, fix blocking bugs, update dependencies
-- [ ] **Phase 2: RNN Training Verification** - Verify end-to-end training on all cognitive tasks including context-DM
+- [x] **Phase 2: RNN Training Verification** - Verify end-to-end training on all cognitive tasks including context-DM
 - [ ] **Phase 3: Latent Circuit Inference** - Implement and validate latent circuit fitting with 100-init ensemble
 - [ ] **Phase 4: Bayesian Model Fitting** - Fit Nassar 2021 model to human and RNN behavioral data with full diagnostics
 - [ ] **Phase 5: Human-vs-RNN Comparison** - Extract learning rates, run group-level comparison, produce final outputs
@@ -108,7 +108,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure and Organization | 3/3 | ✓ Complete | 2026-03-18 |
-| 2. RNN Training Verification | 0/3 | Not started | - |
+| 2. RNN Training Verification | 3/3 | ✓ Complete | 2026-03-19 |
 | 3. Latent Circuit Inference | 0/3 | Not started | - |
 | 4. Bayesian Model Fitting | 0/4 | Not started | - |
 | 5. Human-vs-RNN Comparison | 0/2 | Not started | - |

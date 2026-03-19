@@ -7,10 +7,10 @@
 
 ### RNN Training & Verification
 
-- [ ] **TRAIN-01**: RNN ActorCritic trains end-to-end on PIE_CP_OB_v2 environment (change-point and oddball conditions)
-- [ ] **TRAIN-02**: RNN ActorCritic trains on NeuroGym tasks (DawTwoStep, SingleContextDecisionMaking)
-- [ ] **TRAIN-03**: ContextDecisionMaking-v0 task integrated from neurogym with gym-compatible interface
-- [ ] **TRAIN-04**: RNN ActorCritic trains on context-dependent decision-making task
+- [x] **TRAIN-01**: RNN ActorCritic trains end-to-end on PIE_CP_OB_v2 environment (change-point and oddball conditions)
+- [x] **TRAIN-02**: RNN ActorCritic trains on NeuroGym tasks (DawTwoStep, SingleContextDecisionMaking)
+- [x] **TRAIN-03**: ContextDecisionMaking-v0 task integrated from neurogym with gym-compatible interface
+- [x] **TRAIN-04**: RNN ActorCritic trains on context-dependent decision-making task
 
 ### Latent Circuit Inference
 
@@ -79,10 +79,10 @@
 | ORG-02 | Phase 1 | Complete |
 | ORG-03 | Phase 1 | Complete |
 | ORG-04 | Phase 1 | Complete |
-| TRAIN-01 | Phase 2 | Pending |
-| TRAIN-02 | Phase 2 | Pending |
-| TRAIN-03 | Phase 2 | Pending |
-| TRAIN-04 | Phase 2 | Pending |
+| TRAIN-01 | Phase 2 | Complete |
+| TRAIN-02 | Phase 2 | Complete |
+| TRAIN-03 | Phase 2 | Complete |
+| TRAIN-04 | Phase 2 | Complete |
 | CIRC-01 | Phase 3 | Pending |
 | CIRC-02 | Phase 3 | Pending |
 | CIRC-03 | Phase 3 | Pending |
