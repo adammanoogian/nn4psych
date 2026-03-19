@@ -16,6 +16,8 @@ Reference:
   Langdon & Engel (2025). Latent circuit inference from heterogeneous neural data.
 """
 
+import copy
+import gc
 import json
 import warnings
 from pathlib import Path
@@ -25,6 +27,7 @@ import numpy as np
 import torch
 
 from nn4psych.models.actor_critic import ActorCritic
+from nn4psych.analysis.latent_net import LatentNet
 from envs.neurogym_wrapper import SingleContextDecisionMakingWrapper
 
 
@@ -268,3 +271,321 @@ def save_circuit_data(data: dict, output_dir: str) -> None:
     print(f"Saved circuit data to {out_dir}/:")
     print(f"  circuit_data.npz: u={data['u'].shape}, z={data['z'].shape}, y={data['y'].shape}")
     print(f"  circuit_data_metadata.json")
+
+
+def fit_latent_circuit_ensemble(
+    u: np.ndarray,
+    z: np.ndarray,
+    y: np.ndarray,
+    n_inits: int = 100,
+    n_latent: int = 8,
+    epochs: int = 500,
+    lr: float = 0.02,
+    l_y: float = 1.0,
+    weight_decay: float = 0.001,
+    sigma_rec: float = 0.15,
+    device: str = 'cpu',
+    verbose: bool = True,
+) -> dict:
+    """
+    Fit an ensemble of LatentNet instances and return the best by lowest nmse_y.
+
+    Runs ``n_inits`` independent random initializations of LatentNet, each
+    fitted for ``epochs`` epochs on the provided circuit data. The initialization
+    with the lowest normalized MSE between projected latent states and full RNN
+    hidden states (``nmse_y``) is selected as the best solution.
+
+    Parameters
+    ----------
+    u : np.ndarray
+        Input stimulus, shape (n_trials, T, input_size=7).
+    z : np.ndarray
+        Actor logits (target output), shape (n_trials, T, output_size=3).
+    y : np.ndarray
+        RNN hidden states, shape (n_trials, T, N=64).
+    n_inits : int, optional
+        Number of random initializations to run. Default is 100.
+    n_latent : int, optional
+        Latent circuit rank (n in LatentNet). Must be >= max(input_size, output_size).
+        Default is 8.
+    epochs : int, optional
+        Training epochs per initialization. Default is 500.
+    lr : float, optional
+        Adam learning rate. Default is 0.02.
+    l_y : float, optional
+        Weight on hidden-state reconstruction term. Default is 1.0.
+    weight_decay : float, optional
+        Adam weight decay. Default is 0.001.
+    sigma_rec : float, optional
+        Recurrent noise level during LatentNet forward pass. Default is 0.15.
+    device : str, optional
+        Device for computation. Default is 'cpu'.
+    verbose : bool, optional
+        Print per-init progress. Default is True.
+
+    Returns
+    -------
+    dict with keys:
+        'best_model'    : LatentNet with best weights loaded
+        'best_nmse_y'   : float
+        'best_mse_z'    : float
+        'best_init_idx' : int (0-indexed)
+        'all_nmse_y'    : list of floats
+        'all_mse_z'     : list of floats
+        'n_inits'       : int
+        'n_latent'      : int
+    """
+    # Convert numpy arrays to float32 tensors (detached, no grad)
+    u_tensor = torch.tensor(u, dtype=torch.float32).detach()
+    z_tensor = torch.tensor(z, dtype=torch.float32).detach()
+    y_tensor = torch.tensor(y, dtype=torch.float32).detach()
+
+    n_trials = u.shape[0]
+    T = u.shape[1]
+    input_size = u.shape[2]
+    output_size = z.shape[2]
+    N = y.shape[2]
+
+    all_nmse_y = []
+    all_mse_z = []
+    all_state_dicts = []
+
+    for i in range(n_inits):
+        # Create fresh LatentNet for this initialization
+        latent_net = LatentNet(
+            n=n_latent,
+            N=N,
+            input_size=input_size,
+            n_trials=n_trials,
+            sigma_rec=sigma_rec,
+            output_size=output_size,
+            device=device,
+        )
+
+        # Fit (suppress LatentNet's internal epoch prints during ensemble)
+        latent_net.fit(
+            u_tensor, z_tensor, y_tensor,
+            epochs=epochs,
+            lr=lr,
+            l_y=l_y,
+            weight_decay=weight_decay,
+            verbose=False,
+        )
+
+        # Compute final metrics
+        with torch.no_grad():
+            x = latent_net(u_tensor)
+            nmse_y = latent_net.nmse_y(y_tensor, x).item()
+            mse_z = latent_net.mse_z(x, z_tensor).item()
+
+        all_nmse_y.append(nmse_y)
+        all_mse_z.append(mse_z)
+        all_state_dicts.append(copy.deepcopy(latent_net.state_dict()))
+
+        if verbose:
+            print(f"Init {i + 1}/{n_inits}: nmse_y={nmse_y:.4f}, mse_z={mse_z:.4f}")
+
+        # Free memory between inits
+        del latent_net
+        torch.cuda.empty_cache()
+        gc.collect()
+
+    # Select best initialization by lowest nmse_y
+    best_init_idx = int(np.argmin(all_nmse_y))
+    best_nmse_y = all_nmse_y[best_init_idx]
+    best_mse_z = all_mse_z[best_init_idx]
+
+    if verbose:
+        print(f"\nBest init: {best_init_idx} (nmse_y={best_nmse_y:.4f}, mse_z={best_mse_z:.4f})")
+
+    # Reload best state_dict into a fresh LatentNet
+    best_model = LatentNet(
+        n=n_latent,
+        N=N,
+        input_size=input_size,
+        n_trials=n_trials,
+        sigma_rec=sigma_rec,
+        output_size=output_size,
+        device=device,
+    )
+    best_model.load_state_dict(all_state_dicts[best_init_idx])
+    best_model.eval()
+
+    return {
+        'best_model': best_model,
+        'best_nmse_y': best_nmse_y,
+        'best_mse_z': best_mse_z,
+        'best_init_idx': best_init_idx,
+        'all_nmse_y': all_nmse_y,
+        'all_mse_z': all_mse_z,
+        'n_inits': n_inits,
+        'n_latent': n_latent,
+    }
+
+
+def validate_latent_circuit(
+    latent_net: LatentNet,
+    u: np.ndarray,
+    z: np.ndarray,
+    y: np.ndarray,
+    W_rec: np.ndarray,
+    W_in: np.ndarray = None,
+    labels: dict = None,
+    invariant_threshold: float = 0.85,
+    device: str = 'cpu',
+) -> dict:
+    """
+    Validate a fitted LatentNet against the source RNN and task data.
+
+    Computes four validation metrics:
+    1. Invariant subspace correlation: corr(q @ W_rec @ q.T, w_rec)  [connectivity level]
+    2. Per-trial activity R-squared in full space: R^2(Qx, y)
+    3. Per-trial activity R-squared in latent space: R^2(x, Q^T y)
+    4. Trial-averaged dynamics R-squared grouped by modality_context condition
+
+    Parameters
+    ----------
+    latent_net : LatentNet
+        Fitted LatentNet instance.
+    u : np.ndarray
+        Input stimulus, shape (n_trials, T, input_size).
+    z : np.ndarray
+        Actor logits, shape (n_trials, T, output_size).
+    y : np.ndarray
+        RNN hidden states, shape (n_trials, T, N).
+    W_rec : np.ndarray
+        RNN hidden-to-hidden weight matrix (weight_hh_l0), shape (N, N).
+    W_in : np.ndarray, optional
+        RNN input-to-hidden weight matrix (weight_ih_l0). Currently not used
+        in validation but accepted for API completeness.
+    labels : dict, optional
+        Per-trial condition labels from collect_circuit_data(). Must contain
+        'modality_context' key. If None, trial-averaged check is skipped.
+    invariant_threshold : float, optional
+        Threshold for invariant subspace correlation pass/fail. Default is 0.85.
+    device : str, optional
+        Device for computation. Default is 'cpu'.
+
+    Returns
+    -------
+    dict with keys:
+        'invariant_subspace_corr'    : float
+        'invariant_subspace_pass'    : bool
+        'activity_r2_full_space'     : float  (per-trial)
+        'activity_r2_latent_space'   : float  (per-trial)
+        'trial_avg_r2_full_space'    : float or None
+        'trial_avg_r2_latent_space'  : float or None
+        'trial_avg_r2_by_condition'  : dict or None  {condition_id: float}
+        'nmse_y'                     : float
+        'nmse_q'                     : float
+        'mse_z'                      : float
+        'threshold'                  : float
+    """
+    latent_net.eval()
+
+    u_tensor = torch.tensor(u, dtype=torch.float32).detach()
+    z_tensor = torch.tensor(z, dtype=torch.float32).detach()
+    y_tensor = torch.tensor(y, dtype=torch.float32).detach()
+
+    with torch.no_grad():
+        # Run forward pass to get latent states x: (n_trials, T, n)
+        x = latent_net(u_tensor)
+
+        # --- Reconstruction metrics ---
+        nmse_y_val = latent_net.nmse_y(y_tensor, x).item()
+        nmse_q_val = latent_net.nmse_q(y_tensor).item()
+        mse_z_val = latent_net.mse_z(x, z_tensor).item()
+
+        # q has shape (n, N); q.T has shape (N, n)
+        q = latent_net.q.detach()   # (n, N)
+
+        # --- Check 1: Invariant subspace (connectivity level) ---
+        # Paper Eq. 14: q @ W_rec @ q.T should approximate w_rec (inferred latent recurrent matrix)
+        # q: (n, N), W_rec: (N, N), q.T: (N, n) → result: (n, n)
+        w_rec_inferred = latent_net.recurrent_layer.weight.data.detach().numpy()  # (n, n)
+        q_np = q.numpy()           # (n, N)
+        Q_W_Q = q_np @ W_rec @ q_np.T  # (n, n)
+        inv_corr = float(np.corrcoef(Q_W_Q.flatten(), w_rec_inferred.flatten())[0, 1])
+        inv_pass = inv_corr >= invariant_threshold
+
+        # --- Check 2: Per-trial activity R-squared in full space (Qx vs y) ---
+        # Qx: x @ q  gives (n_trials, T, N)
+        qx = (x @ q).numpy()       # (n_trials, T, N)
+        y_np = y_tensor.numpy()    # (n_trials, T, N)
+
+        ss_res_full = np.sum((qx - y_np) ** 2)
+        y_mean_full = y_np.mean()
+        ss_tot_full = np.sum((y_np - y_mean_full) ** 2)
+        r2_full = float(1.0 - ss_res_full / ss_tot_full) if ss_tot_full > 0 else float('nan')
+
+        # --- Check 3: Per-trial activity R-squared in latent space (Q^T y vs x) ---
+        # Q^T y: y_tensor @ q.T  gives (n_trials, T, n)  (q.T is (N, n))
+        x_np = x.numpy()                           # (n_trials, T, n)
+        q_y = (y_tensor @ q.t()).numpy()            # (n_trials, T, n)
+
+        ss_res_lat = np.sum((q_y - x_np) ** 2)
+        x_mean = x_np.mean()
+        ss_tot_lat = np.sum((x_np - x_mean) ** 2)
+        r2_latent = float(1.0 - ss_res_lat / ss_tot_lat) if ss_tot_lat > 0 else float('nan')
+
+        # --- Check 4: Trial-averaged dynamics R-squared (grouped by condition) ---
+        trial_avg_r2_full = None
+        trial_avg_r2_latent = None
+        trial_avg_r2_by_condition = None
+
+        if labels is not None and 'modality_context' in labels:
+            conditions = np.unique(labels['modality_context'])
+            condition_r2_full = {}
+            condition_r2_latent = {}
+
+            for cond in conditions:
+                mask = labels['modality_context'] == cond
+
+                # Average actual RNN hidden states across trials in this condition
+                y_avg = y_np[mask].mean(axis=0)    # (T, N)
+                # Average projected latent states across trials in this condition
+                qx_avg = qx[mask].mean(axis=0)     # (T, N)
+                # Average latent states across trials
+                x_avg = x_np[mask].mean(axis=0)    # (T, n)
+                # Average projected y in latent space
+                qy_avg = q_y[mask].mean(axis=0)    # (T, n)
+
+                # R^2 in full space for this condition
+                ss_res_c = np.sum((qx_avg - y_avg) ** 2)
+                ss_tot_c = np.sum((y_avg - y_avg.mean()) ** 2)
+                r2_c_full = float(1.0 - ss_res_c / ss_tot_c) if ss_tot_c > 0 else float('nan')
+                condition_r2_full[int(cond)] = r2_c_full
+
+                # R^2 in latent space for this condition
+                ss_res_cl = np.sum((qy_avg - x_avg) ** 2)
+                ss_tot_cl = np.sum((x_avg - x_avg.mean()) ** 2)
+                r2_c_latent = float(1.0 - ss_res_cl / ss_tot_cl) if ss_tot_cl > 0 else float('nan')
+                condition_r2_latent[int(cond)] = r2_c_latent
+
+            # Mean across conditions
+            valid_full = [v for v in condition_r2_full.values() if not np.isnan(v)]
+            valid_latent = [v for v in condition_r2_latent.values() if not np.isnan(v)]
+            trial_avg_r2_full = float(np.mean(valid_full)) if valid_full else float('nan')
+            trial_avg_r2_latent = float(np.mean(valid_latent)) if valid_latent else float('nan')
+            trial_avg_r2_by_condition = condition_r2_full
+        else:
+            warnings.warn(
+                "labels is None or missing 'modality_context' key. "
+                "Skipping trial-averaged dynamics R-squared check.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
+    return {
+        'invariant_subspace_corr': inv_corr,
+        'invariant_subspace_pass': inv_pass,
+        'activity_r2_full_space': r2_full,
+        'activity_r2_latent_space': r2_latent,
+        'trial_avg_r2_full_space': trial_avg_r2_full,
+        'trial_avg_r2_latent_space': trial_avg_r2_latent,
+        'trial_avg_r2_by_condition': trial_avg_r2_by_condition,
+        'nmse_y': nmse_y_val,
+        'nmse_q': nmse_q_val,
+        'mse_z': mse_z_val,
+        'threshold': invariant_threshold,
+    }

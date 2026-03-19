@@ -108,7 +108,7 @@ class LatentNet(torch.nn.Module):
         return mse(x @ self.q, y) / mse(y_bar, torch.zeros_like(y_bar))
 
     # Function for fitting latent circuit model.
-    def fit(self, u, z, y, epochs, lr,l_y,weight_decay):
+    def fit(self, u, z, y, epochs, lr, l_y, weight_decay, verbose=True):
 
         # Initialize optimizer and wrap training data as PyTorch dataset
         optimizer = torch.optim.Adam(self.parameters(), lr=lr,weight_decay = weight_decay)
@@ -133,7 +133,7 @@ class LatentNet(torch.nn.Module):
                 # Re-apply connectivity masks after each gradient step.
                 self.connectivity_masks()
 
-            if i % 10 == 0:
+            if verbose and i % 10 == 0:
                 x = self.forward(u)
                 print('Epoch: {}/{}.............'.format(i, epochs), end=' ')
                 print("mse_z: {:.4f}".format(self.mse_z(x, z).item()), end=' ')
