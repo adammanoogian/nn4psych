@@ -1,6 +1,7 @@
 """Neural network models for predictive inference tasks."""
 
 from nn4psych.models.actor_critic import ActorCritic
+from nn4psych.models.continuous_rnn import ContinuousActorCritic
 from nn4psych.models.multitask_actor_critic import (
     MultiTaskActorCritic,
     PaddedMultiTaskActorCritic,
@@ -9,6 +10,7 @@ from nn4psych.models.multitask_actor_critic import (
 
 __all__ = [
     "ActorCritic",
+    "ContinuousActorCritic",
     "MultiTaskActorCritic",
     "PaddedMultiTaskActorCritic",
     "TaskSpec",
