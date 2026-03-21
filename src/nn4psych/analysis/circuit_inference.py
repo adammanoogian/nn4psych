@@ -27,12 +27,13 @@ import numpy as np
 import torch
 
 from nn4psych.models.actor_critic import ActorCritic
+from nn4psych.models.continuous_rnn import ContinuousActorCritic
 from nn4psych.analysis.latent_net import LatentNet
 from envs.neurogym_wrapper import SingleContextDecisionMakingWrapper
 
 
 def collect_circuit_data(
-    model: ActorCritic,
+    model: "ActorCritic | ContinuousActorCritic",
     env_class=SingleContextDecisionMakingWrapper,
     modality_contexts: list = None,
     n_trials_per_context: int = 300,
@@ -49,7 +50,7 @@ def collect_circuit_data(
 
     Parameters
     ----------
-    model : ActorCritic
+    model : ActorCritic or ContinuousActorCritic
         Trained model. Will be set to eval mode.
     env_class : class, optional
         Environment wrapper class. Default is SingleContextDecisionMakingWrapper.

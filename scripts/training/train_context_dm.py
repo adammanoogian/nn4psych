@@ -23,7 +23,7 @@ import torch
 import torch.optim as optim
 from torch.distributions import Categorical
 
-from nn4psych.models.actor_critic import ActorCritic
+from nn4psych.models.continuous_rnn import ContinuousActorCritic
 from nn4psych.analysis.behavior import extract_behavior_with_hidden
 from nn4psych.training.resources import configure_cpu_threads
 from envs.neurogym_wrapper import (
@@ -108,6 +108,7 @@ def _run_trial_block(model, env, optimizer, args, hx, device, n_trials):
 
                 optimizer.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
                 hx = hx.detach()
 
@@ -161,7 +162,7 @@ def train_context_dm(args):
     print(f"  modality_context={args.modality_context}")
     print(f"  epochs={args.epochs}, trials={args.trials}")
 
-    model = ActorCritic(input_dim, hidden_dim, action_dim).to(device)
+    model = ContinuousActorCritic(input_dim, hidden_dim, action_dim, alpha=0.2, sigma_rec=0.15, gain=0.9).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     # Training loop
@@ -169,7 +170,7 @@ def train_context_dm(args):
 
     for epoch in range(args.epochs):
         env.reset_epoch()
-        hx = (torch.randn(1, 1, hidden_dim) * 1 / hidden_dim ** 0.5).to(device)
+        hx = model.reset_hidden(batch_size=1, device=device)
 
         hx, epoch_rewards = _run_trial_block(model, env, optimizer, args, hx, device, args.trials)
 
@@ -237,7 +238,7 @@ def train_context_dm_dual(args):
     print(f"  modality_contexts=[0, 1], alternating half-epoch blocks")
     print(f"  epochs={args.epochs}, trials_per_epoch={args.trials} ({args.trials//2} per context)")
 
-    model = ActorCritic(input_dim, hidden_dim, action_dim).to(device)
+    model = ContinuousActorCritic(input_dim, hidden_dim, action_dim, alpha=0.2, sigma_rec=0.15, gain=0.9).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     n_per_context = max(1, args.trials // 2)
@@ -247,7 +248,7 @@ def train_context_dm_dual(args):
     for epoch in range(args.epochs):
         env_0.reset_epoch()
         env_1.reset_epoch()
-        hx = (torch.randn(1, 1, hidden_dim) * 1 / hidden_dim ** 0.5).to(device)
+        hx = model.reset_hidden(batch_size=1, device=device)
 
         # First half-epoch: modality_context=0
         hx, rewards_0 = _run_trial_block(model, env_0, optimizer, args, hx, device, n_per_context)
@@ -386,7 +387,7 @@ def main():
         )
         env.set_num_tasks(1)
         input_dim = env.obs_dim + 1 + 1
-        model = ActorCritic(input_dim, args.hidden_dim, env.action_dim)
+        model = ContinuousActorCritic(input_dim, args.hidden_dim, env.action_dim, alpha=0.2, sigma_rec=0.15, gain=0.9)
         model.load_state_dict(torch.load(args.model_path, map_location=args.device))
         print(f"Loaded model from {args.model_path}")
     elif args.both_modalities:
