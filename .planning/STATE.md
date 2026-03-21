@@ -75,7 +75,7 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None.
+1 pending — `explore-sac-continuous-actions` (v2/exploratory)
 
 ### Blockers/Concerns
 
