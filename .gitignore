@@ -22,10 +22,15 @@ build/
 
 # Data files
 *.npy
+*.npz
 *.pkl
 *.pickle
 *.h5
 *.hdf5
+
+# Model weights
+*.pth
+*.pt
 
 # Legacy/Temp
 *copy*

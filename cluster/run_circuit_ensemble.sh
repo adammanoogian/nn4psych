@@ -80,14 +80,35 @@ else:
 "
 echo ""
 
-# Verify data exists
-if [[ ! -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
-    echo "ERROR: circuit_data.npz not found."
-    echo "Run data collection locally first (Phase 3, Plan 01)."
-    exit 1
-fi
+# Generate data if not present (training + collection)
+mkdir -p cluster/logs output/circuit_analysis data/processed/rnn_behav
 
-mkdir -p cluster/logs output/circuit_analysis
+if [[ ! -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
+    echo "circuit_data.npz not found. Running training + collection..."
+    echo ""
+
+    # Step 1: Train dual-modality ContinuousActorCritic
+    python -u scripts/training/train_context_dm.py \
+        --both_modalities \
+        --epochs 50 --trials 100 \
+        --hidden_dim 64 --seed 42 \
+        --skip_extraction
+
+    # Step 2: Collect circuit data (u, z, y) with proper params
+    python -u -c "
+import sys; sys.path.insert(0, '.')
+import torch
+from nn4psych.models.continuous_rnn import ContinuousActorCritic
+from nn4psych.analysis.circuit_inference import collect_circuit_data, save_circuit_data
+
+model = ContinuousActorCritic(7, 64, 3, alpha=0.2, sigma_rec=0.15, gain=0.9)
+model.load_state_dict(torch.load('data/processed/rnn_behav/model_context_dm_dual.pth', map_location='cpu'))
+data = collect_circuit_data(model, n_trials_per_context=300, max_steps=75)
+save_circuit_data(data, 'data/processed/rnn_behav')
+print(f'Circuit data: u={data[\"u\"].shape}, z={data[\"z\"].shape}, y={data[\"y\"].shape}')
+"
+    echo ""
+fi
 
 # =============================================================================
 # Run Ensemble Fitting + Validation
