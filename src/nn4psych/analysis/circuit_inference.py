@@ -336,10 +336,11 @@ def fit_latent_circuit_ensemble(
         'n_inits'       : int
         'n_latent'      : int
     """
-    # Convert numpy arrays to float32 tensors (detached, no grad)
-    u_tensor = torch.tensor(u, dtype=torch.float32).detach()
-    z_tensor = torch.tensor(z, dtype=torch.float32).detach()
-    y_tensor = torch.tensor(y, dtype=torch.float32).detach()
+    # Convert numpy arrays to float32 tensors on the target device
+    torch_device = torch.device(device)
+    u_tensor = torch.tensor(u, dtype=torch.float32, device=torch_device).detach()
+    z_tensor = torch.tensor(z, dtype=torch.float32, device=torch_device).detach()
+    y_tensor = torch.tensor(y, dtype=torch.float32, device=torch_device).detach()
 
     n_trials = u.shape[0]
     T = u.shape[1]
@@ -352,7 +353,7 @@ def fit_latent_circuit_ensemble(
     all_state_dicts = []
 
     for i in range(n_inits):
-        # Create fresh LatentNet for this initialization
+        # Create fresh LatentNet and move entire module to device
         latent_net = LatentNet(
             n=n_latent,
             N=N,
@@ -362,6 +363,7 @@ def fit_latent_circuit_ensemble(
             output_size=output_size,
             device=device,
         )
+        latent_net = latent_net.to(torch_device)
 
         # Fit (suppress LatentNet's internal epoch prints during ensemble)
         latent_net.fit(
@@ -399,7 +401,7 @@ def fit_latent_circuit_ensemble(
     if verbose:
         print(f"\nBest init: {best_init_idx} (nmse_y={best_nmse_y:.4f}, mse_z={best_mse_z:.4f})")
 
-    # Reload best state_dict into a fresh LatentNet
+    # Reload best state_dict into a fresh LatentNet on the same device
     best_model = LatentNet(
         n=n_latent,
         N=N,
@@ -409,6 +411,7 @@ def fit_latent_circuit_ensemble(
         output_size=output_size,
         device=device,
     )
+    best_model = best_model.to(torch_device)
     best_model.load_state_dict(all_state_dicts[best_init_idx])
     best_model.eval()
 
@@ -484,9 +487,10 @@ def validate_latent_circuit(
     """
     latent_net.eval()
 
-    u_tensor = torch.tensor(u, dtype=torch.float32).detach()
-    z_tensor = torch.tensor(z, dtype=torch.float32).detach()
-    y_tensor = torch.tensor(y, dtype=torch.float32).detach()
+    torch_device = torch.device(device)
+    u_tensor = torch.tensor(u, dtype=torch.float32, device=torch_device).detach()
+    z_tensor = torch.tensor(z, dtype=torch.float32, device=torch_device).detach()
+    y_tensor = torch.tensor(y, dtype=torch.float32, device=torch_device).detach()
 
     with torch.no_grad():
         # Run forward pass to get latent states x: (n_trials, T, n)

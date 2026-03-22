@@ -158,29 +158,21 @@ else:
     exit 0
 
 else
-    # Interactive mode
+    # Interactive / default mode
     if [[ "$ENV_EXISTS" == true ]]; then
         echo ""
-        echo "Options: [u] Update | [f] Fresh recreate | [q] Quit"
-        read -p "Choose [u/f/q]: " response
-        case $response in
-            [Uu]*)
-                if command -v mamba &> /dev/null; then
-                    mamba env update -n "$ENV_NAME" -f "$PROJECT_ROOT/$ENV_FILE" --prune
-                else
-                    conda env update -n "$ENV_NAME" -f "$PROJECT_ROOT/$ENV_FILE" --prune
-                fi
-                ;;
-            [Ff]*)
-                conda env remove -n "$ENV_NAME" -y
-                if command -v mamba &> /dev/null; then
-                    mamba env create -f "$PROJECT_ROOT/$ENV_FILE"
-                else
-                    conda env create -f "$PROJECT_ROOT/$ENV_FILE"
-                fi
-                ;;
-            *) echo "Exiting."; exit 0 ;;
-        esac
+        echo "Installing nn4psych-specific packages into existing env..."
+        echo "(This preserves all existing packages from other projects)"
+        echo ""
+        conda activate "$ENV_NAME"
+
+        # Install only what nn4psych needs that may be missing
+        pip install pyyaml tqdm psutil gymnasium \
+            "neurogym @ git+https://github.com/neurogym/neurogym" 2>&1 | \
+            grep -v "already satisfied" || true
+
+        echo ""
+        echo "Packages installed into existing '$ENV_NAME' env."
     else
         echo "Creating '$ENV_NAME' environment..."
         if command -v mamba &> /dev/null; then

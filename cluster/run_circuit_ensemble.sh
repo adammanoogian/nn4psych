@@ -90,10 +90,6 @@ if [[ ! -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
     echo "circuit_data.npz not found. Running training + collection..."
     echo ""
 
-    # Install missing packages if needed
-    pip install pyyaml gymnasium 2>/dev/null
-    pip install "neurogym @ git+https://github.com/neurogym/neurogym" 2>/dev/null
-
     # Step 1: Train dual-modality ContinuousActorCritic
     python -u scripts/training/train_context_dm.py \
         --both_modalities \
