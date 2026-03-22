@@ -1,4 +1,4 @@
-name: actinf-py-scripts
+name: nn4psych
 channels:
   - conda-forge
 dependencies:

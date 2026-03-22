@@ -21,7 +21,7 @@
 
 set -e  # Exit on error (no -u to avoid PS1/unbound variable issues)
 
-ENV_NAME="actinf-py-scripts"
+ENV_NAME="nn4psych"
 ENV_FILE="cluster/environment_cluster.yml"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"

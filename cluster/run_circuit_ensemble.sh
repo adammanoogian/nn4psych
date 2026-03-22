@@ -57,7 +57,7 @@ echo "n_latent:   $N_LATENT"
 echo "============================================================"
 
 # Activate project environment
-conda activate actinf-py-scripts || {
+conda activate nn4psych || {
     echo "ERROR: Failed to activate conda environment 'actinf-py-scripts'"
     echo "Run: bash cluster/setup_env.sh"
     exit 1
