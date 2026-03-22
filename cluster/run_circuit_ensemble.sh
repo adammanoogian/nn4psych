@@ -90,12 +90,16 @@ if [[ ! -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
     echo "circuit_data.npz not found. Running training + collection..."
     echo ""
 
+    # Install missing packages if needed
+    pip install pyyaml gymnasium 2>/dev/null
+    pip install "neurogym @ git+https://github.com/neurogym/neurogym" 2>/dev/null
+
     # Step 1: Train dual-modality ContinuousActorCritic
     python -u scripts/training/train_context_dm.py \
         --both_modalities \
         --epochs 50 --trials 100 \
         --hidden_dim 64 --seed 42 \
-        --skip_extraction
+        --skip_extraction || { echo "ERROR: Training failed"; exit 1; }
 
     # Step 2: Collect circuit data (u, z, y) with proper params
     python -u -c "
@@ -109,7 +113,7 @@ model.load_state_dict(torch.load('data/processed/rnn_behav/model_context_dm_dual
 data = collect_circuit_data(model, n_trials_per_context=300, max_steps=75)
 save_circuit_data(data, 'data/processed/rnn_behav')
 print(f'Circuit data: u={data[\"u\"].shape}, z={data[\"z\"].shape}, y={data[\"y\"].shape}')
-"
+" || { echo "ERROR: Data collection failed"; exit 1; }
     echo ""
 fi
 
