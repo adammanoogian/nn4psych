@@ -1,0 +1,22 @@
+============================================================
+Latent Circuit Ensemble Fitting — SLURM Job
+============================================================
+Job ID:     53621143
+Node:       m3n109
+GPU(s):     0
+Start:      Mon Mar 23 03:48:04 AM AEDT 2026
+n_inits:    100
+epochs:     500
+n_latent:   8
+============================================================
+
+Verifying GPU...
+  PyTorch:    2.10.0+cu128
+  CUDA avail: True
+  GPU device: NVIDIA A100 80GB PCIe
+
+circuit_data.npz not found. Running training + collection...
+
+
+
+Job complete at Mon Mar 23 03:48:46 AM AEDT 2026. Exit code: 0

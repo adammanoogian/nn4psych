@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "<string>", line 7, in <module>
+AttributeError: 'torch._C._CudaDeviceProperties' object has no attribute 'total_mem'. Did you mean: 'total_memory'?
+Traceback (most recent call last):
+  File "/fs04/fc37/adam/projects/nn4psych/scripts/training/train_context_dm.py", line 26, in <module>
+    from nn4psych.models.continuous_rnn import ContinuousActorCritic
+ModuleNotFoundError: No module named 'nn4psych'
+Traceback (most recent call last):
+  File "<string>", line 4, in <module>
+ModuleNotFoundError: No module named 'nn4psych'
+Traceback (most recent call last):
+  File "<stdin>", line 6, in <module>
+ModuleNotFoundError: No module named 'nn4psych'
