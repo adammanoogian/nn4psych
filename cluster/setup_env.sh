@@ -21,7 +21,14 @@
 
 set -e  # Exit on error (no -u to avoid PS1/unbound variable issues)
 
-ENV_NAME="nn4psych"
+# Use shared env if actinf-py-scripts exists (saves ~4GB disk),
+# otherwise create nn4psych-specific env
+if conda env list 2>/dev/null | grep -q "actinf-py-scripts"; then
+    ENV_NAME="actinf-py-scripts"
+    echo "Found existing actinf-py-scripts env — will extend it (saves disk)"
+else
+    ENV_NAME="nn4psych"
+fi
 ENV_FILE="cluster/environment_cluster.yml"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
