@@ -1,28 +1,33 @@
 #!/bin/bash
-#SBATCH -J circuit_ensemble
-#SBATCH --gres=gpu:1
-#SBATCH -c 4
-#SBATCH -t 02:00:00
-#SBATCH -p seas_gpu
-#SBATCH --mem=8G
-#SBATCH -o logs/circuit_ensemble_%j.out
-#SBATCH -e logs/circuit_ensemble_%j.err
-
-# Latent circuit inference: 100-init LatentNet ensemble fitting on GPU
-# Expects circuit_data.npz to already exist from local data collection
+# =============================================================================
+# SLURM: GPU-Accelerated Latent Circuit Ensemble Fitting
+# =============================================================================
+# Runs 100-initialization LatentNet ensemble fitting on GPU.
+# Expects circuit_data.npz to exist from local data collection (Phase 3, Plan 01).
 #
 # Usage:
-#   sbatch scripts/slurm_circuit_ensemble.sh
+#   sbatch cluster/run_circuit_ensemble.sh
+#   sbatch --export=N_INITS=50,EPOCHS=300 cluster/run_circuit_ensemble.sh   # Quick test
 #
-# Or with custom parameters:
-#   sbatch scripts/slurm_circuit_ensemble.sh --n_inits 100 --epochs 500
+# Performance (approximate, 600 trials x T=75):
+#   - CPU:  ~2-3 hours (100 inits x 500 epochs)
+#   - GPU:  ~15-30 minutes
+#
+# Derived from: project_utils/templates/slurm_gpu_TEMPLATE.slurm
+# =============================================================================
 
-eval "$(conda shell.bash hook)"
-conda activate pytorch
+#SBATCH --job-name=circuit_ensemble
+#SBATCH --output=cluster/logs/circuit_ensemble_%j.out
+#SBATCH --error=cluster/logs/circuit_ensemble_%j.err
+#SBATCH --time=02:00:00
+#SBATCH --mem=8G
+#SBATCH --gres=gpu:1
+#SBATCH --partition=gpu
+#SBATCH --cpus-per-task=4
 
-mkdir -p logs output/circuit_analysis
-
-# Default parameters (can be overridden via command line args passed to sbatch)
+# =============================================================================
+# Configuration (override via --export=VAR=val)
+# =============================================================================
 N_INITS=${N_INITS:-100}
 EPOCHS=${EPOCHS:-500}
 N_LATENT=${N_LATENT:-8}
@@ -30,14 +35,63 @@ LR=${LR:-0.02}
 L_Y=${L_Y:-1.0}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.001}
 
-echo "=== Latent Circuit Ensemble Fitting ==="
-echo "Job ID: $SLURM_JOB_ID"
-echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'N/A')"
-echo "n_inits: $N_INITS"
-echo "epochs: $EPOCHS"
-echo "n_latent: $N_LATENT"
-echo "========================================="
+# =============================================================================
+# Environment Setup
+# =============================================================================
+# Load miniforge3 (M3 convention). Falls back to conda hook on other clusters.
+module load miniforge3 2>/dev/null || eval "$(conda shell.bash hook)" 2>/dev/null || true
 
+cd "${SLURM_SUBMIT_DIR:-$(dirname "$0")/..}"
+PROJECT_ROOT="$(pwd)"
+
+echo "============================================================"
+echo "Latent Circuit Ensemble Fitting — SLURM Job"
+echo "============================================================"
+echo "Job ID:     ${SLURM_JOB_ID:-local}"
+echo "Node:       ${SLURMD_NODENAME:-$(hostname)}"
+echo "GPU(s):     ${CUDA_VISIBLE_DEVICES:-none}"
+echo "Start:      $(date)"
+echo "n_inits:    $N_INITS"
+echo "epochs:     $EPOCHS"
+echo "n_latent:   $N_LATENT"
+echo "============================================================"
+
+# Activate project environment
+conda activate actinf-py-scripts || {
+    echo "ERROR: Failed to activate conda environment 'actinf-py-scripts'"
+    echo "Run: bash cluster/setup_env.sh"
+    exit 1
+}
+
+# =============================================================================
+# Verify GPU Access
+# =============================================================================
+echo ""
+echo "Verifying GPU..."
+python -c "
+import torch
+print(f'  PyTorch:    {torch.__version__}')
+print(f'  CUDA avail: {torch.cuda.is_available()}')
+if torch.cuda.is_available():
+    print(f'  GPU device: {torch.cuda.get_device_name(0)}')
+    print(f'  GPU memory: {torch.cuda.get_device_properties(0).total_mem / 1024**3:.1f} GB')
+else:
+    print('  WARNING: No GPU detected. Falling back to CPU.')
+"
+echo ""
+
+# Verify data exists
+if [[ ! -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
+    echo "ERROR: circuit_data.npz not found."
+    echo "Run data collection locally first (Phase 3, Plan 01)."
+    exit 1
+fi
+
+mkdir -p cluster/logs output/circuit_analysis
+
+# =============================================================================
+# Run Ensemble Fitting + Validation
+# =============================================================================
 python -u - <<'PYTHON_SCRIPT'
 import sys, os, json, time
 sys.path.insert(0, '.')
@@ -53,11 +107,8 @@ from nn4psych.analysis.circuit_inference import (
 # Auto-detect device
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Device: {device}")
-if device == 'cuda':
-    print(f"GPU: {torch.cuda.get_device_name(0)}")
-    print(f"GPU memory: {torch.cuda.get_device_properties(0).total_mem / 1024**3:.1f} GB")
 
-# Read env vars for parameters
+# Read parameters from environment
 n_inits = int(os.environ.get('N_INITS', 100))
 epochs = int(os.environ.get('EPOCHS', 500))
 n_latent = int(os.environ.get('N_LATENT', 8))
@@ -76,8 +127,8 @@ labels = {
 }
 print(f"  u={u.shape}, z={z.shape}, y={y.shape}")
 
-# Load trained model for W_rec
-print("Loading trained model for W_rec extraction...")
+# Load trained model for W_rec extraction
+print("Loading trained model...")
 model = ContinuousActorCritic(
     input_dim=u.shape[2], hidden_dim=y.shape[2], action_dim=z.shape[2],
     alpha=0.2, sigma_rec=0.15, gain=0.9,
@@ -90,7 +141,7 @@ W_rec = model.W_hh.weight.data.detach().numpy()
 W_in = model.W_ih.weight.data.detach().numpy()
 
 # Run ensemble
-print(f"\nStarting {n_inits}-init ensemble ({epochs} epochs each)...")
+print(f"\nStarting {n_inits}-init ensemble ({epochs} epochs each, device={device})...")
 start_time = time.time()
 
 result = fit_latent_circuit_ensemble(
@@ -116,7 +167,6 @@ torch.save(
     result['best_model'].state_dict(),
     'output/circuit_analysis/best_latent_circuit.pt',
 )
-print("Saved: output/circuit_analysis/best_latent_circuit.pt")
 
 # Run validation
 print("\nRunning validation...")
@@ -127,7 +177,7 @@ val = validate_latent_circuit(
     device=device,
 )
 
-# Save validation results
+# Save results
 val_report = {
     'phase': '03-latent-circuit-inference',
     'plan': '02',
@@ -157,12 +207,9 @@ val_report = {
     },
     'status': 'pass' if val['invariant_subspace_pass'] else 'soft-fail',
 }
-
 with open('output/circuit_analysis/validation_results.json', 'w') as f:
     json.dump(val_report, f, indent=2)
-print("Saved: output/circuit_analysis/validation_results.json")
 
-# Save ensemble diagnostics
 diagnostics = {
     'all_nmse_y': result['all_nmse_y'],
     'all_mse_z': result['all_mse_z'],
@@ -175,11 +222,10 @@ diagnostics = {
 }
 with open('output/circuit_analysis/ensemble_diagnostics.json', 'w') as f:
     json.dump(diagnostics, f, indent=2)
-print("Saved: output/circuit_analysis/ensemble_diagnostics.json")
 
-# Print summary
+# Summary
 print("\n" + "=" * 60)
-print("RESULTS SUMMARY")
+print("RESULTS")
 print("=" * 60)
 print(f"  nmse_y (best):           {val_report['best_nmse_y']:.4f}")
 print(f"  Invariant subspace corr: {val_report['invariant_subspace_corr']:.4f} {'PASS' if val_report['invariant_subspace_pass'] else 'SOFT-FAIL'}")
@@ -187,10 +233,10 @@ print(f"  Activity R2 (full):      {val_report['activity_r2_full_space']:.4f}")
 print(f"  Activity R2 (latent):    {val_report['activity_r2_latent_space']:.4f}")
 if val_report['trial_avg_r2_full_space'] is not None:
     print(f"  Trial-avg R2 (full):     {val_report['trial_avg_r2_full_space']:.4f}")
-    print(f"  Trial-avg by condition:  {val_report['trial_avg_r2_by_condition']}")
 print(f"  Status:                  {val_report['status']}")
 print(f"  Time:                    {val_report['elapsed_minutes']} min")
 print("=" * 60)
 PYTHON_SCRIPT
 
-echo "Job complete. Exit code: $?"
+echo ""
+echo "Job complete at $(date). Exit code: $?"

@@ -1,0 +1,38 @@
+name: actinf-py-scripts
+channels:
+  - conda-forge
+dependencies:
+  # Core Python
+  - python>=3.11
+
+  # Scientific Computing
+  - numpy>=1.24
+  - scipy>=1.10
+  - pandas>=2.0
+
+  # Visualization (Agg backend only on cluster)
+  - matplotlib>=3.7
+  - seaborn>=0.12
+
+  # Machine Learning
+  # NOTE: PyTorch CPU installed via conda. For GPU, run:
+  #   bash cluster/setup_env.sh --gpu
+  # which pip-installs torch with bundled CUDA runtime.
+  - pytorch>=2.0
+  - scikit-learn>=1.2
+
+  # Statistics
+  - statsmodels>=0.14
+
+  # Development
+  - pytest>=7.0
+  - pyyaml>=6.0
+  - tqdm>=4.60
+
+  # Utilities
+  - pip
+  - psutil
+
+  - pip:
+    - gymnasium>=0.29.0
+    - neurogym @ git+https://github.com/neurogym/neurogym
