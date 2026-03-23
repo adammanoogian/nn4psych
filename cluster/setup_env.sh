@@ -167,8 +167,10 @@ else
         conda activate "$ENV_NAME"
 
         # Install only what nn4psych needs that may be missing
-        pip install pyyaml tqdm psutil gymnasium \
-            "neurogym @ git+https://github.com/neurogym/neurogym" 2>&1 | \
+        pip install pyyaml tqdm psutil gymnasium 2>&1 | \
+            grep -v "already satisfied" || true
+        # neurogym with --no-deps to avoid numpy source-rebuild (Intel compiler conflict on M3)
+        pip install --no-deps "neurogym @ git+https://github.com/neurogym/neurogym" 2>&1 | \
             grep -v "already satisfied" || true
 
         echo ""
@@ -181,6 +183,17 @@ else
             conda env create -f "$PROJECT_ROOT/$ENV_FILE"
         fi
     fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Install neurogym (always, with --no-deps to avoid numpy rebuild)
+# ─────────────────────────────────────────────────────────────────────────────
+if [[ "$MODE" != "check" && "$MODE" != "gpu" ]]; then
+    conda activate "$ENV_NAME" 2>/dev/null || true
+    echo ""
+    echo "Installing neurogym (--no-deps to avoid numpy source rebuild)..."
+    pip install --no-deps "neurogym @ git+https://github.com/neurogym/neurogym" 2>&1 | \
+        grep -v "already satisfied" || true
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
