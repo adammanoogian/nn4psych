@@ -2,8 +2,9 @@ name: nn4psych
 channels:
   - conda-forge
 dependencies:
-  # Core Python — pin to 3.11 to avoid numpy source-build issues on 3.14
-  - python=3.11.*
+  # Core Python — match actinf_physics (3.10) for shared env on cluster
+  # Pre-built numpy wheels available for 3.10, avoids source-build issues
+  - python=3.10.*
 
   # Scientific Computing
   - numpy>=1.24

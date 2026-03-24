@@ -21,14 +21,12 @@
 
 set -e  # Exit on error (no -u to avoid PS1/unbound variable issues)
 
-# Use shared env if actinf-py-scripts exists (saves ~4GB disk),
-# otherwise create nn4psych-specific env
-if conda env list 2>/dev/null | grep -q "actinf-py-scripts"; then
-    ENV_NAME="actinf-py-scripts"
-    echo "Found existing actinf-py-scripts env — will extend it (saves disk)"
-else
-    ENV_NAME="nn4psych"
-fi
+# Shared env strategy:
+# actinf_physics uses actinf-py-scripts (Python 3.10, torch, pyro)
+# nn4psych adds: pyyaml, gymnasium, neurogym, matplotlib, seaborn
+# Both projects share the same env to save disk (~4GB on 20GB quota)
+# If actinf env doesn't exist, creates standalone nn4psych env instead.
+ENV_NAME=""  # resolved after module load (need conda available first)
 ENV_FILE="cluster/environment_cluster.yml"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -100,6 +98,18 @@ if [[ -n "$PROJECT_ID" ]]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Resolve env name (now that conda is available)
+# ─────────────────────────────────────────────────────────────────────────────
+
+if conda env list 2>/dev/null | grep -q "actinf-py-scripts"; then
+    ENV_NAME="actinf-py-scripts"
+    echo "Found existing actinf-py-scripts env — will extend it (saves disk)"
+else
+    ENV_NAME="nn4psych"
+fi
+echo "Env name: $ENV_NAME"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Handle modes
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -117,6 +127,14 @@ if [[ "$MODE" == "check" ]]; then
     echo "Running verification..."
 
 elif [[ "$MODE" == "fresh" ]]; then
+    if [[ "$ENV_NAME" == "actinf-py-scripts" ]]; then
+        echo "ERROR: --fresh would delete the shared actinf-py-scripts env."
+        echo "This env is also used by actinf_physics. Use default mode instead"
+        echo "(it installs nn4psych packages without deleting existing ones)."
+        echo ""
+        echo "To truly recreate, run from actinf_physics/cluster/ first."
+        exit 1
+    fi
     if [[ "$ENV_EXISTS" == true ]]; then
         echo "Removing existing environment..."
         conda env remove -n "$ENV_NAME" -y
