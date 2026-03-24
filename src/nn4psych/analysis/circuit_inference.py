@@ -518,16 +518,16 @@ def validate_latent_circuit(
         # --- Check 1: Invariant subspace (connectivity level) ---
         # Paper Eq. 14: q @ W_rec @ q.T should approximate w_rec (inferred latent recurrent matrix)
         # q: (n, N), W_rec: (N, N), q.T: (N, n) → result: (n, n)
-        w_rec_inferred = latent_net.recurrent_layer.weight.data.detach().numpy()  # (n, n)
-        q_np = q.numpy()           # (n, N)
+        w_rec_inferred = latent_net.recurrent_layer.weight.data.detach().cpu().numpy()  # (n, n)
+        q_np = q.cpu().numpy()     # (n, N)
         Q_W_Q = q_np @ W_rec @ q_np.T  # (n, n)
         inv_corr = float(np.corrcoef(Q_W_Q.flatten(), w_rec_inferred.flatten())[0, 1])
         inv_pass = inv_corr >= invariant_threshold
 
         # --- Check 2: Per-trial activity R-squared in full space (Qx vs y) ---
         # Qx: x @ q  gives (n_trials, T, N)
-        qx = (x @ q).numpy()       # (n_trials, T, N)
-        y_np = y_tensor.numpy()    # (n_trials, T, N)
+        qx = (x @ q).cpu().numpy()       # (n_trials, T, N)
+        y_np = y_tensor.cpu().numpy()    # (n_trials, T, N)
 
         ss_res_full = np.sum((qx - y_np) ** 2)
         y_mean_full = y_np.mean()
@@ -536,8 +536,8 @@ def validate_latent_circuit(
 
         # --- Check 3: Per-trial activity R-squared in latent space (Q^T y vs x) ---
         # Q^T y: y_tensor @ q.T  gives (n_trials, T, n)  (q.T is (N, n))
-        x_np = x.numpy()                           # (n_trials, T, n)
-        q_y = (y_tensor @ q.t()).numpy()            # (n_trials, T, n)
+        x_np = x.cpu().numpy()                       # (n_trials, T, n)
+        q_y = (y_tensor @ q.t()).cpu().numpy()      # (n_trials, T, n)
 
         ss_res_lat = np.sum((q_y - x_np) ** 2)
         x_mean = x_np.mean()
