@@ -62,22 +62,20 @@ class LatentNet(torch.nn.Module):
     def forward(self, u):
         # total timesteps
         t = u.shape[1]
+        batch_size = u.shape[0]
 
-        # Initialize hidden states to zero
-        states = torch.zeros(u.shape[0], 1, self.n, device=self.device)
-        batch_size = states.shape[0]
+        # Pre-allocate output tensor (avoids per-step torch.cat allocation)
+        states = torch.zeros(batch_size, t, self.n, device=self.device)
 
-        # Noise to be added at each time step
-        noise = torch.sqrt(2 * self.alpha * self.sigma_rec ** 2) * torch.empty(batch_size, t, self.n).normal_(mean=0,
-                                                                                                              std=1).to(
-            device=self.device)
+        # Noise for all timesteps
+        noise = (torch.sqrt(torch.tensor(2 * self.alpha, device=self.device)) * self.sigma_rec
+                 * torch.randn(batch_size, t, self.n, device=self.device))
 
-        # Loop over time steps
+        # Loop over time steps (write into pre-allocated tensor)
         for i in range(t - 1):
-            state_new = (1 - self.alpha) * states[:, i, :] + self.alpha * (
+            states[:, i + 1, :] = (1 - self.alpha) * states[:, i, :] + self.alpha * (
                 self.activation(
                     self.recurrent_layer(states[:, i, :]) + self.input_layer(u[:, i, :]) + noise[:, i, :]))
-            states = torch.cat((states, state_new.unsqueeze_(1)), 1)
         return states
 
     def loss_function(self, x, z, y, l_y):

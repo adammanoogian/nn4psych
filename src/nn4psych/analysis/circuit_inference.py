@@ -352,7 +352,12 @@ def fit_latent_circuit_ensemble(
     all_mse_z = []
     all_state_dicts = []
 
+    import time as _time
+    t_start = _time.time()
+
     for i in range(n_inits):
+        t_init_start = _time.time()
+
         # Create fresh LatentNet and move entire module to device
         latent_net = LatentNet(
             n=n_latent,
@@ -383,10 +388,16 @@ def fit_latent_circuit_ensemble(
 
         all_nmse_y.append(nmse_y)
         all_mse_z.append(mse_z)
-        all_state_dicts.append(copy.deepcopy(latent_net.state_dict()))
+        # Move state_dict to CPU before storing (saves GPU memory)
+        all_state_dicts.append({k: v.cpu() for k, v in latent_net.state_dict().items()})
+
+        t_init_elapsed = _time.time() - t_init_start
+        t_total_elapsed = _time.time() - t_start
+        eta = t_init_elapsed * (n_inits - i - 1)
 
         if verbose:
-            print(f"Init {i + 1}/{n_inits}: nmse_y={nmse_y:.4f}, mse_z={mse_z:.4f}")
+            print(f"Init {i + 1}/{n_inits}: nmse_y={nmse_y:.4f}, mse_z={mse_z:.4f} "
+                  f"({t_init_elapsed:.1f}s, ETA {eta/60:.1f}min)", flush=True)
 
         # Free memory between inits
         del latent_net
