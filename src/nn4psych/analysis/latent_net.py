@@ -66,6 +66,10 @@ class LatentNet(torch.nn.Module):
         return o[:self.n, :]
 
     def forward(self, u):
+        # Ensure q is on the same device as input
+        if self.q.device != u.device:
+            self.q = self.cayley_transform(self.a)
+
         t = u.shape[1]
         batch_size = u.shape[0]
 
@@ -105,6 +109,10 @@ class LatentNet(torch.nn.Module):
         return mse(x @ self.q, y) / mse(y_bar, torch.zeros_like(y_bar))
 
     def fit(self, u, z, y, epochs, lr, l_y, weight_decay, verbose=True):
+        # Recompute q on the correct device (may have been set on CPU in __init__ before .to())
+        self.q = self.cayley_transform(self.a)
+        self.connectivity_masks()
+
         optimizer = torch.optim.Adam(self.parameters(), lr=lr, weight_decay=weight_decay)
 
         n_samples = u.shape[0]
