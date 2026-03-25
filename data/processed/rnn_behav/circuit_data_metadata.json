@@ -1,0 +1,29 @@
+{
+  "n_trials": 600,
+  "T": 75,
+  "modality_contexts": [
+    0,
+    1
+  ],
+  "n_trials_per_context": 300,
+  "u_shape": [
+    600,
+    75,
+    7
+  ],
+  "z_shape": [
+    600,
+    75,
+    3
+  ],
+  "y_shape": [
+    600,
+    75,
+    64
+  ],
+  "label_keys": [
+    "labels_modality_context",
+    "labels_coherence_sign",
+    "labels_correct_action"
+  ]
+}

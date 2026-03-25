@@ -1,0 +1,134 @@
+============================================================
+Latent Circuit Ensemble Fitting — SLURM Job
+============================================================
+Job ID:     53704673
+Node:       m3g115
+GPU(s):     0
+Start:      Wed Mar 25 06:49:21 AM AEDT 2026
+n_inits:    100
+epochs:     500
+n_latent:   8
+============================================================
+
+Verifying GPU...
+  PyTorch:    2.10.0+cu128
+  CUDA avail: True
+  GPU device: NVIDIA L40S
+  GPU memory: 44.4 GB
+
+circuit_data.npz not found. Running training + collection...
+
+Task: ContextDecisionMaking-v0 (DUAL modality)
+  obs_dim=5, action_dim=3
+  input_dim=7 (obs=5 + ctx=1 + reward=1)
+  hidden_dim=64
+  modality_contexts=[0, 1], alternating half-epoch blocks
+  epochs=50, trials_per_epoch=100 (50 per context)
+Epoch    0 | mean_reward=3.7790 (ctx0=3.8700, ctx1=3.6880)
+Epoch   10 | mean_reward=4.7460 (ctx0=4.7260, ctx1=4.7660)
+Epoch   20 | mean_reward=5.7120 (ctx0=5.6580, ctx1=5.7660)
+Epoch   30 | mean_reward=9.5400 (ctx0=9.4400, ctx1=9.6400)
+Epoch   40 | mean_reward=10.7630 (ctx0=10.8420, ctx1=10.6840)
+Epoch   49 | mean_reward=11.4370 (ctx0=10.9960, ctx1=11.8780)
+Saved model to data/processed/rnn_behav/model_context_dm_dual.pth
+Collected 600 trials. Trial lengths: min=75, max=75
+Final shapes: u=(600, 75, 7), z=(600, 75, 3), y=(600, 75, 64)
+Saved circuit data to data/processed/rnn_behav/:
+  circuit_data.npz: u=(600, 75, 7), z=(600, 75, 3), y=(600, 75, 64)
+  circuit_data_metadata.json
+Circuit data: u=(600, 75, 7), z=(600, 75, 3), y=(600, 75, 64)
+
+Device: cuda
+
+Loading circuit data...
+  u=(600, 75, 7), z=(600, 75, 3), y=(600, 75, 64)
+Loading trained model...
+
+Starting 100-init ensemble (500 epochs each, device=cuda)...
+Init 1/100: nmse_y=0.3162, mse_z=4.1474
+Init 2/100: nmse_y=0.3093, mse_z=4.1458
+Init 3/100: nmse_y=0.3065, mse_z=4.1438
+Init 4/100: nmse_y=0.3197, mse_z=4.1455
+Init 5/100: nmse_y=0.3014, mse_z=4.1454
+Init 6/100: nmse_y=0.2998, mse_z=4.1460
+Init 7/100: nmse_y=0.3010, mse_z=4.1443
+Init 8/100: nmse_y=0.3005, mse_z=4.1447
+Init 9/100: nmse_y=0.3082, mse_z=4.1468
+Init 10/100: nmse_y=0.3110, mse_z=4.1447
+Init 11/100: nmse_y=0.3025, mse_z=4.1462
+Init 12/100: nmse_y=0.3197, mse_z=4.1478
+Init 13/100: nmse_y=0.2998, mse_z=4.1458
+Init 14/100: nmse_y=0.3076, mse_z=4.1443
+Init 15/100: nmse_y=0.3026, mse_z=4.1443
+Init 16/100: nmse_y=0.3028, mse_z=4.1460
+Init 17/100: nmse_y=0.3025, mse_z=4.1434
+Init 18/100: nmse_y=0.3068, mse_z=4.1454
+Init 19/100: nmse_y=0.3160, mse_z=4.1458
+Init 20/100: nmse_y=0.3137, mse_z=4.1452
+Init 21/100: nmse_y=0.3017, mse_z=4.1457
+Init 22/100: nmse_y=0.3049, mse_z=4.1436
+Init 23/100: nmse_y=0.3056, mse_z=4.1454
+Init 24/100: nmse_y=0.3047, mse_z=4.1445
+Init 25/100: nmse_y=0.3168, mse_z=4.1488
+Init 26/100: nmse_y=0.2925, mse_z=4.1444
+Init 27/100: nmse_y=0.2986, mse_z=4.1472
+Init 28/100: nmse_y=0.3108, mse_z=4.1449
+Init 29/100: nmse_y=0.3103, mse_z=4.1444
+Init 30/100: nmse_y=0.3161, mse_z=4.1483
+Init 31/100: nmse_y=0.5524, mse_z=4.1492
+Init 32/100: nmse_y=0.3268, mse_z=4.1491
+Init 33/100: nmse_y=0.3145, mse_z=4.1482
+Init 34/100: nmse_y=0.3194, mse_z=4.1484
+Init 35/100: nmse_y=0.3070, mse_z=4.1450
+Init 36/100: nmse_y=0.3027, mse_z=4.1452
+Init 37/100: nmse_y=0.3124, mse_z=4.1443
+Init 38/100: nmse_y=0.3018, mse_z=4.1461
+Init 39/100: nmse_y=0.2970, mse_z=4.1436
+Init 40/100: nmse_y=0.3133, mse_z=4.1471
+Init 41/100: nmse_y=0.3153, mse_z=4.1455
+Init 42/100: nmse_y=0.3027, mse_z=4.1446
+Init 43/100: nmse_y=0.3127, mse_z=4.1473
+Init 44/100: nmse_y=0.3036, mse_z=4.1479
+Init 45/100: nmse_y=0.3008, mse_z=4.1470
+Init 46/100: nmse_y=0.3023, mse_z=4.1453
+Init 47/100: nmse_y=0.3026, mse_z=4.1468
+Init 48/100: nmse_y=0.5540, mse_z=4.1483
+Init 49/100: nmse_y=0.3146, mse_z=4.1481
+Init 50/100: nmse_y=0.3013, mse_z=4.1455
+Init 51/100: nmse_y=0.3152, mse_z=4.1467
+Init 52/100: nmse_y=0.3105, mse_z=4.1453
+Init 53/100: nmse_y=0.3016, mse_z=4.1456
+Init 54/100: nmse_y=0.3004, mse_z=4.1436
+Init 55/100: nmse_y=0.3124, mse_z=4.1464
+Init 56/100: nmse_y=0.3068, mse_z=4.1488
+Init 57/100: nmse_y=0.3114, mse_z=4.1449
+Init 58/100: nmse_y=0.2993, mse_z=4.1461
+Init 59/100: nmse_y=0.3123, mse_z=4.1466
+Init 60/100: nmse_y=0.3007, mse_z=4.1452
+Init 61/100: nmse_y=0.3129, mse_z=4.1463
+Init 62/100: nmse_y=0.3012, mse_z=4.1466
+Init 63/100: nmse_y=0.3090, mse_z=4.1446
+Init 64/100: nmse_y=0.3135, mse_z=4.1490
+Init 65/100: nmse_y=0.3154, mse_z=4.1499
+Init 66/100: nmse_y=0.3074, mse_z=4.1461
+Init 67/100: nmse_y=0.3112, mse_z=4.1463
+Init 68/100: nmse_y=0.3208, mse_z=4.1500
+Init 69/100: nmse_y=0.3091, mse_z=4.1468
+Init 70/100: nmse_y=0.3089, mse_z=4.1477
+Init 71/100: nmse_y=0.3148, mse_z=4.1489
+Init 72/100: nmse_y=0.3215, mse_z=4.1471
+Init 73/100: nmse_y=0.3076, mse_z=4.1460
+Init 74/100: nmse_y=0.3083, mse_z=4.1445
+Init 75/100: nmse_y=0.3075, mse_z=4.1461
+Init 76/100: nmse_y=0.3055, mse_z=4.1450
+Init 77/100: nmse_y=0.3079, mse_z=4.1455
+Init 78/100: nmse_y=0.3095, mse_z=4.1443
+Init 79/100: nmse_y=0.3118, mse_z=4.1460
+Init 80/100: nmse_y=0.5581, mse_z=4.1507
+Init 81/100: nmse_y=0.3106, mse_z=4.1469
+Init 82/100: nmse_y=0.3000, mse_z=4.1434
+Init 83/100: nmse_y=0.2968, mse_z=4.1465
+Init 84/100: nmse_y=0.3140, mse_z=4.1474
+Init 85/100: nmse_y=0.3020, mse_z=4.1452
+Init 86/100: nmse_y=0.2993, mse_z=4.1440
+Init 87/100: nmse_y=0.3001, mse_z=4.1440
