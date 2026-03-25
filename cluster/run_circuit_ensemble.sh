@@ -19,7 +19,7 @@
 #SBATCH --job-name=circuit_ensemble
 #SBATCH --output=cluster/logs/circuit_ensemble_%j.out
 #SBATCH --error=cluster/logs/circuit_ensemble_%j.err
-#SBATCH --time=02:00:00
+#SBATCH --time=04:00:00
 #SBATCH --mem=8G
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
@@ -34,6 +34,7 @@ N_LATENT=${N_LATENT:-8}
 LR=${LR:-0.02}
 L_Y=${L_Y:-1.0}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.001}
+FORCE_RETRAIN=${FORCE_RETRAIN:-0}  # Set to 1 to regenerate training data
 
 # =============================================================================
 # Environment Setup
@@ -86,18 +87,23 @@ echo ""
 # Generate data if not present (training + collection)
 mkdir -p cluster/logs output/circuit_analysis data/processed/rnn_behav
 
+if [[ "$FORCE_RETRAIN" == "1" ]] && [[ -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
+    echo "FORCE_RETRAIN=1: removing old data to regenerate..."
+    rm -f data/processed/rnn_behav/circuit_data.npz data/processed/rnn_behav/model_context_dm_dual.pth
+fi
+
 if [[ ! -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
     echo "circuit_data.npz not found. Running training + collection..."
     echo ""
 
-    # Step 1: Train dual-modality ContinuousActorCritic
+    # Step 1: Train dual-modality ContinuousActorCritic (150 epochs, closer to paper)
     python -u scripts/training/train_context_dm.py \
         --both_modalities \
-        --epochs 50 --trials 100 \
+        --epochs 150 --trials 200 \
         --hidden_dim 64 --seed 42 \
         --skip_extraction || { echo "ERROR: Training failed"; exit 1; }
 
-    # Step 2: Collect circuit data (u, z, y) with proper params
+    # Step 2: Collect circuit data (u, z, y) — 500 per context = 1000 total
     python -u -c "
 import sys; sys.path.insert(0, '.')
 import torch
@@ -106,7 +112,7 @@ from nn4psych.analysis.circuit_inference import collect_circuit_data, save_circu
 
 model = ContinuousActorCritic(7, 64, 3, alpha=0.2, sigma_rec=0.15, gain=0.9)
 model.load_state_dict(torch.load('data/processed/rnn_behav/model_context_dm_dual.pth', map_location='cpu'))
-data = collect_circuit_data(model, n_trials_per_context=300, max_steps=75)
+data = collect_circuit_data(model, n_trials_per_context=500, max_steps=75)
 save_circuit_data(data, 'data/processed/rnn_behav')
 print(f'Circuit data: u={data[\"u\"].shape}, z={data[\"z\"].shape}, y={data[\"y\"].shape}')
 " || { echo "ERROR: Data collection failed"; exit 1; }
