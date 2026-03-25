@@ -30,9 +30,9 @@
 # =============================================================================
 N_INITS=${N_INITS:-100}
 EPOCHS=${EPOCHS:-500}
-N_LATENT=${N_LATENT:-8}
+N_LATENT=${N_LATENT:-12}
 LR=${LR:-0.02}
-L_Y=${L_Y:-1.0}
+L_Y=${L_Y:-50.0}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.001}
 FORCE_RETRAIN=${FORCE_RETRAIN:-0}  # Set to 1 to regenerate training data
 
