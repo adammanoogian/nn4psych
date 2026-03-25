@@ -1,0 +1,15 @@
+/scratch/fc37/aman0087/conda/envs/actinf-py-scripts/lib/python3.10/site-packages/gymnasium/envs/registration.py:481: UserWarning: [33mWARN: The environment creator metadata doesn't include `render_modes`, contains: ['paper_link', 'paper_name', 'tags'][0m
+  logger.warn(
+/scratch/fc37/aman0087/conda/envs/actinf-py-scripts/lib/python3.10/site-packages/gymnasium/envs/registration.py:481: UserWarning: [33mWARN: The environment creator metadata doesn't include `render_modes`, contains: ['paper_link', 'paper_name', 'tags'][0m
+  logger.warn(
+Traceback (most recent call last):
+  File "<stdin>", line 52, in <module>
+  File "/fs04/fc37/adam/projects/nn4psych/src/nn4psych/analysis/circuit_inference.py", line 374, in fit_latent_circuit_ensemble
+    latent_net.fit(
+  File "/fs04/fc37/adam/projects/nn4psych/src/nn4psych/analysis/latent_net.py", line 128, in fit
+    loss = self.loss_function(x_batch, z_batch, y_batch, l_y)
+  File "/fs04/fc37/adam/projects/nn4psych/src/nn4psych/analysis/latent_net.py", line 87, in loss_function
+    return self.mse_z(x, z) + l_y * self.nmse_y(y, x)
+  File "/fs04/fc37/adam/projects/nn4psych/src/nn4psych/analysis/latent_net.py", line 105, in nmse_y
+    return mse(x @ self.q, y) / mse(y_bar, torch.zeros_like(y_bar))
+RuntimeError: Expected all tensors to be on the same device, but got mat2 is on cpu, different from other tensors on cuda:0 (when checking argument in method wrapper_CUDA_mm)

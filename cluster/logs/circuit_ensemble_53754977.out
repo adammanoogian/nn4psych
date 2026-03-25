@@ -1,0 +1,60 @@
+============================================================
+Latent Circuit Ensemble Fitting — SLURM Job
+============================================================
+Job ID:     53754977
+Node:       m3g117
+GPU(s):     0
+Start:      Wed Mar 25 05:57:53 PM AEDT 2026
+n_inits:    100
+epochs:     500
+n_latent:   8
+============================================================
+
+Verifying GPU...
+  PyTorch:    2.10.0+cu128
+  CUDA avail: True
+  GPU device: NVIDIA L40S
+  GPU memory: 44.4 GB
+
+FORCE_RETRAIN=1: removing old data to regenerate...
+circuit_data.npz not found. Running training + collection...
+
+Task: ContextDecisionMaking-v0 (DUAL modality)
+  obs_dim=5, action_dim=3
+  input_dim=7 (obs=5 + ctx=1 + reward=1)
+  hidden_dim=64
+  modality_contexts=[0, 1], alternating half-epoch blocks
+  epochs=150, trials_per_epoch=200 (100 per context)
+Epoch    0 | mean_reward=3.8920 (ctx0=3.9380, ctx1=3.8460)
+Epoch   10 | mean_reward=6.5760 (ctx0=6.8500, ctx1=6.3020)
+Epoch   20 | mean_reward=15.7755 (ctx0=15.5410, ctx1=16.0100)
+Epoch   30 | mean_reward=20.2410 (ctx0=20.5750, ctx1=19.9070)
+Epoch   40 | mean_reward=21.7225 (ctx0=21.8010, ctx1=21.6440)
+Epoch   50 | mean_reward=21.6555 (ctx0=21.6780, ctx1=21.6330)
+Epoch   60 | mean_reward=22.1550 (ctx0=21.8700, ctx1=22.4400)
+Epoch   70 | mean_reward=22.7015 (ctx0=23.0080, ctx1=22.3950)
+Epoch   80 | mean_reward=22.8705 (ctx0=22.9450, ctx1=22.7960)
+Epoch   90 | mean_reward=23.0820 (ctx0=22.6500, ctx1=23.5140)
+Epoch  100 | mean_reward=23.3455 (ctx0=23.4280, ctx1=23.2630)
+Epoch  110 | mean_reward=23.4335 (ctx0=23.3750, ctx1=23.4920)
+Epoch  120 | mean_reward=23.0020 (ctx0=23.3280, ctx1=22.6760)
+Epoch  130 | mean_reward=23.6715 (ctx0=23.8130, ctx1=23.5300)
+Epoch  140 | mean_reward=23.4095 (ctx0=23.6010, ctx1=23.2180)
+Epoch  149 | mean_reward=23.5430 (ctx0=23.5560, ctx1=23.5300)
+Saved model to data/processed/rnn_behav/model_context_dm_dual.pth
+Collected 1000 trials. Trial lengths: min=75, max=75
+Final shapes: u=(1000, 75, 7), z=(1000, 75, 3), y=(1000, 75, 64)
+Saved circuit data to data/processed/rnn_behav/:
+  circuit_data.npz: u=(1000, 75, 7), z=(1000, 75, 3), y=(1000, 75, 64)
+  circuit_data_metadata.json
+Circuit data: u=(1000, 75, 7), z=(1000, 75, 3), y=(1000, 75, 64)
+
+Device: cuda
+
+Loading circuit data...
+  u=(1000, 75, 7), z=(1000, 75, 3), y=(1000, 75, 64)
+Loading trained model...
+
+Starting 100-init ensemble (500 epochs each, device=cuda)...
+
+Job complete at Wed Mar 25 07:36:08 PM AEDT 2026. Exit code: 0

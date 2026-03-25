@@ -1,23 +1,23 @@
 {
-  "n_trials": 600,
+  "n_trials": 1000,
   "T": 75,
   "modality_contexts": [
     0,
     1
   ],
-  "n_trials_per_context": 300,
+  "n_trials_per_context": 500,
   "u_shape": [
-    600,
+    1000,
     75,
     7
   ],
   "z_shape": [
-    600,
+    1000,
     75,
     3
   ],
   "y_shape": [
-    600,
+    1000,
     75,
     64
   ],
