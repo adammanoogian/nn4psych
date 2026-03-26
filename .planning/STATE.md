@@ -75,7 +75,9 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-1 pending — `explore-sac-continuous-actions` (v2/exploratory)
+2 pending:
+- `explore-sac-continuous-actions` (v2/exploratory)
+- `multitask-latent-circuit-comparison` (v2/analysis — cross-task Q comparison + fixed points in latent space)
 
 ### Blockers/Concerns
 
