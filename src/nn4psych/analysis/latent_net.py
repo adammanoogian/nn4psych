@@ -87,8 +87,11 @@ class LatentNet(torch.nn.Module):
             state_list.append(h)
         return torch.stack(state_list, dim=1)  # (batch, t, n)
 
-    def loss_function(self, x, z, y, l_y):
-        return self.mse_z(x, z) + l_y * self.nmse_y(y, x)
+    def loss_function(self, x, z, y, l_y, include_output_loss=True):
+        loss = l_y * self.nmse_y(y, x)
+        if include_output_loss:
+            loss = loss + self.mse_z(x, z)
+        return loss
 
     def mse_z(self, x, z):
         return torch.sum((self.output_layer(x) - z) ** 2) / x.shape[0] / x.shape[1]
@@ -108,7 +111,7 @@ class LatentNet(torch.nn.Module):
         y_bar = y - torch.mean(y, dim=[0, 1], keepdim=True)
         return mse(x @ self.q, y) / mse(y_bar, torch.zeros_like(y_bar))
 
-    def fit(self, u, z, y, epochs, lr, l_y, weight_decay, verbose=True):
+    def fit(self, u, z, y, epochs, lr, l_y, weight_decay, verbose=True, include_output_loss=True):
         # Recompute q on the correct device (may have been set on CPU in __init__ before .to())
         self.q = self.cayley_transform(self.a)
         self.connectivity_masks()
@@ -133,7 +136,7 @@ class LatentNet(torch.nn.Module):
 
                 optimizer.zero_grad()
                 x_batch = self.forward(u_batch)
-                loss = self.loss_function(x_batch, z_batch, y_batch, l_y)
+                loss = self.loss_function(x_batch, z_batch, y_batch, l_y, include_output_loss)
                 loss.backward()
                 optimizer.step()
 

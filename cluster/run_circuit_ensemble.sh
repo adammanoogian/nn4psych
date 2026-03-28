@@ -30,11 +30,13 @@
 # =============================================================================
 N_INITS=${N_INITS:-100}
 EPOCHS=${EPOCHS:-500}
-N_LATENT=${N_LATENT:-12}
+N_LATENT=${N_LATENT:-8}
 LR=${LR:-0.02}
-L_Y=${L_Y:-50.0}
+L_Y=${L_Y:-1.0}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.001}
+INCLUDE_OUTPUT_LOSS=${INCLUDE_OUTPUT_LOSS:-1}  # Set to 0 to fit hidden states only
 FORCE_RETRAIN=${FORCE_RETRAIN:-0}  # Set to 1 to regenerate training data
+FORCE_RECOLLECT=${FORCE_RECOLLECT:-0}  # Set to 1 to re-collect circuit data (keep model)
 
 # =============================================================================
 # Environment Setup
@@ -94,6 +96,11 @@ echo ""
 # Generate data if not present (training + collection)
 mkdir -p cluster/logs output/circuit_analysis data/processed/rnn_behav
 
+if [[ "$FORCE_RECOLLECT" == "1" ]] && [[ -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
+    echo "FORCE_RECOLLECT=1: removing old circuit data (keeping trained model)..."
+    rm -f data/processed/rnn_behav/circuit_data.npz data/processed/rnn_behav/circuit_data_metadata.json
+fi
+
 if [[ "$FORCE_RETRAIN" == "1" ]] && [[ -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
     echo "FORCE_RETRAIN=1: removing old data to regenerate..."
     rm -f data/processed/rnn_behav/circuit_data.npz data/processed/rnn_behav/model_context_dm_dual.pth
@@ -152,6 +159,7 @@ n_latent = int(os.environ.get('N_LATENT', 8))
 lr = float(os.environ.get('LR', 0.02))
 l_y = float(os.environ.get('L_Y', 1.0))
 weight_decay = float(os.environ.get('WEIGHT_DECAY', 0.001))
+include_output_loss = bool(int(os.environ.get('INCLUDE_OUTPUT_LOSS', 1)))
 
 # Load circuit data
 print("\nLoading circuit data...")
@@ -213,6 +221,9 @@ W_in = model.W_ih.weight.data.detach().numpy()
 print(f"\nStarting {n_inits}-init ensemble ({epochs} epochs each, device={device})...")
 start_time = time.time()
 
+print(f"  include_output_loss={include_output_loss}, l_y={l_y}, n_latent={n_latent}")
+print(f"  z range: [{z.min():.3f}, {z.max():.3f}] (should be [0,1] for softmax beliefs)")
+
 result = fit_latent_circuit_ensemble(
     u, z, y,
     n_inits=n_inits,
@@ -224,6 +235,7 @@ result = fit_latent_circuit_ensemble(
     sigma_rec=0.15,
     device=device,
     verbose=True,
+    include_output_loss=include_output_loss,
 )
 
 elapsed = time.time() - start_time

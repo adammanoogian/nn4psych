@@ -154,14 +154,14 @@ def collect_circuit_data(
                     x = torch.tensor(state, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(torch_device)
                     actor_logits, _, h = model(x, h)
 
-                    # Record z (actor logits, raw — not softmax) and y (hidden state)
-                    z_t = actor_logits.squeeze().cpu().numpy().copy()  # (action_dim,)
+                    # Record z (softmax policy beliefs, bounded [0,1]) and y (hidden state)
+                    action_probs = torch.softmax(actor_logits, dim=-1)
+                    z_t = action_probs.squeeze().cpu().numpy().copy()  # (action_dim,)
                     y_t = h.squeeze().cpu().numpy().copy()             # (hidden_dim,)
                     trial_z.append(z_t)
                     trial_y.append(y_t)
 
                     # Select action (deterministic, consistent with extract_behavior_with_hidden)
-                    action_probs = torch.softmax(actor_logits, dim=-1)
                     action = torch.argmax(action_probs, dim=-1).item()
 
                     # Step environment
@@ -287,6 +287,7 @@ def fit_latent_circuit_ensemble(
     sigma_rec: float = 0.15,
     device: str = 'cpu',
     verbose: bool = True,
+    include_output_loss: bool = True,
 ) -> dict:
     """
     Fit an ensemble of LatentNet instances and return the best by lowest nmse_y.
@@ -378,6 +379,7 @@ def fit_latent_circuit_ensemble(
             l_y=l_y,
             weight_decay=weight_decay,
             verbose=False,
+            include_output_loss=include_output_loss,
         )
 
         # Compute final metrics
