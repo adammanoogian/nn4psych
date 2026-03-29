@@ -1,0 +1,157 @@
+============================================================
+Latent Circuit Ensemble Fitting — SLURM Job
+============================================================
+Job ID:     54148075
+Node:       m3g105
+GPU(s):     0
+Start:      Mon Mar 30 02:02:32 AM AEDT 2026
+n_inits:    100
+epochs:     500
+n_latent:   8
+============================================================
+
+Verifying GPU...
+  PyTorch:    2.10.0+cu128
+  CUDA avail: True
+  GPU device: NVIDIA L40S
+  GPU memory: 44.4 GB
+GPU monitoring started (PID 2374226) -> cluster/logs/gpu_stats_54148075.csv
+
+Device: cuda
+
+Loading circuit data...
+  u=(1000, 75, 7), z=(1000, 75, 3), y=(1000, 75, 64)
+Loading trained model...
+
+Starting 100-init ensemble (500 epochs each, device=cuda)...
+  include_output_loss=True, l_y=1.0, n_latent=8
+  z range: [0.000, 1.000] (should be [0,1] for softmax beliefs)
+Init 1/100: nmse_y=0.3392, mse_z=0.2823 (58.6s, ETA 96.7min)
+Init 2/100: nmse_y=0.3415, mse_z=0.3239 (54.2s, ETA 88.5min)
+Init 3/100: nmse_y=0.3676, mse_z=0.3289 (54.1s, ETA 87.4min)
+Init 4/100: nmse_y=0.3395, mse_z=0.2832 (53.9s, ETA 86.3min)
+Init 5/100: nmse_y=0.3216, mse_z=0.2763 (53.9s, ETA 85.4min)
+Init 6/100: nmse_y=0.3460, mse_z=0.3152 (54.1s, ETA 84.7min)
+Init 7/100: nmse_y=0.3214, mse_z=0.2825 (54.0s, ETA 83.7min)
+Init 8/100: nmse_y=0.3470, mse_z=0.3109 (54.2s, ETA 83.2min)
+Init 9/100: nmse_y=0.3425, mse_z=0.3138 (53.9s, ETA 81.8min)
+Init 10/100: nmse_y=0.3623, mse_z=0.3216 (54.0s, ETA 81.0min)
+Init 11/100: nmse_y=0.3250, mse_z=0.2774 (53.9s, ETA 79.9min)
+Init 12/100: nmse_y=0.3246, mse_z=0.2781 (54.2s, ETA 79.5min)
+Init 13/100: nmse_y=0.3426, mse_z=0.3139 (54.2s, ETA 78.5min)
+Init 14/100: nmse_y=0.3728, mse_z=0.3318 (53.9s, ETA 77.3min)
+Init 15/100: nmse_y=0.3257, mse_z=0.2791 (54.6s, ETA 77.4min)
+Init 16/100: nmse_y=0.3228, mse_z=0.2797 (58.4s, ETA 81.8min)
+Init 17/100: nmse_y=0.3489, mse_z=0.3151 (54.0s, ETA 74.7min)
+Init 18/100: nmse_y=0.3147, mse_z=0.2785 (54.0s, ETA 73.7min)
+Init 19/100: nmse_y=0.3224, mse_z=0.2813 (54.0s, ETA 72.9min)
+Init 20/100: nmse_y=0.3810, mse_z=0.3284 (53.9s, ETA 71.9min)
+Init 21/100: nmse_y=0.3161, mse_z=0.2781 (53.9s, ETA 71.0min)
+Init 22/100: nmse_y=0.4186, mse_z=0.3200 (54.9s, ETA 71.3min)
+Init 23/100: nmse_y=0.4379, mse_z=0.3347 (54.0s, ETA 69.3min)
+Init 24/100: nmse_y=0.3760, mse_z=0.3256 (54.4s, ETA 68.9min)
+Init 25/100: nmse_y=0.4036, mse_z=0.3400 (54.2s, ETA 67.7min)
+Init 26/100: nmse_y=0.3172, mse_z=0.2749 (54.0s, ETA 66.7min)
+Init 27/100: nmse_y=0.4121, mse_z=0.3374 (54.1s, ETA 65.8min)
+Init 28/100: nmse_y=0.3507, mse_z=0.3140 (54.1s, ETA 64.9min)
+Init 29/100: nmse_y=0.3499, mse_z=0.3205 (54.0s, ETA 63.9min)
+Init 30/100: nmse_y=0.3152, mse_z=0.2735 (54.0s, ETA 62.9min)
+Init 31/100: nmse_y=0.4192, mse_z=0.3161 (54.0s, ETA 62.1min)
+Init 32/100: nmse_y=0.3286, mse_z=0.3287 (54.1s, ETA 61.3min)
+Init 33/100: nmse_y=0.3177, mse_z=0.2779 (53.9s, ETA 60.2min)
+Init 34/100: nmse_y=0.4269, mse_z=0.3232 (54.1s, ETA 59.5min)
+Init 35/100: nmse_y=0.3585, mse_z=0.3175 (54.1s, ETA 58.6min)
+Init 36/100: nmse_y=0.3491, mse_z=0.3209 (54.1s, ETA 57.7min)
+Init 37/100: nmse_y=0.3217, mse_z=0.2803 (54.2s, ETA 56.9min)
+Init 38/100: nmse_y=0.3211, mse_z=0.2785 (54.0s, ETA 55.8min)
+Init 39/100: nmse_y=0.4152, mse_z=0.3220 (54.0s, ETA 54.9min)
+Init 40/100: nmse_y=0.4284, mse_z=0.3255 (54.0s, ETA 54.0min)
+Init 41/100: nmse_y=0.4383, mse_z=0.3313 (54.2s, ETA 53.3min)
+Init 42/100: nmse_y=0.3402, mse_z=0.3111 (54.5s, ETA 52.6min)
+Init 43/100: nmse_y=0.4448, mse_z=0.3283 (54.0s, ETA 51.3min)
+Init 44/100: nmse_y=0.3346, mse_z=0.2747 (54.0s, ETA 50.4min)
+Init 45/100: nmse_y=0.3981, mse_z=0.3425 (54.0s, ETA 49.5min)
+Init 46/100: nmse_y=0.3712, mse_z=0.3211 (54.0s, ETA 48.6min)
+Init 47/100: nmse_y=0.3448, mse_z=0.3162 (54.0s, ETA 47.7min)
+Init 48/100: nmse_y=0.4191, mse_z=0.3227 (55.2s, ETA 47.9min)
+Init 49/100: nmse_y=0.3229, mse_z=0.2798 (58.5s, ETA 49.7min)
+Init 50/100: nmse_y=0.3432, mse_z=0.3114 (54.1s, ETA 45.0min)
+Init 51/100: nmse_y=0.3184, mse_z=0.2730 (53.9s, ETA 44.1min)
+Init 52/100: nmse_y=0.3525, mse_z=0.3132 (53.9s, ETA 43.1min)
+Init 53/100: nmse_y=0.3200, mse_z=0.2790 (53.9s, ETA 42.3min)
+Init 54/100: nmse_y=0.3234, mse_z=0.2780 (54.0s, ETA 41.4min)
+Init 55/100: nmse_y=0.3455, mse_z=0.3114 (54.0s, ETA 40.5min)
+Init 56/100: nmse_y=0.4206, mse_z=0.3172 (53.9s, ETA 39.5min)
+Init 57/100: nmse_y=0.3711, mse_z=0.3312 (57.0s, ETA 40.8min)
+Init 58/100: nmse_y=0.3144, mse_z=0.2739 (58.6s, ETA 41.0min)
+Init 59/100: nmse_y=0.3388, mse_z=0.3127 (54.0s, ETA 36.9min)
+Init 60/100: nmse_y=0.3934, mse_z=0.3395 (53.9s, ETA 36.0min)
+Init 61/100: nmse_y=0.3441, mse_z=0.3219 (54.1s, ETA 35.2min)
+Init 62/100: nmse_y=0.4099, mse_z=0.3387 (54.0s, ETA 34.2min)
+Init 63/100: nmse_y=0.4314, mse_z=0.3218 (53.9s, ETA 33.3min)
+Init 64/100: nmse_y=0.4329, mse_z=0.3233 (53.9s, ETA 32.3min)
+Init 65/100: nmse_y=0.3432, mse_z=0.3137 (54.0s, ETA 31.5min)
+Init 66/100: nmse_y=0.4113, mse_z=0.3406 (54.0s, ETA 30.6min)
+Init 67/100: nmse_y=0.3757, mse_z=0.2946 (54.0s, ETA 29.7min)
+Init 68/100: nmse_y=0.3540, mse_z=0.3123 (53.9s, ETA 28.8min)
+Init 69/100: nmse_y=0.3425, mse_z=0.3177 (53.9s, ETA 27.9min)
+Init 70/100: nmse_y=0.3262, mse_z=0.2765 (53.8s, ETA 26.9min)
+Init 71/100: nmse_y=0.3299, mse_z=0.2881 (53.8s, ETA 26.0min)
+Init 72/100: nmse_y=0.3294, mse_z=0.2805 (54.2s, ETA 25.3min)
+Init 73/100: nmse_y=0.4276, mse_z=0.3235 (54.3s, ETA 24.4min)
+Init 74/100: nmse_y=0.3484, mse_z=0.3212 (54.3s, ETA 23.5min)
+Init 75/100: nmse_y=0.3417, mse_z=0.3140 (54.1s, ETA 22.5min)
+Init 76/100: nmse_y=0.4482, mse_z=0.3488 (54.1s, ETA 21.6min)
+Init 77/100: nmse_y=0.3162, mse_z=0.2787 (54.1s, ETA 20.7min)
+Init 78/100: nmse_y=0.3248, mse_z=0.2809 (54.0s, ETA 19.8min)
+Init 79/100: nmse_y=0.3365, mse_z=0.3114 (54.2s, ETA 19.0min)
+Init 80/100: nmse_y=0.3238, mse_z=0.2761 (54.5s, ETA 18.2min)
+Init 81/100: nmse_y=0.3495, mse_z=0.3222 (57.3s, ETA 18.2min)
+Init 82/100: nmse_y=0.3183, mse_z=0.2813 (54.2s, ETA 16.3min)
+Init 83/100: nmse_y=0.3226, mse_z=0.2778 (54.1s, ETA 15.3min)
+Init 84/100: nmse_y=0.3228, mse_z=0.3305 (54.1s, ETA 14.4min)
+Init 85/100: nmse_y=0.3233, mse_z=0.2779 (54.1s, ETA 13.5min)
+Init 86/100: nmse_y=0.3439, mse_z=0.3133 (54.2s, ETA 12.6min)
+Init 87/100: nmse_y=0.3461, mse_z=0.3167 (54.3s, ETA 11.8min)
+Init 88/100: nmse_y=0.3475, mse_z=0.3102 (55.2s, ETA 11.0min)
+Init 89/100: nmse_y=0.3973, mse_z=0.3418 (54.2s, ETA 9.9min)
+Init 90/100: nmse_y=0.3223, mse_z=0.2799 (54.1s, ETA 9.0min)
+Init 91/100: nmse_y=0.3525, mse_z=0.3275 (54.0s, ETA 8.1min)
+Init 92/100: nmse_y=0.3414, mse_z=0.3139 (54.1s, ETA 7.2min)
+Init 93/100: nmse_y=0.3437, mse_z=0.3097 (54.0s, ETA 6.3min)
+Init 94/100: nmse_y=0.3459, mse_z=0.3153 (54.3s, ETA 5.4min)
+Init 95/100: nmse_y=0.3179, mse_z=0.2740 (54.3s, ETA 4.5min)
+Init 96/100: nmse_y=0.4311, mse_z=0.3213 (54.1s, ETA 3.6min)
+Init 97/100: nmse_y=0.4217, mse_z=0.3225 (54.1s, ETA 2.7min)
+Init 98/100: nmse_y=0.3635, mse_z=0.3205 (54.1s, ETA 1.8min)
+Init 99/100: nmse_y=0.3660, mse_z=0.3304 (54.2s, ETA 0.9min)
+Init 100/100: nmse_y=0.3150, mse_z=0.2775 (55.6s, ETA 0.0min)
+
+Best init: 57 (nmse_y=0.3144, mse_z=0.2739)
+
+Ensemble complete in 90.7 minutes
+Best init: 57 (nmse_y=0.3144)
+
+Running validation...
+
+============================================================
+RESULTS
+============================================================
+  nmse_y (best):           0.3144
+  Invariant subspace corr: 0.6830 SOFT-FAIL
+  Activity R2 (full):      0.8445
+  Activity R2 (latent):    0.7876
+  Trial-avg R2 (full):     0.9752
+  Status:                  soft-fail
+  Time:                    90.7 min
+============================================================
+
+=== GPU UTILIZATION SUMMARY ===
+timestamp, utilization.gpu [%], utilization.memory [%], memory.used [MiB], memory.total [MiB], power.draw [W]
+Samples: 547
+Avg GPU util: 29.4%
+Avg memory: 618 MiB
+Peak GPU util: 30%
+================================
+
+Job complete at Mon Mar 30 03:33:38 AM AEDT 2026. Exit code: 0
