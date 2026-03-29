@@ -172,38 +172,6 @@ labels = {
 }
 print(f"  u={u.shape}, z={z.shape}, y={y.shape}")
 
-# Quick profiling: time one forward+backward pass to check GPU utilization
-if device == 'cuda':
-    from nn4psych.analysis.latent_net import LatentNet as _LN
-    _net = _LN(n=n_latent, N=y.shape[2], input_size=u.shape[2], n_trials=u.shape[0],
-               sigma_rec=0.15, output_size=z.shape[2], device=device).to(device)
-    _u = torch.tensor(u[:128], dtype=torch.float32, device=device)
-    _z = torch.tensor(z[:128], dtype=torch.float32, device=device)
-    _y = torch.tensor(y[:128], dtype=torch.float32, device=device)
-    _net.q = _net.cayley_transform(_net.a)
-    # Warm up
-    _x = _net(_u); _loss = _net.loss_function(_x, _z, _y, l_y); _loss.backward()
-    # Timed run
-    torch.cuda.synchronize()
-    _t0 = time.time()
-    for _i in range(10):
-        _net.zero_grad()
-        _x = _net(_u)
-        _loss = _net.loss_function(_x, _z, _y, l_y)
-        _loss.backward()
-        _net.q = _net.cayley_transform(_net.a)
-        _net.connectivity_masks()
-    torch.cuda.synchronize()
-    _dt = (time.time() - _t0) / 10
-    print(f"\nProfiling (1 batch of 128, 1 grad step): {_dt*1000:.1f} ms")
-    print(f"  Projected per epoch (5 batches): {_dt*5*1000:.1f} ms")
-    print(f"  Projected per init (500 epochs): {_dt*5*500:.1f} s")
-    print(f"  Projected total (100 inits): {_dt*5*500*100/60:.1f} min")
-    _mem = torch.cuda.max_memory_allocated() / 1024**2
-    print(f"  Peak GPU memory: {_mem:.0f} MiB")
-    del _net, _u, _z, _y, _x, _loss
-    torch.cuda.empty_cache()
-
 # Load trained model for W_rec extraction
 print("Loading trained model...")
 model = ContinuousActorCritic(
@@ -330,14 +298,14 @@ if [[ -n "${GPU_MON_PID:-}" ]]; then
         # Print header + stats
         head -1 "cluster/logs/gpu_stats_${SLURM_JOB_ID}.csv"
         echo "Samples: $(wc -l < "cluster/logs/gpu_stats_${SLURM_JOB_ID}.csv")"
-        # Average GPU util (column 2)
-        awk -F', ' 'NR>1 && $2+0>0 {sum+=$2; n++} END {if(n>0) printf "Avg GPU util: %.1f%%\n", sum/n; else print "No GPU data"}' \
+        # Average GPU util (column 2, values like "85 %")
+        awk -F', ' 'NR>1 {sum+=$2+0; n++} END {if(n>0) printf "Avg GPU util: %.1f%%\n", sum/n; else print "No GPU data"}' \
             "cluster/logs/gpu_stats_${SLURM_JOB_ID}.csv"
-        # Average memory used (column 4)
-        awk -F', ' 'NR>1 && $4+0>0 {sum+=$4; n++} END {if(n>0) printf "Avg memory: %.0f MiB\n", sum/n}' \
+        # Average memory used (column 4, values like "2048 MiB")
+        awk -F', ' 'NR>1 {sum+=$4+0; n++} END {if(n>0) printf "Avg memory: %.0f MiB\n", sum/n}' \
             "cluster/logs/gpu_stats_${SLURM_JOB_ID}.csv"
         # Peak GPU util
-        awk -F', ' 'NR>1 && $2+0>max {max=$2} END {printf "Peak GPU util: %.0f%%\n", max}' \
+        awk -F', ' 'NR>1 {v=$2+0; if(v>max) max=v} END {printf "Peak GPU util: %.0f%%\n", max}' \
             "cluster/logs/gpu_stats_${SLURM_JOB_ID}.csv"
     fi
     echo "================================"
