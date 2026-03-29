@@ -1,0 +1,13 @@
+/scratch/fc37/aman0087/conda/envs/actinf-py-scripts/lib/python3.10/site-packages/gymnasium/envs/registration.py:481: UserWarning: [33mWARN: The environment creator metadata doesn't include `render_modes`, contains: ['paper_link', 'paper_name', 'tags'][0m
+  logger.warn(
+/scratch/fc37/aman0087/conda/envs/actinf-py-scripts/lib/python3.10/site-packages/gymnasium/envs/registration.py:481: UserWarning: [33mWARN: The environment creator metadata doesn't include `render_modes`, contains: ['paper_link', 'paper_name', 'tags'][0m
+  logger.warn(
+Traceback (most recent call last):
+  File "<stdin>", line 54, in <module>
+  File "/scratch/fc37/aman0087/conda/envs/actinf-py-scripts/lib/python3.10/site-packages/torch/_tensor.py", line 630, in backward
+    torch.autograd.backward(
+  File "/scratch/fc37/aman0087/conda/envs/actinf-py-scripts/lib/python3.10/site-packages/torch/autograd/__init__.py", line 364, in backward
+    _engine_run_backward(
+  File "/scratch/fc37/aman0087/conda/envs/actinf-py-scripts/lib/python3.10/site-packages/torch/autograd/graph.py", line 865, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+RuntimeError: Trying to backward through the graph a second time (or directly access saved tensors after they have already been freed). Saved intermediate values of the graph are freed when you call .backward() or autograd.grad(). Specify retain_graph=True if you need to backward through the graph a second time or if you need to access saved tensors after calling backward.

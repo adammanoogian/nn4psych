@@ -1,0 +1,66 @@
+============================================================
+Latent Circuit Ensemble Fitting — SLURM Job
+============================================================
+Job ID:     54114103
+Node:       m3g109
+GPU(s):     0
+Start:      Sun Mar 29 06:47:25 PM AEDT 2026
+n_inits:    100
+epochs:     500
+n_latent:   8
+============================================================
+
+Verifying GPU...
+  PyTorch:    2.10.0+cu128
+  CUDA avail: True
+  GPU device: NVIDIA L40S
+  GPU memory: 44.4 GB
+GPU monitoring started (PID 1774100) -> cluster/logs/gpu_stats_54114103.csv
+
+FORCE_RECOLLECT=1: removing old circuit data (keeping trained model)...
+circuit_data.npz not found. Running training + collection...
+
+Task: ContextDecisionMaking-v0 (DUAL modality)
+  obs_dim=5, action_dim=3
+  input_dim=7 (obs=5 + ctx=1 + reward=1)
+  hidden_dim=64
+  modality_contexts=[0, 1], alternating half-epoch blocks
+  epochs=150, trials_per_epoch=200 (100 per context)
+Epoch    0 | mean_reward=3.4750 (ctx0=3.5790, ctx1=3.3710)
+Epoch   10 | mean_reward=7.1125 (ctx0=6.7350, ctx1=7.4900)
+Epoch   20 | mean_reward=14.6115 (ctx0=13.1370, ctx1=16.0860)
+Epoch   30 | mean_reward=20.3955 (ctx0=20.0020, ctx1=20.7890)
+Epoch   40 | mean_reward=21.8760 (ctx0=21.8670, ctx1=21.8850)
+Epoch   50 | mean_reward=22.2375 (ctx0=21.9690, ctx1=22.5060)
+Epoch   60 | mean_reward=22.8575 (ctx0=22.8450, ctx1=22.8700)
+Epoch   70 | mean_reward=22.9870 (ctx0=22.8190, ctx1=23.1550)
+Epoch   80 | mean_reward=22.9775 (ctx0=22.8330, ctx1=23.1220)
+Epoch   90 | mean_reward=23.2550 (ctx0=23.3340, ctx1=23.1760)
+Epoch  100 | mean_reward=23.0770 (ctx0=23.1470, ctx1=23.0070)
+Epoch  110 | mean_reward=23.1175 (ctx0=23.0910, ctx1=23.1440)
+Epoch  120 | mean_reward=23.4725 (ctx0=23.4510, ctx1=23.4940)
+Epoch  130 | mean_reward=23.4160 (ctx0=23.5120, ctx1=23.3200)
+Epoch  140 | mean_reward=23.4200 (ctx0=23.3960, ctx1=23.4440)
+Epoch  149 | mean_reward=23.5815 (ctx0=23.5350, ctx1=23.6280)
+Saved model to data/processed/rnn_behav/model_context_dm_dual.pth
+Collected 1000 trials. Trial lengths: min=75, max=75
+Final shapes: u=(1000, 75, 7), z=(1000, 75, 3), y=(1000, 75, 64)
+Saved circuit data to data/processed/rnn_behav/:
+  circuit_data.npz: u=(1000, 75, 7), z=(1000, 75, 3), y=(1000, 75, 64)
+  circuit_data_metadata.json
+Circuit data: u=(1000, 75, 7), z=(1000, 75, 3), y=(1000, 75, 64)
+
+Device: cuda
+
+Loading circuit data...
+  u=(1000, 75, 7), z=(1000, 75, 3), y=(1000, 75, 64)
+
+=== GPU UTILIZATION SUMMARY ===
+timestamp, utilization.gpu [%], utilization.memory [%], memory.used [MiB], memory.total [MiB], power.draw [W]
+Samples: 587
+No GPU data
+Avg memory: 4 MiB
+Peak GPU util: 0%
+================================
+
+Job complete at Sun Mar 29 08:25:10 PM AEDT 2026. Exit code: 0
