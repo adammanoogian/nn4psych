@@ -75,11 +75,12 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-4 pending:
+5 pending:
 - `explore-sac-continuous-actions` (v2/exploratory)
 - `multitask-latent-circuit-comparison` (v2/analysis — cross-task Q comparison + fixed points in latent space)
 - `subset-q-fitting-changepoint-oddball` (v2/analysis — fit Q to trial subsets around task events)
 - `gpu-performance-bottlenecks-latentnet` (optimization — torch.compile, kernel fusion, Cayley frequency)
+- `plan-cluster-gpu-adoption-for-latent-fitting` (planning — breakeven math + when to fold cluster GPU into a phase)
 
 ### Blockers/Concerns
 
