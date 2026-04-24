@@ -1,0 +1,94 @@
+============================================================
+Latent Circuit Ensemble Fitting — SLURM Job
+============================================================
+Job ID:     54923597
+Node:       m3g107
+GPU(s):     0
+Start:      Fri Apr 24 07:39:48 AM AEST 2026
+n_inits:    5
+epochs:     50
+n_latent:   8
+============================================================
+
+Verifying GPU...
+  PyTorch:    2.10.0+cu128
+  CUDA avail: True
+  GPU device: NVIDIA L40S
+  GPU memory: 44.4 GB
+GPU monitoring started (PID 973735) -> cluster/logs/gpu_stats_54923597.csv
+
+circuit_data.npz not found. Running training + collection...
+
+Task: ContextDecisionMaking-v0 (DUAL modality)
+  obs_dim=5, action_dim=3
+  input_dim=7 (obs=5 + ctx=1 + reward=1)
+  hidden_dim=64
+  modality_contexts=[0, 1], alternating half-epoch blocks
+  epochs=150, trials_per_epoch=200 (100 per context)
+Epoch    0 | mean_reward=3.7220 (ctx0=3.5530, ctx1=3.8910)
+Epoch   10 | mean_reward=5.8855 (ctx0=5.5000, ctx1=6.2710)
+Epoch   20 | mean_reward=15.3185 (ctx0=15.0710, ctx1=15.5660)
+Epoch   30 | mean_reward=20.5885 (ctx0=20.5450, ctx1=20.6320)
+Epoch   40 | mean_reward=21.8390 (ctx0=21.6560, ctx1=22.0220)
+Epoch   50 | mean_reward=22.1620 (ctx0=22.1490, ctx1=22.1750)
+Epoch   60 | mean_reward=22.8985 (ctx0=22.9650, ctx1=22.8320)
+Epoch   70 | mean_reward=22.8305 (ctx0=22.7750, ctx1=22.8860)
+Epoch   80 | mean_reward=22.9620 (ctx0=22.7590, ctx1=23.1650)
+Epoch   90 | mean_reward=22.8985 (ctx0=22.9940, ctx1=22.8030)
+Epoch  100 | mean_reward=23.0775 (ctx0=23.2280, ctx1=22.9270)
+Epoch  110 | mean_reward=23.2895 (ctx0=23.4200, ctx1=23.1590)
+Epoch  120 | mean_reward=23.2050 (ctx0=23.0490, ctx1=23.3610)
+Epoch  130 | mean_reward=23.2850 (ctx0=23.1190, ctx1=23.4510)
+Epoch  140 | mean_reward=23.4125 (ctx0=23.4280, ctx1=23.3970)
+Epoch  149 | mean_reward=23.3640 (ctx0=23.6210, ctx1=23.1070)
+Saved model to data/processed/rnn_behav/model_context_dm_dual.pth
+Collected 1000 trials. Trial lengths: min=75, max=75
+Final shapes: u=(1000, 75, 7), z=(1000, 75, 3), y=(1000, 75, 64)
+Saved circuit data to data/processed/rnn_behav/:
+  circuit_data.npz: u=(1000, 75, 7), z=(1000, 75, 3), y=(1000, 75, 64)
+  circuit_data_metadata.json
+Circuit data: u=(1000, 75, 7), z=(1000, 75, 3), y=(1000, 75, 64)
+
+Device: cuda
+
+Loading circuit data...
+  u=(1000, 75, 7), z=(1000, 75, 3), y=(1000, 75, 64)
+Loading trained model...
+
+Starting 5-init ensemble (50 epochs each, device=cuda)...
+  include_output_loss=True, l_y=1.0, n_latent=8
+  z range: [0.000, 1.000] (should be [0,1] for softmax beliefs)
+Init 1/5: nmse_y=0.8409, mse_z=0.5614 (16.9s, ETA 1.1min)
+Init 2/5: nmse_y=0.5836, mse_z=0.4690 (5.5s, ETA 0.3min)
+Init 3/5: nmse_y=0.5299, mse_z=0.4209 (5.5s, ETA 0.2min)
+Init 4/5: nmse_y=0.8523, mse_z=0.5716 (5.5s, ETA 0.1min)
+Init 5/5: nmse_y=0.5541, mse_z=0.4317 (5.5s, ETA 0.0min)
+
+Best init: 2 (nmse_y=0.5299, mse_z=0.4209)
+
+Ensemble complete in 0.7 minutes
+Best init: 2 (nmse_y=0.5299)
+
+Running validation...
+
+============================================================
+RESULTS
+============================================================
+  nmse_y (best):           0.5299
+  Invariant subspace corr: 0.6764 SOFT-FAIL
+  Activity R2 (full):      0.6704
+  Activity R2 (latent):    0.4509
+  Trial-avg R2 (full):     0.9560
+  Status:                  soft-fail
+  Time:                    0.7 min
+============================================================
+
+=== GPU UTILIZATION SUMMARY ===
+timestamp, utilization.gpu [%], utilization.memory [%], memory.used [MiB], memory.total [MiB], power.draw [W]
+Samples: 590
+Avg GPU util: 0.1%
+Avg memory: 7 MiB
+Peak GPU util: 29%
+================================
+
+Job complete at Fri Apr 24 09:17:53 AM AEST 2026. Exit code: 0

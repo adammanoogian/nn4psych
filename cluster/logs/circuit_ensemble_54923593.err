@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "<stdin>", line 27, in <module>
+  File "/scratch/fc37/aman0087/conda/envs/actinf-py-scripts/lib/python3.10/site-packages/numpy/lib/_npyio_impl.py", line 459, in load
+    fid = stack.enter_context(open(os.fspath(file), "rb"))
+FileNotFoundError: [Errno 2] No such file or directory: 'data/processed/rnn_behav/circuit_data.npz'

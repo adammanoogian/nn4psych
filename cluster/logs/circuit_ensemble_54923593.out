@@ -1,0 +1,32 @@
+============================================================
+Latent Circuit Ensemble Fitting — SLURM Job
+============================================================
+Job ID:     54923593
+Node:       m3g107
+GPU(s):     0
+Start:      Fri Apr 24 07:38:46 AM AEST 2026
+n_inits:    100
+epochs:     500
+n_latent:   8
+============================================================
+
+Verifying GPU...
+  PyTorch:    2.10.0+cu128
+  CUDA avail: True
+  GPU device: NVIDIA L40S
+  GPU memory: 44.4 GB
+GPU monitoring started (PID 973186) -> cluster/logs/gpu_stats_54923593.csv
+
+Device: cuda
+
+Loading circuit data...
+
+=== GPU UTILIZATION SUMMARY ===
+timestamp, utilization.gpu [%], utilization.memory [%], memory.used [MiB], memory.total [MiB], power.draw [W]
+Samples: 3
+Avg GPU util: 0.0%
+Avg memory: 0 MiB
+Peak GPU util: 0%
+================================
+
+Job complete at Fri Apr 24 07:39:26 AM AEST 2026. Exit code: 0
