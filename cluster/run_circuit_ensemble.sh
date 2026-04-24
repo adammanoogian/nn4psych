@@ -96,29 +96,38 @@ echo ""
 # Generate data if not present (training + collection)
 mkdir -p cluster/logs output/circuit_analysis data/processed/rnn_behav
 
-if [[ "$FORCE_RECOLLECT" == "1" ]] && [[ -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
-    echo "FORCE_RECOLLECT=1: removing old circuit data (keeping trained model)..."
-    rm -f data/processed/rnn_behav/circuit_data.npz data/processed/rnn_behav/circuit_data_metadata.json
-fi
+# Serialize data regen across concurrent jobs via flock. Without this, parallel
+# sbatch submissions race on circuit_data.npz — either with FORCE_RECOLLECT
+# deletions or on the regen write — and FileNotFoundError crashes the loser
+# (see job 54923593). FORCE_* deletions are also moved inside the lock so they
+# cannot clobber a file another job is currently reading.
+LOCKFILE="data/processed/rnn_behav/.regen.lock"
+(
+    flock -x 200
 
-if [[ "$FORCE_RETRAIN" == "1" ]] && [[ -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
-    echo "FORCE_RETRAIN=1: removing old data to regenerate..."
-    rm -f data/processed/rnn_behav/circuit_data.npz data/processed/rnn_behav/model_context_dm_dual.pth
-fi
+    if [[ "$FORCE_RECOLLECT" == "1" ]] && [[ -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
+        echo "FORCE_RECOLLECT=1: removing old circuit data (keeping trained model)..."
+        rm -f data/processed/rnn_behav/circuit_data.npz data/processed/rnn_behav/circuit_data_metadata.json
+    fi
 
-if [[ ! -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
-    echo "circuit_data.npz not found. Running training + collection..."
-    echo ""
+    if [[ "$FORCE_RETRAIN" == "1" ]] && [[ -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
+        echo "FORCE_RETRAIN=1: removing old data to regenerate..."
+        rm -f data/processed/rnn_behav/circuit_data.npz data/processed/rnn_behav/model_context_dm_dual.pth
+    fi
 
-    # Step 1: Train dual-modality ContinuousActorCritic (150 epochs, closer to paper)
-    python -u scripts/training/train_context_dm.py \
-        --both_modalities \
-        --epochs 150 --trials 200 \
-        --hidden_dim 64 --seed 42 \
-        --skip_extraction || { echo "ERROR: Training failed"; exit 1; }
+    if [[ ! -f "data/processed/rnn_behav/circuit_data.npz" ]]; then
+        echo "circuit_data.npz not found. Running training + collection (lock held)..."
+        echo ""
 
-    # Step 2: Collect circuit data (u, z, y) — 500 per context = 1000 total
-    python -u -c "
+        # Step 1: Train dual-modality ContinuousActorCritic (150 epochs, closer to paper)
+        python -u scripts/training/train_context_dm.py \
+            --both_modalities \
+            --epochs 150 --trials 200 \
+            --hidden_dim 64 --seed 42 \
+            --skip_extraction || { echo "ERROR: Training failed"; exit 1; }
+
+        # Step 2: Collect circuit data (u, z, y) — 500 per context = 1000 total
+        python -u -c "
 import sys; sys.path.insert(0, '.')
 import torch
 from nn4psych.models.continuous_rnn import ContinuousActorCritic
@@ -130,8 +139,11 @@ data = collect_circuit_data(model, n_trials_per_context=500, max_steps=75)
 save_circuit_data(data, 'data/processed/rnn_behav')
 print(f'Circuit data: u={data[\"u\"].shape}, z={data[\"z\"].shape}, y={data[\"y\"].shape}')
 " || { echo "ERROR: Data collection failed"; exit 1; }
-    echo ""
-fi
+        echo ""
+    else
+        echo "circuit_data.npz present, skipping regen (another job wrote it or it was pre-existing)."
+    fi
+) 200>"$LOCKFILE"
 
 # =============================================================================
 # Run Ensemble Fitting + Validation

@@ -56,8 +56,19 @@ figs*
 # Output directories
 /output/*
 !/output/.gitkeep
+# Keep small circuit inference artifacts (validation JSON + best latent weights)
+!/output/circuit_analysis/
+/output/circuit_analysis/*
+!/output/circuit_analysis/*.json
+!/output/circuit_analysis/*.pt
 /figures/*
 !/figures/.gitkeep
+
+# Cluster log bulk — keep repo lean, logs live on the cluster
+/cluster/logs/*.out
+/cluster/logs/*.err
+/cluster/logs/gpu_stats_*.csv
+!/cluster/logs/.gitkeep
 
 # Jupyter
 .ipynb_checkpoints/
