@@ -226,6 +226,17 @@ stage_files "output/circuit_analysis/n_latent_sweep/n*/ensemble_diagnostics.json
 stage_files "output/circuit_analysis/n_latent_sweep/*.json" "sweep aggregates (Pareto + selection)"
 stage_files "output/circuit_analysis/n_latent_sweep/*.png" "sweep plots (Pareto)"
 
+# Canonical RNN model + provenance metadata (INPUTS to circuit analysis).
+# The embedded retrain in run_circuit_ensemble.sh writes these on the cluster;
+# pushing them lets collaborators run 08_infer_latent_circuits.py without
+# scp'ing or retraining. .gitignore must whitelist these paths via:
+#   !/data/processed/rnn_behav/model_context_dm_dual.pth
+#   !/data/processed/rnn_behav/circuit_data_metadata.json
+# The 22MB circuit_data.npz is intentionally NOT staged — too large for raw git.
+stage_files "data/processed/rnn_behav/model_context_dm_dual.pth" "trained RNN checkpoint"
+stage_files "data/processed/rnn_behav/circuit_data_metadata.json" "circuit data metadata"
+stage_files "data/processed/rnn_behav/metadata.json" "rnn_behav metadata"
+
 echo ""
 
 # Check if there's anything to commit

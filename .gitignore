@@ -67,6 +67,17 @@ figs*
 !/output/circuit_analysis/n_latent_sweep/**
 # Re-ignore intermediate scratch inside the sweep tree
 /output/circuit_analysis/**/.regen.lock
+
+# Canonical RNN checkpoints + provenance metadata (small, named, reproducible).
+# These are INPUTS to circuit analysis — committing them lets collaborators run
+# scripts/data_pipeline/08_infer_latent_circuits.py without retraining or
+# scp'ing from the cluster. The autopush job (cluster/99_push_results.slurm)
+# stages these alongside output/circuit_analysis/. The 22MB circuit_data.npz
+# stays gitignored — too large for raw git; promote to LFS / DVC if needed.
+!/data/processed/rnn_behav/model_context_dm_dual.pth
+!/data/processed/rnn_behav/circuit_data_metadata.json
+!/data/processed/rnn_behav/metadata.json
+
 /figures/*
 !/figures/.gitkeep
 
