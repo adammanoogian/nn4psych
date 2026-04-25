@@ -9,6 +9,17 @@
 #   sbatch cluster/run_circuit_ensemble.sh
 #   sbatch --export=N_INITS=50,EPOCHS=300 cluster/run_circuit_ensemble.sh   # Quick test
 #
+# Auto-push results after this single job (recommended pattern):
+#   sed -i 's/\r$//' cluster/*.slurm cluster/*.sh                          # CRLF strip
+#   FIT_JID=$(sbatch --parsable cluster/run_circuit_ensemble.sh)
+#   sbatch --parsable --dependency=afterany:${FIT_JID} \
+#       --export=ALL,PARENT_JOBS="${FIT_JID}" \
+#       cluster/99_push_results.slurm
+#   # Use afterany (not afterok) so push fires on failure too.
+#   # Add NOTIFY_EMAIL=adam.manoogian@monash.edu to the push --export for email.
+#   # See cluster/run_n_latent_sweep.sh for the multi-job (sweep) variant
+#   # — it wires the same push job automatically across all 4 fitting jobs.
+#
 # Performance (approximate, 600 trials x T=75):
 #   - CPU:  ~2-3 hours (100 inits x 500 epochs)
 #   - GPU:  ~15-30 minutes
