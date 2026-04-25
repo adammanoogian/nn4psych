@@ -1,0 +1,51 @@
+{
+  "ranks_attempted": [
+    4,
+    8,
+    12,
+    16
+  ],
+  "ranks_succeeded": [
+    8,
+    12,
+    16
+  ],
+  "ranks_missing": [
+    4
+  ],
+  "rows": [
+    {
+      "n_latent": 8,
+      "best_nmse_y": 0.2964416742324829,
+      "best_mse_z": 0.2859615683555603,
+      "invariant_subspace_corr": 0.7095212775905504,
+      "trial_avg_r2_full_space": 0.9690490961074829,
+      "per_trial_r2_full_space": 0.8146675825119019,
+      "ensemble_std_nmse_y": 0.03584404145937662,
+      "elapsed_minutes": 187.3,
+      "status": "soft-fail"
+    },
+    {
+      "n_latent": 12,
+      "best_nmse_y": 0.2471686154603958,
+      "best_mse_z": 0.27583447098731995,
+      "invariant_subspace_corr": 0.7832673556806835,
+      "trial_avg_r2_full_space": 0.9763582348823547,
+      "per_trial_r2_full_space": 0.8439892530441284,
+      "ensemble_std_nmse_y": 0.02275435461544097,
+      "elapsed_minutes": 95.3,
+      "status": "soft-fail"
+    },
+    {
+      "n_latent": 16,
+      "best_nmse_y": 0.24337001144886017,
+      "best_mse_z": 0.27632513642311096,
+      "invariant_subspace_corr": 0.6871848977480514,
+      "trial_avg_r2_full_space": 0.9780296981334686,
+      "per_trial_r2_full_space": 0.847883939743042,
+      "ensemble_std_nmse_y": 0.019820201577078873,
+      "elapsed_minutes": 91.0,
+      "status": "soft-fail"
+    }
+  ]
+}

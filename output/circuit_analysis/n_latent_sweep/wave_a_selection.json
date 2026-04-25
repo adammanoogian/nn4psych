@@ -1,0 +1,36 @@
+{
+  "chosen_rank": 12,
+  "metrics": {
+    "n_latent": 12,
+    "best_nmse_y": 0.2471686154603958,
+    "best_mse_z": 0.27583447098731995,
+    "invariant_subspace_corr": 0.7832673556806835,
+    "trial_avg_r2_full_space": 0.9763582348823547,
+    "per_trial_r2_full_space": 0.8439892530441284,
+    "ensemble_std_nmse_y": 0.02275435461544097,
+    "elapsed_minutes": 95.3,
+    "status": "soft-fail"
+  },
+  "rationale": "Selected n_latent=12 as it maximises invariant_subspace_corr (0.7833) across the 3-rank sweep (ties broken by preferring lower rank for parsimony).",
+  "pareto_summary": {
+    "ranks_attempted": [
+      4,
+      8,
+      12,
+      16
+    ],
+    "ranks_succeeded": [
+      8,
+      12,
+      16
+    ],
+    "ranks_missing": [
+      4
+    ]
+  },
+  "wave_b_prepositioning": {
+    "recommended_story": "ran_out_of_fixes",
+    "evidence": "Invariant subspace corr varies meaningfully across ranks (spread=0.096); chosen rank n_latent=12 is best of those tried but does not cross 0.85. Wave A reduced but did not eliminate the structural concern; deferred fixes (masked loss, shorter T) remain on the table.",
+    "passes_paper_threshold": false
+  }
+}
