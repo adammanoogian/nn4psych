@@ -37,6 +37,7 @@ WEIGHT_DECAY=${WEIGHT_DECAY:-0.001}
 INCLUDE_OUTPUT_LOSS=${INCLUDE_OUTPUT_LOSS:-1}  # Set to 0 to fit hidden states only
 FORCE_RETRAIN=${FORCE_RETRAIN:-0}  # Set to 1 to regenerate training data
 FORCE_RECOLLECT=${FORCE_RECOLLECT:-0}  # Set to 1 to re-collect circuit data (keep model)
+OUTPUT_SUBDIR=${OUTPUT_SUBDIR:-}   # If set, write to output/circuit_analysis/${OUTPUT_SUBDIR}/ instead of root
 
 # =============================================================================
 # Environment Setup
@@ -222,11 +223,17 @@ elapsed = time.time() - start_time
 print(f"\nEnsemble complete in {elapsed/60:.1f} minutes")
 print(f"Best init: {result['best_init_idx']} (nmse_y={result['best_nmse_y']:.4f})")
 
-# Save best model
-os.makedirs('output/circuit_analysis', exist_ok=True)
+# Save best model (per-rank subdir support via OUTPUT_SUBDIR env var)
+_output_subdir = os.environ.get('OUTPUT_SUBDIR', '')
+_output_root = (
+    os.path.join('output/circuit_analysis', _output_subdir)
+    if _output_subdir
+    else 'output/circuit_analysis'
+)
+os.makedirs(_output_root, exist_ok=True)
 torch.save(
     result['best_model'].state_dict(),
-    'output/circuit_analysis/best_latent_circuit.pt',
+    os.path.join(_output_root, 'best_latent_circuit.pt'),
 )
 
 # Run validation
@@ -267,8 +274,9 @@ val_report = {
         'N': int(y.shape[2]),
     },
     'status': 'pass' if val['invariant_subspace_pass'] else 'soft-fail',
+    'output_subdir': _output_subdir,
 }
-with open('output/circuit_analysis/validation_results.json', 'w') as f:
+with open(os.path.join(_output_root, 'validation_results.json'), 'w') as f:
     json.dump(val_report, f, indent=2)
 
 diagnostics = {
@@ -281,7 +289,7 @@ diagnostics = {
         'max_nmse_y': float(np.max(result['all_nmse_y'])),
     },
 }
-with open('output/circuit_analysis/ensemble_diagnostics.json', 'w') as f:
+with open(os.path.join(_output_root, 'ensemble_diagnostics.json'), 'w') as f:
     json.dump(diagnostics, f, indent=2)
 
 # Summary
