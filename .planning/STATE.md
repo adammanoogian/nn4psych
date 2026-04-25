@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** RNN agent trainable on multiple cognitive tasks with analyzable hidden representations comparable to human data via Bayesian model fitting
-**Current focus:** Phase 3 — Latent Circuit Inference (03-01 complete)
+**Current focus:** Phase 3 — Latent Circuit Inference (03-01 + 03-02 complete; soft-fail on invariant subspace carried into 03-03)
 
 ## Current Position
 
 Phase: 3 of 5 (Latent Circuit Inference) — In progress
-Plan: 1 of ~3 in phase 03 complete (03-01 done)
-Status: In progress — Phase 3, Plan 1 complete
-Last activity: 2026-03-20 — Completed 03-01-PLAN.md (vendor LatentNet, collect circuit data)
+Plan: 2 of 3 in phase 03 complete (03-01 + 03-02 done)
+Status: In progress — Phase 3, Plan 2 complete with documented soft-fail
+Last activity: 2026-04-24 — Completed 03-02 (100-init GPU ensemble on cluster; invariant subspace corr=0.703 soft-fails; trial-avg R²=0.98)
 
-Progress: [███████░░░] ~54% (7/~13 total plans)
+Progress: [████████░░] ~62% (8/~13 total plans)
 
 ## Performance Metrics
 
@@ -29,11 +29,11 @@ Progress: [███████░░░] ~54% (7/~13 total plans)
 |-------|-------|-------|----------|
 | 01-infrastructure-and-organization | 3/3 COMPLETE | ~24 min | ~8 min |
 | 02-rnn-training-verification | 3/3 COMPLETE | ~42 min | ~14 min |
-| 03-latent-circuit-inference | 1/~3 | ~75 min | ~75 min |
+| 03-latent-circuit-inference | 2/3 | ~280 min compute + 5 weeks iteration | ~140 min |
 
 **Recent Trend:**
-- Last 7 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min), 02-01 (12 min), 02-02 (15 min), 02-03 (15 min), 03-01 (75 min)
-- Trend: ~7-75 min per plan (03-01 longer due to training runs)
+- Last 8 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min), 02-01 (12 min), 02-02 (15 min), 02-03 (15 min), 03-01 (75 min), 03-02 (205 min GPU ensemble + ~5 weeks iteration)
+- Trend: 03-02 was substantially larger than plan scope — 11 commits including RNN rearch (tanh→ReLU), data regen, z reformulation, GPU perf, cluster SLURM pipeline. Summary written post-hoc from artifacts.
 
 *Updated after each plan completion*
 
@@ -72,6 +72,13 @@ Recent decisions affecting current work:
 - [03-01]: T=500 in circuit_data.npz — trials run to max_steps with all 500 timesteps captured (fixation+stim+delay+decision within 500 steps)
 - [03-01]: Dual-modality training requires 50+ epochs (not the 10x20 smoke constraint) to achieve >55% accuracy
 - [03-01]: n_trials=40 (20 per context) in circuit_data.npz per CRITICAL MEMORY CONSTRAINTS — less than batch_size=128 means 1 partial batch per fitting epoch
+- [03-02]: Data regenerated on cluster — n_trials=40→1000 (500/context), T=500→75; addresses 03-01 batch-size and padding concerns
+- [03-02]: RNN switched from tanh ActorCritic to ReLU ContinuousActorCritic for LatentNet compatibility (LatentNet assumes ReLU dynamics both sides)
+- [03-02]: z = softmax(logits) not raw logits — mse_z drops from ~30 to ~0.3, balances with nmse_y at l_y=1.0 per paper
+- [03-02]: n_latent=16 used for benchmark run (plan spec & cluster default: 8) — flagged as parameter to sweep in 03-03
+- [03-02]: Cluster SLURM pipeline established (cluster/run_circuit_ensemble.sh, setup_env.sh, .regen.lock) — reusable for 03-03 perturbation sweeps
+- [03-02]: Invariant subspace corr=0.703 < 0.85 threshold → soft-fail accepted per plan; carried into 03-03 as open structural-validity concern
+- [03-02]: GPU device bug fixed — q must be recomputed on correct device at start of fit()/forward() (commit 973d50f)
 
 ### Pending Todos
 
@@ -88,12 +95,15 @@ Recent decisions affecting current work:
 - [RESOLVED 01-03]: extract_behavior private env API — FIXED with reset_epoch() public method
 - [RESOLVED 03-01]: Latent circuit rank selection — start with n=8 (Tutorial default), validate with invariant subspace correlation check
 - [RESOLVED 03-01]: Context-DM trial length — T=500 (runs to max_steps); LatentNet handles arbitrary T
-- [Phase 03-02 concern]: n_trials=40 < batch_size=128 in LatentNet.fit() — only partial batches per epoch. May need to collect more trials (e.g., 300 per context) for reliable fitting. Memory should allow it sequentially.
-- [Phase 03-02 concern]: T=500 includes interleaved intertrial timesteps (only ~12-41 steps have actual task structure). Long T increases fitting time but may not degrade quality if LatentNet can learn to ignore blank periods.
+- [RESOLVED 03-02]: n_trials=40 < batch_size=128 — FIXED by regen at n_trials=1000 (500/context)
+- [RESOLVED 03-02]: T=500 with ~5% task-relevant — PARTIALLY FIXED by T=75 regen (now ~20-40% task-relevant, not full fix)
+- [Phase 03-03 open]: Invariant subspace corr=0.703 < 0.85 — Q only partially linearises RNN connectivity. May contaminate perturbation analysis. Candidate causes: n_latent=16 over-parameterised, remaining task-structure/padding noise at T=75, or method limit at current data quality.
+- [Phase 03-03 open]: T=75 still has ~45-60 steps of blank/padding beyond task-active window (~15-30 steps at dt=100ms for ContextDecisionMaking). User flagged as concern — investigate whether this is noise affecting fit quality. Options: mask loss to task-active timesteps, shorten T, sliced fitting, or n_latent sweep.
+- [Phase 03-03 open]: n_latent=16 benchmark vs plan's 8 — sweep n_latent ∈ {4, 8, 12, 16} to find knee before committing to 16 for perturbation analysis.
 - [Phase 4 planning]: Nassar 2021 .mat file nested indexing not directly inspected — must run describe_mat_structure() before writing data loading code (research flag)
 
 ## Session Continuity
 
-Last session: 2026-03-20T00:15:00Z
-Stopped at: Completed 03-01-PLAN.md — Phase 3 Plan 1 done (LatentNet vendor + circuit data collection)
+Last session: 2026-04-24
+Stopped at: Completed 03-02-PLAN.md — Phase 3 Plan 2 done (100-init GPU ensemble + validation; soft-fail on invariant subspace documented). Summary written post-hoc from cluster artifacts. Ready to discuss/plan 03-03 with open task-structure concern.
 Resume file: None

@@ -65,8 +65,8 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Vendor LatentNet, create collect_circuit_data(), train dual-modality model, collect u/z/y tensors (Wave 1)
-- [ ] 03-02-PLAN.md — Run 100-init LatentNet ensemble fitting, invariant subspace + activity-level validation, save validation_results.json (Wave 2)
+- [x] 03-01-PLAN.md — Vendor LatentNet, create collect_circuit_data(), train dual-modality model, collect u/z/y tensors (Wave 1) — COMPLETE 2026-03-20
+- [x] 03-02-PLAN.md — Run 100-init LatentNet ensemble fitting, invariant subspace + activity-level validation, save validation_results.json (Wave 2) — COMPLETE 2026-04-24 (SOFT-FAIL on invariant subspace; see 03-02-SUMMARY.md)
 - [ ] 03-03-PLAN.md — Implement perturbation analysis (Q-mapped rank-one weight perturbation), wire 08_infer_latent_circuits.py pipeline (Wave 3)
 
 ### Phase 4: Bayesian Model Fitting
@@ -109,6 +109,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Infrastructure and Organization | 3/3 | ✓ Complete | 2026-03-18 |
 | 2. RNN Training Verification | 3/3 | ✓ Complete | 2026-03-19 |
-| 3. Latent Circuit Inference | 0/3 | Not started | - |
+| 3. Latent Circuit Inference | 2/3 | In progress | - |
 | 4. Bayesian Model Fitting | 0/4 | Not started | - |
 | 5. Human-vs-RNN Comparison | 0/2 | Not started | - |
