@@ -62,12 +62,13 @@ Plans:
   2. The selected solution's QᵀW_recQ correlation with inferred w_rec is >= 0.85 (invariant subspace condition)
   3. Projecting RNN responses onto latent axes reproduces the trial-averaged dynamics (activity-level validation passes)
   4. Perturbing w_rec in latent space and mapping back to RNN weights produces a measurable predicted behavioral change
-**Plans:** 3 plans
+**Plans:** 4 plans
 
 Plans:
 - [x] 03-01-PLAN.md — Vendor LatentNet, create collect_circuit_data(), train dual-modality model, collect u/z/y tensors (Wave 1) — COMPLETE 2026-03-20
 - [x] 03-02-PLAN.md — Run 100-init LatentNet ensemble fitting, invariant subspace + activity-level validation, save validation_results.json (Wave 2) — COMPLETE 2026-04-24 (SOFT-FAIL on invariant subspace; see 03-02-SUMMARY.md)
-- [ ] 03-03-PLAN.md — Implement perturbation analysis (Q-mapped rank-one weight perturbation), wire 08_infer_latent_circuits.py pipeline (Wave 3)
+- [ ] 03-03-PLAN.md — Wave A: n_latent sweep at {4, 8, 12, 16} on cluster, Pareto curve + Q selection by max invariant_subspace_corr (Wave 3)
+- [ ] 03-04-PLAN.md — Wave B: perturbation analysis (Q-mapped rank-one weight perturbation) on Wave A's chosen Q + 08_infer_latent_circuits.py pipeline + story-1-vs-story-2 writeup (Wave 4)
 
 ### Phase 4: Bayesian Model Fitting
 **Goal**: The Nassar 2021 reduced Bayesian observer model is implemented in NumPyro/JAX, validated on synthetic data, fit per-subject to human schizophrenia data, and fit to RNN behavioral outputs — all with MCMC convergence diagnostics enforced.
@@ -109,6 +110,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Infrastructure and Organization | 3/3 | ✓ Complete | 2026-03-18 |
 | 2. RNN Training Verification | 3/3 | ✓ Complete | 2026-03-19 |
-| 3. Latent Circuit Inference | 2/3 | In progress | - |
+| 3. Latent Circuit Inference | 2/4 | In progress | - |
 | 4. Bayesian Model Fitting | 0/4 | Not started | - |
 | 5. Human-vs-RNN Comparison | 0/2 | Not started | - |
