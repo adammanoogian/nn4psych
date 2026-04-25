@@ -1,0 +1,4 @@
+4 54946902 n_latent_sweep/n4
+8 54946903 n_latent_sweep/n8
+12 54946904 n_latent_sweep/n12
+16 54946905 n_latent_sweep/n16
