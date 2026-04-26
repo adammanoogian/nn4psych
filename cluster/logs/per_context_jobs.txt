@@ -1,5 +1,5 @@
 # Per-context fit jobs — Plan 03-06
-# Submitted: 2026-04-26T19:49:56+10:00
-context_0_fit_jid=54965054
-context_1_fit_jid=54965055
-autopush_jid=54965056
+# Submitted: 2026-04-26T23:43:11+10:00
+context_0_fit_jid=54968589
+context_1_fit_jid=54968590
+autopush_jid=54968591
