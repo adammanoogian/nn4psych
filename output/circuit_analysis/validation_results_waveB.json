@@ -1,0 +1,22 @@
+{
+  "invariant_subspace_corr": 0.419509019385932,
+  "invariant_subspace_pass": false,
+  "activity_r2_full_space": -0.6897051334381104,
+  "activity_r2_latent_space": 0.10835844278335571,
+  "trial_avg_r2_full_space": -0.27626633644104004,
+  "trial_avg_r2_latent_space": 0.24052953720092773,
+  "trial_avg_r2_by_condition": {
+    "0": -0.2635307312011719,
+    "1": -0.2890019416809082
+  },
+  "nmse_y": 4.946508407592773,
+  "nmse_q": 1.8349436521530151,
+  "mse_z": 0.3421344459056854,
+  "threshold": 0.85,
+  "data_shape": {
+    "n_trials": 1000,
+    "T": 75,
+    "N": 64
+  },
+  "wave_a_chosen_rank": 12
+}
