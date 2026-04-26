@@ -65,6 +65,9 @@ figs*
 # Wave A n_latent sweep tree (per-rank ensemble outputs + Pareto aggregates)
 !/output/circuit_analysis/n_latent_sweep/
 !/output/circuit_analysis/n_latent_sweep/**
+# Per-context diagnostic fits (Plan 03-06)
+!/output/circuit_analysis/per_context/
+!/output/circuit_analysis/per_context/**
 # Re-ignore intermediate scratch inside the sweep tree
 /output/circuit_analysis/**/.regen.lock
 
@@ -77,6 +80,8 @@ figs*
 !/data/processed/rnn_behav/model_context_dm_dual.pth
 !/data/processed/rnn_behav/circuit_data_metadata.json
 !/data/processed/rnn_behav/metadata.json
+# 03-05: pre-masked backup — fixed name so it never pollutes git status
+data/processed/rnn_behav/circuit_data.npz.pre_masked_backup
 
 /figures/*
 !/figures/.gitkeep
