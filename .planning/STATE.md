@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 3 of 5 (Latent Circuit Inference) — In gap-closure
-Plan: 4/4 base plans complete; 03-05 (masked-loss fits, cluster submitted); 03-06 partial (Task 1 done, Task 2 pending autopush)
-Status: 03-05 complete (cluster jobs submitted, awaiting autopush); 03-06 Task 1 complete — driver + cluster scripts + smoke test done, cluster submission pending manual run of `bash cluster/run_per_context_fits.sh` on Monash M3, Task 2 blocked on autopush delivery.
-Last activity: 2026-04-26 — Completed 03-06 Task 1 (per-context latent circuit driver, SLURM scripts, smoke test passed). Resume: run cluster/run_per_context_fits.sh on M3, then /gsd:execute-phase 03 --gaps-only after autopush.
+Plan: 4/4 base plans complete; 03-05 Tasks 1-2 complete (cluster code pushed, SSH pending); 03-06 Task 1 done (cluster scripts ready)
+Status: 03-05 PARTIAL (Tasks 1-2 done — code committed+pushed, cluster submission requires SSH to M3 + git pull + bash run_n_latent_sweep_masked.sh); 03-06 Task 1 complete — driver + cluster scripts + smoke test done, cluster submission pending.
+Last activity: 2026-04-26 — 03-05 Tasks 1-2 complete: task_active_mask added, masked-loss fit wired, cluster submitter created, circuit_data.npz pushed. Also 03-06 Task 1 complete.
 
 Progress: [████████░░] ~77% (10/~13 base plans + Phase 3.1 plans in-progress)
 
@@ -85,6 +85,12 @@ Recent decisions affecting current work:
 - [03-04]: LatentNet sigma_rec=0.15 noise always active — cluster metrics (corr=0.78, nmse_y=0.247) were single-seed measurements right after training; fresh eval locally gives corr=0.42, nmse_y=4.9; stochastic eval is a pre-existing LatentNet limitation
 - [03-04]: --quick flag now redirects data/output to smoke_test/ subdirs (prevents overwriting canonical circuit_data.npz and output artifacts)
 - [03-04]: Phase 4 proceeds independently; Q's role in final pipeline is descriptive not causal-mechanistic
+- [03-05]: Fixation+delay excluded from task_active_mask (sensorimotor-only; discrimination signal only in stimulus+decision periods)
+- [03-05]: task_active_mask=None in fit_latent_circuit_ensemble is bit-identical to pre-03-05 Wave A behavior (verified smoke test)
+- [03-05]: circuit_data.npz committed to git (un-ignored) so cluster can git pull mask-augmented file; fallback regen on cluster would produce file without task_active_mask key
+- [03-05]: cluster/run_circuit_ensemble.sh MASKED=1 assertion raises KeyError if task_active_mask missing; prevents silent full-T fitting on stale checkout
+- [03-05]: nmse_y_full always reported alongside masked nmse_y for Wave A cross-comparability
+- [03-05]: mini-batch masked loop (batch_size=128, connectivity_masks() after each batch) mirrors LatentNet.fit() to preserve training dynamics
 - [03-06]: sigma_rec=0.15 default (no eval-mode override) for per-context fits — cluster_same_seed_as_train matches Wave A pooled baseline for direct corr comparison
 - [03-06]: circuit_data.npz sliced READ-ONLY by modality_context — no writes, no race condition with 03-05's task_active_mask
 - [03-06]: afterany (not afterok) for autopush — push fires even if one context fit fails
@@ -107,7 +113,7 @@ Recent decisions affecting current work:
 - [RESOLVED 03-02]: n_trials=40 < batch_size=128 — FIXED by regen at n_trials=1000 (500/context)
 - [RESOLVED 03-02]: T=500 with ~5% task-relevant — PARTIALLY FIXED by T=75 regen (now ~20-40% task-relevant, not full fix)
 - [RESOLVED 03-04]: n_latent sweep completed (03-03); rank n=12 selected as best of tried; STORY_2 committed; CIRC-05 closed (with caveats per writeup)
-- [Phase 3.1 IN-PROGRESS — Gap 1, priority 1 — 03-05]: T=75 padding noise — masked-loss fitting over task-active timesteps. 03-05 cluster jobs submitted; awaiting autopush. task_active_mask added to circuit_data.npz.
+- [Phase 3.1 IN-PROGRESS — Gap 1, priority 1 — 03-05]: T=75 padding noise — masked-loss fitting over task-active timesteps. Tasks 1-2 COMPLETE (circuit_inference.py + circuit_data.npz + CLI + cluster scripts committed+pushed). Cluster submission PENDING SSH to M3. Run: `bash cluster/run_n_latent_sweep_masked.sh --ranks 8,12,16`. Task 3 (aggregator) waits for autopush.
 - [Phase 3.1 IN-PROGRESS — Gap 3, priority 3 / diagnostic — 03-06]: Per-context fitting (modality_context 0 vs 1) — Task 1 complete (driver + cluster scripts + smoke test). Cluster submission pending: `bash cluster/run_per_context_fits.sh` on Monash M3. Task 2 (aggregation + conclusion) awaits autopush.
 - [Phase 3.1 OPEN — Gap 2, priority 2]: Shorter T regen (T≈25-40 with delay=0) — orthogonal probe of same hypothesis. Not yet planned.
 - [Phase 3.1 OPEN — confound]: LatentNet stochastic eval — sigma_rec noise always active; cluster/local metric discrepancy is a pre-existing limitation; should fix or pin a single eval seed before quantitative comparisons between runs (Gap 4 candidate?).
@@ -116,7 +122,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-26
-Stopped at: Completed 03-06 Task 1 (per-context latent circuit fitting driver + cluster scripts + smoke test). Cluster submission pending on Monash M3. Task 2 awaits autopush delivery.
-Resume: (1) On Monash M3: `bash cluster/run_per_context_fits.sh`; (2) After autopush: `/gsd:execute-phase 03 --gaps-only` to run Task 2.
+Last session: 2026-04-26T18:00:00Z (approximate)
+Stopped at: Completed 03-05 Tasks 1-2 (masked-loss fit + circuit_data.npz + CLI + cluster). Also 03-06 Task 1. Both plans blocked on cluster SSH for submission.
+Resume: (1) On Monash M3: `git pull origin main && bash cluster/run_n_latent_sweep_masked.sh --ranks 8,12,16` for 03-05; `bash cluster/run_per_context_fits.sh` for 03-06. (2) After autopush of both: `/gsd:execute-phase 03 --gaps-only` to run Task 3 of 03-05 and Task 2 of 03-06.
 Resume file: None
