@@ -1,10 +1,4 @@
-# Masked n_latent sweep — submission pending
-# Run on Monash M3 SLURM cluster after SSH connection:
-#   git pull origin main   # ensure circuit_data.npz with task_active_mask is present
-#   bash cluster/run_n_latent_sweep_masked.sh --ranks 8,12,16
-# Then update this file with the JIDs returned by sbatch.
-# Expected format:
-#   8  <JID1>  n_latent_sweep_masked/n8  MASKED=1
-#   12 <JID2>  n_latent_sweep_masked/n12 MASKED=1
-#   16 <JID3>  n_latent_sweep_masked/n16 MASKED=1
-#   PUSH <JID4> afterany:<JID1>:<JID2>:<JID3>
+8 54965048 n_latent_sweep_masked/n8 MASKED=1
+12 54965049 n_latent_sweep_masked/n12 MASKED=1
+16 54965050 n_latent_sweep_masked/n16 MASKED=1
+PUSH 54965051 afterany:54965048:54965049:54965050

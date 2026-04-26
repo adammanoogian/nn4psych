@@ -1,7 +1,5 @@
 # Per-context fit jobs — Plan 03-06
-# Status: PENDING CLUSTER SUBMISSION
-# Run: bash cluster/run_per_context_fits.sh  (on Monash M3 cluster)
-# This file will be overwritten by run_per_context_fits.sh with actual JIDs.
-context_0_fit_jid=PENDING
-context_1_fit_jid=PENDING
-autopush_jid=PENDING
+# Submitted: 2026-04-26T19:49:56+10:00
+context_0_fit_jid=54965054
+context_1_fit_jid=54965055
+autopush_jid=54965056
