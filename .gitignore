@@ -80,6 +80,10 @@ figs*
 !/data/processed/rnn_behav/model_context_dm_dual.pth
 !/data/processed/rnn_behav/circuit_data_metadata.json
 !/data/processed/rnn_behav/metadata.json
+# 03-05: track canonical circuit_data.npz so cluster can git pull it
+# (cluster assertion requires task_active_mask when MASKED=1; stale npz
+#  would trigger fallback regen WITHOUT the mask key)
+!/data/processed/rnn_behav/circuit_data.npz
 # 03-05: pre-masked backup — fixed name so it never pollutes git status
 data/processed/rnn_behav/circuit_data.npz.pre_masked_backup
 
