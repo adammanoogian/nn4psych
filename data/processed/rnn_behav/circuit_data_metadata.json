@@ -25,5 +25,13 @@
     "labels_modality_context",
     "labels_coherence_sign",
     "labels_correct_action"
-  ]
+  ],
+  "has_task_active_mask": true,
+  "task_active_mask_shape": [
+    1000,
+    75
+  ],
+  "task_active_mean_steps": 32.561,
+  "task_active_min_steps": 20,
+  "task_active_max_steps": 43
 }
