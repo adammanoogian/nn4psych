@@ -70,6 +70,8 @@ figs*
 !/output/circuit_analysis/per_context/**
 # Re-ignore intermediate scratch inside the sweep tree
 /output/circuit_analysis/**/.regen.lock
+# Re-ignore smoke-test outputs anywhere (1-init/--quick artifacts, not canonical)
+/output/circuit_analysis/**/smoke_test*/
 
 # Canonical RNN checkpoints + provenance metadata (small, named, reproducible).
 # These are INPUTS to circuit analysis — committing them lets collaborators run
