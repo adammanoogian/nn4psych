@@ -3,13 +3,16 @@ from __future__ import annotations
 """
 Circuit data collection for latent circuit inference.
 
-Provides collect_circuit_data() to extract (u, z, y) tensors from a trained
-ActorCritic model running ContextDecisionMaking-v0, for use with LatentNet.fit().
+Provides collect_circuit_data() to extract (u, z, y, task_active_mask) tensors
+from a trained ActorCritic model running ContextDecisionMaking-v0, for use with
+LatentNet.fit().
 
-The three tensors follow the LatentNet convention:
-  u: input stimulus at each timestep  (n_trials, T, input_dim)
-  z: actor logits at each timestep    (n_trials, T, action_dim)
-  y: RNN hidden states                (n_trials, T, hidden_dim)
+The four tensors follow the LatentNet convention:
+  u: input stimulus at each timestep      (n_trials, T, input_dim)
+  z: actor logits at each timestep        (n_trials, T, action_dim)
+  y: RNN hidden states                    (n_trials, T, hidden_dim)
+  task_active_mask: bool mask over steps  (n_trials, T), True during
+    stimulus + decision periods (excludes fixation, delay, and blank padding)
 
 All trials are truncated to the minimum observed trial length (T) so the
 arrays are uniform with no NaN values, as required by LatentNet.fit().
@@ -73,6 +76,12 @@ def collect_circuit_data(
         'u' : np.ndarray, shape (n_trials, T, input_dim), float32
         'z' : np.ndarray, shape (n_trials, T, action_dim), float32
         'y' : np.ndarray, shape (n_trials, T, hidden_dim), float32
+        'task_active_mask' : np.ndarray, shape (n_trials, T), bool
+            True at each timestep where the environment is in the 'stimulus'
+            or 'decision' period. Fixation, delay, and blank/padding timesteps
+            are False. Derived from NeuroGym TrialEnv timing (not hard-coded).
+            Falls back to all-True with a warning if the env does not expose
+            per-period timing (backward-compat safeguard).
         'labels' : dict with per-trial condition arrays:
             'modality_context' : np.ndarray, shape (n_trials,), int
             'coherence_sign'   : np.ndarray, shape (n_trials,), int (+1 or -1)
@@ -91,10 +100,11 @@ def collect_circuit_data(
     torch_device = torch.device(device)
 
     # Per-trial storage (variable-length until we truncate)
-    all_u_trials = []   # list of (T_trial, input_dim) arrays
-    all_z_trials = []   # list of (T_trial, action_dim) arrays
-    all_y_trials = []   # list of (T_trial, hidden_dim) arrays
-    all_lengths = []    # int per trial
+    all_u_trials = []      # list of (T_trial, input_dim) arrays
+    all_z_trials = []      # list of (T_trial, action_dim) arrays
+    all_y_trials = []      # list of (T_trial, hidden_dim) arrays
+    all_mask_trials = []   # list of (T_trial,) bool arrays
+    all_lengths = []       # int per trial
 
     # Per-trial label storage
     label_modality_context = []
@@ -141,6 +151,17 @@ def collect_circuit_data(
                 trial_u = []
                 trial_z = []
                 trial_y = []
+                trial_mask = []  # bool per step: True during stimulus or decision
+
+                # Check whether the underlying NeuroGym TrialEnv exposes in_period.
+                # Access via env.env.unwrapped (NeurogymWrapper.env is the ngym.make()
+                # return value, and .unwrapped is the raw TrialEnv).
+                try:
+                    _uw = env.env.unwrapped
+                    _has_periods = callable(getattr(_uw, 'in_period', None))
+                except AttributeError:
+                    _uw = None
+                    _has_periods = False
 
                 norm_obs = env.normalize_states(obs)
                 reward = 0.0
@@ -152,8 +173,27 @@ def collect_circuit_data(
                     u_t = state.astype(np.float32).copy()
                     trial_u.append(u_t)
 
+                    # Record task-active mask at this timestep (before step).
+                    # True only during 'stimulus' or 'decision' periods; fixation and
+                    # delay are excluded (they carry no discrimination signal).
+                    try:
+                        if _has_periods:
+                            mask_t = bool(
+                                _uw.in_period('stimulus') or _uw.in_period('decision')
+                            )
+                        else:
+                            mask_t = True  # fallback: treat all as active
+                    except Exception:
+                        mask_t = True  # fallback on any period-query failure
+                    trial_mask.append(mask_t)
+
                     # Forward pass
-                    x = torch.tensor(state, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(torch_device)
+                    x = (
+                        torch.tensor(state, dtype=torch.float32)
+                        .unsqueeze(0)
+                        .unsqueeze(0)
+                        .to(torch_device)
+                    )
                     actor_logits, _, h = model(x, h)
 
                     # Record z (softmax policy beliefs, bounded [0,1]) and y (hidden state)
@@ -172,12 +212,22 @@ def collect_circuit_data(
                     state = np.concatenate([norm_obs, env.context, [reward]])
                     steps += 1
 
+                if not _has_periods and steps > 0:
+                    warnings.warn(
+                        f"env.env.unwrapped does not expose in_period() for "
+                        f"modality_context={ctx}. task_active_mask defaults to "
+                        "all-True for this trial (backward-compat fallback).",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+
                 # Store trial data if at least 1 step was taken
                 T_trial = len(trial_u)
                 if T_trial > 0:
-                    all_u_trials.append(np.stack(trial_u))   # (T_trial, input_dim)
-                    all_z_trials.append(np.stack(trial_z))   # (T_trial, action_dim)
-                    all_y_trials.append(np.stack(trial_y))   # (T_trial, hidden_dim)
+                    all_u_trials.append(np.stack(trial_u))              # (T_trial, input_dim)
+                    all_z_trials.append(np.stack(trial_z))              # (T_trial, action_dim)
+                    all_y_trials.append(np.stack(trial_y))              # (T_trial, hidden_dim)
+                    all_mask_trials.append(np.array(trial_mask, dtype=bool))  # (T_trial,)
                     all_lengths.append(T_trial)
                     label_modality_context.append(ctx)
                     label_coherence_sign.append(coherence_sign)
@@ -201,9 +251,20 @@ def collect_circuit_data(
         print(f"  Truncating all trials to T={T} (minimum observed length).")
 
     # Stack into uniform arrays (truncate to T)
-    u = np.stack([arr[:T] for arr in all_u_trials]).astype(np.float32)  # (n_total, T, input_dim)
-    z = np.stack([arr[:T] for arr in all_z_trials]).astype(np.float32)  # (n_total, T, action_dim)
-    y = np.stack([arr[:T] for arr in all_y_trials]).astype(np.float32)  # (n_total, T, hidden_dim)
+    u = np.stack([arr[:T] for arr in all_u_trials]).astype(np.float32)   # (n_total, T, input_dim)
+    z = np.stack([arr[:T] for arr in all_z_trials]).astype(np.float32)   # (n_total, T, action_dim)
+    y = np.stack([arr[:T] for arr in all_y_trials]).astype(np.float32)   # (n_total, T, hidden_dim)
+    task_active_mask = np.stack(
+        [arr[:T] for arr in all_mask_trials]
+    )  # (n_total, T), bool
+
+    # Sanity report: mean active steps per trial
+    active_per_trial = task_active_mask.sum(axis=1)  # (n_total,)
+    print(
+        f"task_active_mask: mean_active={float(active_per_trial.mean()):.1f}, "
+        f"min={int(active_per_trial.min())}, max={int(active_per_trial.max())} "
+        f"steps (out of T={T})"
+    )
 
     labels = {
         'modality_context': np.array(label_modality_context, dtype=np.int32),
@@ -211,12 +272,14 @@ def collect_circuit_data(
         'correct_action':   np.array(label_correct_action,   dtype=np.int32),
     }
 
-    print(f"Final shapes: u={u.shape}, z={z.shape}, y={y.shape}")
+    print(f"Final shapes: u={u.shape}, z={z.shape}, y={y.shape}, "
+          f"task_active_mask={task_active_mask.shape}")
 
     return {
         'u': u,
         'z': z,
         'y': y,
+        'task_active_mask': task_active_mask,
         'labels': labels,
         'T': T,
         'n_trials': n_total,
@@ -243,12 +306,16 @@ def save_circuit_data(data: dict, output_dir: str) -> None:
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build save dict: u, z, y plus flattened label arrays
+    # Build save dict: u, z, y, task_active_mask plus flattened label arrays
     save_dict = {
         'u': data['u'],
         'z': data['z'],
         'y': data['y'],
     }
+    # Include task_active_mask if present (added in 03-05)
+    if 'task_active_mask' in data:
+        save_dict['task_active_mask'] = data['task_active_mask']
+
     labels = data.get('labels', {})
     for key, arr in labels.items():
         save_dict[f'labels_{key}'] = arr
@@ -256,23 +323,37 @@ def save_circuit_data(data: dict, output_dir: str) -> None:
     npz_path = out_dir / 'circuit_data.npz'
     np.savez(npz_path, **save_dict)
 
-    # Save metadata JSON
+    # Save metadata JSON — all values cast to Python builtins for json.dump
+    has_mask = 'task_active_mask' in data
     metadata = {
         'n_trials': int(data['n_trials']),
         'T': int(data['T']),
         'modality_contexts': list(data['modality_contexts']),
         'n_trials_per_context': int(data['n_trials_per_context']),
-        'u_shape': list(data['u'].shape),
-        'z_shape': list(data['z'].shape),
-        'y_shape': list(data['y'].shape),
+        'u_shape': [int(x) for x in data['u'].shape],
+        'z_shape': [int(x) for x in data['z'].shape],
+        'y_shape': [int(x) for x in data['y'].shape],
         'label_keys': [f'labels_{k}' for k in labels.keys()],
+        'has_task_active_mask': has_mask,
     }
+    if has_mask:
+        mask = data['task_active_mask']
+        active = mask.sum(axis=1)
+        metadata['task_active_mask_shape'] = [int(x) for x in mask.shape]
+        metadata['task_active_mean_steps'] = float(active.mean())
+        metadata['task_active_min_steps'] = int(active.min())
+        metadata['task_active_max_steps'] = int(active.max())
+
     meta_path = out_dir / 'circuit_data_metadata.json'
     with open(meta_path, 'w') as f:
         json.dump(metadata, f, indent=2)
 
     print(f"Saved circuit data to {out_dir}/:")
-    print(f"  circuit_data.npz: u={data['u'].shape}, z={data['z'].shape}, y={data['y'].shape}")
+    print(
+        f"  circuit_data.npz: u={data['u'].shape}, z={data['z'].shape}, "
+        f"y={data['y'].shape}"
+        + (f", task_active_mask={data['task_active_mask'].shape}" if has_mask else "")
+    )
     print(f"  circuit_data_metadata.json")
 
 
@@ -290,6 +371,7 @@ def fit_latent_circuit_ensemble(
     device: str = 'cpu',
     verbose: bool = True,
     include_output_loss: bool = True,
+    task_active_mask: np.ndarray | None = None,
 ) -> dict:
     """
     Fit an ensemble of LatentNet instances and return the best by lowest nmse_y.
@@ -298,6 +380,11 @@ def fit_latent_circuit_ensemble(
     fitted for ``epochs`` epochs on the provided circuit data. The initialization
     with the lowest normalized MSE between projected latent states and full RNN
     hidden states (``nmse_y``) is selected as the best solution.
+
+    When ``task_active_mask`` is provided, the NMSE_y (and mse_z) loss is
+    computed over task-active timesteps only (stimulus + decision periods),
+    ignoring fixation, delay, and blank/padding steps. This implements Gap 1
+    of Phase 3.1: masked-loss fitting to avoid the T=75 padding hypothesis.
 
     Parameters
     ----------
@@ -326,18 +413,27 @@ def fit_latent_circuit_ensemble(
         Device for computation. Default is 'cpu'.
     verbose : bool, optional
         Print per-init progress. Default is True.
+    task_active_mask : np.ndarray or None, optional
+        Bool mask of shape (n_trials, T). When provided, loss is computed over
+        masked timesteps only (NMSE_y and mse_z are both masked). When None,
+        behavior is identical to the pre-03-05 unmasked fitting. Default None.
 
     Returns
     -------
     dict with keys:
-        'best_model'    : LatentNet with best weights loaded
-        'best_nmse_y'   : float
-        'best_mse_z'    : float
-        'best_init_idx' : int (0-indexed)
-        'all_nmse_y'    : list of floats
-        'all_mse_z'     : list of floats
-        'n_inits'       : int
-        'n_latent'      : int
+        'best_model'     : LatentNet with best weights loaded
+        'best_nmse_y'    : float — masked NMSE_y if mask provided, else full
+        'best_mse_z'     : float
+        'best_nmse_y_full' : float — full (unmasked) NMSE_y (only differs from
+                             best_nmse_y when task_active_mask is provided)
+        'best_init_idx'  : int (0-indexed)
+        'all_nmse_y'     : list of floats (masked if mask provided)
+        'all_mse_z'      : list of floats
+        'all_nmse_y_full' : list of floats (full NMSE_y per init; equals
+                            all_nmse_y when mask is None)
+        'n_inits'        : int
+        'n_latent'       : int
+        'masked'         : bool — True if task_active_mask was applied
     """
     # Convert numpy arrays to float32 tensors on the target device
     torch_device = torch.device(device)
@@ -345,13 +441,21 @@ def fit_latent_circuit_ensemble(
     z_tensor = torch.tensor(z, dtype=torch.float32, device=torch_device).detach()
     y_tensor = torch.tensor(y, dtype=torch.float32, device=torch_device).detach()
 
+    # Build mask tensor (n_trials, T, 1) once; None when not masking
+    mask_t: torch.Tensor | None = None
+    if task_active_mask is not None:
+        mask_t = torch.tensor(
+            task_active_mask, dtype=torch.float32, device=torch_device
+        ).unsqueeze(-1)  # (n_trials, T, 1)
+
     n_trials = u.shape[0]
     T = u.shape[1]
     input_size = u.shape[2]
     output_size = z.shape[2]
     N = y.shape[2]
 
-    all_nmse_y = []
+    all_nmse_y = []       # masked if mask_t provided, else full
+    all_nmse_y_full = []  # always full NMSE_y (for cross-comparability with Wave A)
     all_mse_z = []
     all_state_dicts = []
 
@@ -373,24 +477,87 @@ def fit_latent_circuit_ensemble(
         )
         latent_net = latent_net.to(torch_device)
 
-        # Fit (suppress LatentNet's internal epoch prints during ensemble)
-        latent_net.fit(
-            u_tensor, z_tensor, y_tensor,
-            epochs=epochs,
-            lr=lr,
-            l_y=l_y,
-            weight_decay=weight_decay,
-            verbose=False,
-            include_output_loss=include_output_loss,
-        )
+        if mask_t is not None:
+            # Masked fitting: replicate LatentNet.fit()'s mini-batch loop but
+            # substitute masked NMSE_y and mse_z. mask_t is (n_trials, T, 1).
+            _batch_size = 128
+            optimizer = torch.optim.Adam(
+                latent_net.parameters(), lr=lr, weight_decay=weight_decay
+            )
+            latent_net.train()
+            # Re-init q on correct device (mirrors LatentNet.fit() preamble)
+            latent_net.q = latent_net.cayley_transform(latent_net.a)
+            latent_net.connectivity_masks()
+
+            for _epoch in range(epochs):
+                indices = torch.randperm(n_trials, device=torch_device)
+                for _start in range(0, n_trials, _batch_size):
+                    idx = indices[_start: _start + _batch_size]
+                    u_b = u_tensor[idx]
+                    z_b = z_tensor[idx]
+                    y_b = y_tensor[idx]
+                    m_b = mask_t[idx]  # (batch, T, 1)
+
+                    optimizer.zero_grad()
+                    x_b = latent_net(u_b)  # (batch, T, n_latent)
+
+                    # Masked NMSE_y: residuals zeroed at non-active timesteps
+                    # x_b @ q: (batch, T, N) where q has shape (n_latent, N)
+                    y_pred_b = x_b @ latent_net.q
+                    resid_sq_y = ((y_pred_b - y_b) ** 2) * m_b
+                    denom_sq_y = (y_b ** 2) * m_b
+                    nmse_y_loss = (
+                        resid_sq_y.sum() / denom_sq_y.sum().clamp_min(1e-12)
+                    )
+
+                    if include_output_loss:
+                        z_pred_b = latent_net.output_layer(x_b)
+                        resid_sq_z = ((z_pred_b - z_b) ** 2) * m_b
+                        denom_sq_z = (z_b ** 2) * m_b
+                        mse_z_loss = (
+                            resid_sq_z.sum() / denom_sq_z.sum().clamp_min(1e-12)
+                        )
+                        loss = mse_z_loss + l_y * nmse_y_loss
+                    else:
+                        loss = nmse_y_loss
+
+                    loss.backward()
+                    optimizer.step()
+                    # Re-orthonormalize Q and re-apply connectivity masks
+                    # (mirrors what LatentNet.fit() does after each batch)
+                    latent_net.q = latent_net.cayley_transform(latent_net.a)
+                    latent_net.connectivity_masks()
+            latent_net.eval()
+        else:
+            # Standard fitting (no mask) — identical to pre-03-05 behavior
+            latent_net.fit(
+                u_tensor, z_tensor, y_tensor,
+                epochs=epochs,
+                lr=lr,
+                l_y=l_y,
+                weight_decay=weight_decay,
+                verbose=False,
+                include_output_loss=include_output_loss,
+            )
 
         # Compute final metrics
         with torch.no_grad():
             x = latent_net(u_tensor)
-            nmse_y = latent_net.nmse_y(y_tensor, x).item()
+            # Full (unmasked) NMSE_y — always computed for cross-wave comparability
+            nmse_y_full = latent_net.nmse_y(y_tensor, x).item()
             mse_z = latent_net.mse_z(x, z_tensor).item()
 
+            if mask_t is not None:
+                # Masked NMSE_y at inference time (mirrors training loss)
+                y_pred_val = x @ latent_net.q
+                resid_sq = ((y_pred_val - y_tensor) ** 2) * mask_t
+                denom_sq = (y_tensor ** 2) * mask_t
+                nmse_y = float(resid_sq.sum() / denom_sq.sum().clamp_min(1e-12))
+            else:
+                nmse_y = nmse_y_full
+
         all_nmse_y.append(nmse_y)
+        all_nmse_y_full.append(nmse_y_full)
         all_mse_z.append(mse_z)
         # Move state_dict to CPU before storing (saves GPU memory)
         all_state_dicts.append({k: v.cpu() for k, v in latent_net.state_dict().items()})
@@ -400,8 +567,19 @@ def fit_latent_circuit_ensemble(
         eta = t_init_elapsed * (n_inits - i - 1)
 
         if verbose:
-            print(f"Init {i + 1}/{n_inits}: nmse_y={nmse_y:.4f}, mse_z={mse_z:.4f} "
-                  f"({t_init_elapsed:.1f}s, ETA {eta/60:.1f}min)", flush=True)
+            if mask_t is not None:
+                print(
+                    f"Init {i + 1}/{n_inits}: nmse_y(masked)={nmse_y:.4f}, "
+                    f"nmse_y(full)={nmse_y_full:.4f}, mse_z={mse_z:.4f} "
+                    f"({t_init_elapsed:.1f}s, ETA {eta/60:.1f}min)",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"Init {i + 1}/{n_inits}: nmse_y={nmse_y:.4f}, mse_z={mse_z:.4f} "
+                    f"({t_init_elapsed:.1f}s, ETA {eta/60:.1f}min)",
+                    flush=True,
+                )
 
         # Free memory between inits
         del latent_net
@@ -409,12 +587,25 @@ def fit_latent_circuit_ensemble(
         gc.collect()
 
     # Select best initialization by lowest nmse_y
+    # (masked nmse_y when mask provided; full otherwise — preserves Wave A
+    # selection semantics when mask is None)
     best_init_idx = int(np.argmin(all_nmse_y))
     best_nmse_y = all_nmse_y[best_init_idx]
+    best_nmse_y_full = all_nmse_y_full[best_init_idx]
     best_mse_z = all_mse_z[best_init_idx]
 
     if verbose:
-        print(f"\nBest init: {best_init_idx} (nmse_y={best_nmse_y:.4f}, mse_z={best_mse_z:.4f})")
+        if mask_t is not None:
+            print(
+                f"\nBest init: {best_init_idx} "
+                f"(nmse_y(masked)={best_nmse_y:.4f}, "
+                f"nmse_y(full)={best_nmse_y_full:.4f}, mse_z={best_mse_z:.4f})"
+            )
+        else:
+            print(
+                f"\nBest init: {best_init_idx} "
+                f"(nmse_y={best_nmse_y:.4f}, mse_z={best_mse_z:.4f})"
+            )
 
     # Reload best state_dict into a fresh LatentNet on the same device
     best_model = LatentNet(
@@ -433,12 +624,15 @@ def fit_latent_circuit_ensemble(
     return {
         'best_model': best_model,
         'best_nmse_y': best_nmse_y,
+        'best_nmse_y_full': best_nmse_y_full,
         'best_mse_z': best_mse_z,
         'best_init_idx': best_init_idx,
         'all_nmse_y': all_nmse_y,
+        'all_nmse_y_full': all_nmse_y_full,
         'all_mse_z': all_mse_z,
         'n_inits': n_inits,
         'n_latent': n_latent,
+        'masked': mask_t is not None,
     }
 
 
