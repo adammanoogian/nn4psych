@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** RNN agent trainable on multiple cognitive tasks with analyzable hidden representations comparable to human data via Bayesian model fitting
-**Current focus:** Phase 3 COMPLETE — Phase 4 (Bayesian fitting) is next
+**Current focus:** Phase 3 — base plans (03-01..03-04) all DONE, but verifier returned `human_needed` on SC-2 / SC-4 soft-fails. User chose Option B (2026-04-26): pursue Phase 3.1 gap closure (masked-loss fitting + shorter T regen + condition-sliced fitting) BEFORE Phase 4. Phase 3 is therefore in gap-closure (NOT closed).
 
 ## Current Position
 
-Phase: 3 of 5 (Latent Circuit Inference) — COMPLETE (03-01 + 03-02 + 03-03 + 03-04 done)
-Plan: 4 of 4 in phase 03 complete
-Status: Phase 3 complete — STORY_2 committed; CIRC-05 closed; Phase 4 unblocked
-Last activity: 2026-04-26 — Completed 03-04 (Wave B perturbation analysis; 0/50 significant effects; STORY_2)
+Phase: 3 of 5 (Latent Circuit Inference) — In gap-closure
+Plan: 4/4 base plans complete; Phase 3.1 gap-closure plans (03-05+) to be authored via /gsd:plan-phase 03 --gaps
+Status: 03-04 done; verifier flagged 2 soft-fails (SC-2, SC-4); user mandated Phase 3.1 gap closure. Phase 4 BLOCKED until gap closure attempt completes.
+Last activity: 2026-04-26 — Completed 03-04 + verifier ran + user chose Option B. About to invoke /gsd:plan-phase 03 --gaps.
 
-Progress: [█████████░] ~69% (9/~13 total plans)
+Progress: [████████░░] ~77% (10/~13 base plans + Phase 3.1 plans pending)
 
 ## Performance Metrics
 
@@ -103,16 +103,16 @@ Recent decisions affecting current work:
 - [RESOLVED 03-01]: Context-DM trial length — T=500 (runs to max_steps); LatentNet handles arbitrary T
 - [RESOLVED 03-02]: n_trials=40 < batch_size=128 — FIXED by regen at n_trials=1000 (500/context)
 - [RESOLVED 03-02]: T=500 with ~5% task-relevant — PARTIALLY FIXED by T=75 regen (now ~20-40% task-relevant, not full fix)
-- [RESOLVED 03-04]: Invariant subspace corr sweep completed (n=8: 0.71, n=12: 0.78, n=16: 0.69); n=12 chosen; STORY_2 committed; CIRC-05 closed
-- [RESOLVED 03-04]: n_latent sweep completed (03-03); rank n=12 selected as best of tried
-- [v2 open]: T=75 padding noise — deferred fix: masked-loss fitting over task-active timesteps is highest-priority fix; would directly test T=75 padding hypothesis
-- [v2 open]: LatentNet stochastic eval — sigma_rec noise always active; cluster/local metric discrepancy is a pre-existing limitation; should fix before quantitative comparisons between runs
-- [v2 open]: Perturbation strengths [-0.5, 0.5] are modest relative to max |w_rec_ij|=4.17; testing ±2 to ±5 in v2 might reveal dose-response
-- [Phase 4 planning]: Nassar 2021 .mat file nested indexing not directly inspected — must run describe_mat_structure() before writing data loading code (research flag)
+- [RESOLVED 03-04]: n_latent sweep completed (03-03); rank n=12 selected as best of tried; STORY_2 committed; CIRC-05 closed (with caveats per writeup)
+- [Phase 3.1 OPEN — Gap 1, priority 1]: T=75 padding noise — masked-loss fitting over task-active timesteps. Directly targets the T=75 padding hypothesis. See 03-VERIFICATION.md Gaps section.
+- [Phase 3.1 OPEN — Gap 2, priority 2]: Shorter T regen (T≈25-40 with delay=0) — orthogonal probe of same hypothesis.
+- [Phase 3.1 OPEN — Gap 3, priority 3 / diagnostic]: Condition-sliced fitting (per-context Qs) — diagnostic on whether RNN's structure is itself non-low-rank vs two interleaved low-rank circuits.
+- [Phase 3.1 OPEN — confound]: LatentNet stochastic eval — sigma_rec noise always active; cluster/local metric discrepancy is a pre-existing limitation; should fix or pin a single eval seed before quantitative comparisons between runs (Gap 4 candidate?).
+- [Phase 3.1 OPEN — diagnostic]: Perturbation strengths [-0.5, 0.5] are modest relative to max |w_rec_ij|=4.17; if Q quality is fixed, re-running with stronger strengths may give cleaner SC-4 evidence.
 - [Phase 4 planning]: Nassar 2021 .mat file nested indexing not directly inspected — must run describe_mat_structure() before writing data loading code (research flag)
 
 ## Session Continuity
 
 Last session: 2026-04-26
-Stopped at: Completed 03-04-PLAN.md — Phase 3 COMPLETE (Wave B perturbation analysis; STORY_2 committed; CIRC-05 closed). Phase 4 unblocked.
+Stopped at: Completed 03-04 (Wave B perturbation analysis; STORY_2 committed). Verifier returned `human_needed` (SC-2 + SC-4 soft-fails). User chose Option B → pursue Phase 3.1 gap closure before Phase 4. About to invoke /gsd:plan-phase 03 --gaps.
 Resume file: None

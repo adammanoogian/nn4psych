@@ -67,8 +67,9 @@ Plans:
 Plans:
 - [x] 03-01-PLAN.md — Vendor LatentNet, create collect_circuit_data(), train dual-modality model, collect u/z/y tensors (Wave 1) — COMPLETE 2026-03-20
 - [x] 03-02-PLAN.md — Run 100-init LatentNet ensemble fitting, invariant subspace + activity-level validation, save validation_results.json (Wave 2) — COMPLETE 2026-04-24 (SOFT-FAIL on invariant subspace; see 03-02-SUMMARY.md)
-- [ ] 03-03-PLAN.md — Wave A: n_latent sweep at {4, 8, 12, 16} on cluster, Pareto curve + Q selection by max invariant_subspace_corr (Wave 3)
-- [ ] 03-04-PLAN.md — Wave B: perturbation analysis (Q-mapped rank-one weight perturbation) on Wave A's chosen Q + 08_infer_latent_circuits.py pipeline + story-1-vs-story-2 writeup (Wave 4)
+- [x] 03-03-PLAN.md — Wave A: n_latent sweep at {4, 8, 12, 16} on cluster, Pareto curve + Q selection by max invariant_subspace_corr (Wave 3) — COMPLETE 2026-04-25 (n=12 chosen, corr=0.7833; spread=0.096; story_prepositioning=ran_out_of_fixes)
+- [x] 03-04-PLAN.md — Wave B: perturbation analysis (Q-mapped rank-one weight perturbation) on Wave A's chosen Q + 08_infer_latent_circuits.py pipeline + story-1-vs-story-2 writeup (Wave 4) — COMPLETE 2026-04-26 (STORY_2 committed; 0/50 significant perturbations — ambiguous due to stochastic-eval Q-quality discrepancy)
+- [ ] **Phase 3.1 (gap closure)** — verifier returned human_needed on SC-2 (corr=0.7833 < 0.85) and SC-4 (perturbation ambiguity); user chose Option B 2026-04-26: pursue masked-loss fitting + shorter T regen + condition-sliced fitting. Plans to be authored via /gsd:plan-phase 03 --gaps. See 03-VERIFICATION.md Gaps section.
 
 ### Phase 4: Bayesian Model Fitting
 **Goal**: The Nassar 2021 reduced Bayesian observer model is implemented in NumPyro/JAX, validated on synthetic data, fit per-subject to human schizophrenia data, and fit to RNN behavioral outputs — all with MCMC convergence diagnostics enforced.
@@ -110,6 +111,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Infrastructure and Organization | 3/3 | ✓ Complete | 2026-03-18 |
 | 2. RNN Training Verification | 3/3 | ✓ Complete | 2026-03-19 |
-| 3. Latent Circuit Inference | 2/4 | In progress | - |
-| 4. Bayesian Model Fitting | 0/4 | Not started | - |
+| 3. Latent Circuit Inference | 4/4 base + Phase 3.1 gap closure pending | In progress (gap-closure) | - |
+| 4. Bayesian Model Fitting | 0/4 | Blocked on Phase 3.1 gap closure | - |
 | 5. Human-vs-RNN Comparison | 0/2 | Not started | - |
