@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** RNN agent trainable on multiple cognitive tasks with analyzable hidden representations comparable to human data via Bayesian model fitting
-**Current focus:** Phase 3 — Latent Circuit Inference (03-01 + 03-02 complete; soft-fail on invariant subspace carried into 03-03)
+**Current focus:** Phase 3 COMPLETE — Phase 4 (Bayesian fitting) is next
 
 ## Current Position
 
-Phase: 3 of 5 (Latent Circuit Inference) — In progress
-Plan: 2 of 3 in phase 03 complete (03-01 + 03-02 done)
-Status: In progress — Phase 3, Plan 2 complete with documented soft-fail
-Last activity: 2026-04-24 — Completed 03-02 (100-init GPU ensemble on cluster; invariant subspace corr=0.703 soft-fails; trial-avg R²=0.98)
+Phase: 3 of 5 (Latent Circuit Inference) — COMPLETE (03-01 + 03-02 + 03-03 + 03-04 done)
+Plan: 4 of 4 in phase 03 complete
+Status: Phase 3 complete — STORY_2 committed; CIRC-05 closed; Phase 4 unblocked
+Last activity: 2026-04-26 — Completed 03-04 (Wave B perturbation analysis; 0/50 significant effects; STORY_2)
 
-Progress: [████████░░] ~62% (8/~13 total plans)
+Progress: [█████████░] ~69% (9/~13 total plans)
 
 ## Performance Metrics
 
@@ -29,11 +29,11 @@ Progress: [████████░░] ~62% (8/~13 total plans)
 |-------|-------|-------|----------|
 | 01-infrastructure-and-organization | 3/3 COMPLETE | ~24 min | ~8 min |
 | 02-rnn-training-verification | 3/3 COMPLETE | ~42 min | ~14 min |
-| 03-latent-circuit-inference | 2/3 | ~280 min compute + 5 weeks iteration | ~140 min |
+| 03-latent-circuit-inference | 4/4 COMPLETE | ~320 min compute + 5 weeks iteration | ~80 min |
 
 **Recent Trend:**
-- Last 8 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min), 02-01 (12 min), 02-02 (15 min), 02-03 (15 min), 03-01 (75 min), 03-02 (205 min GPU ensemble + ~5 weeks iteration)
-- Trend: 03-02 was substantially larger than plan scope — 11 commits including RNN rearch (tanh→ReLU), data regen, z reformulation, GPU perf, cluster SLURM pipeline. Summary written post-hoc from artifacts.
+- Last 9 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min), 02-01 (12 min), 02-02 (15 min), 02-03 (15 min), 03-01 (75 min), 03-02 (205 min GPU ensemble + ~5 weeks iteration), 03-03 (~?), 03-04 (39 min)
+- Trend: 03-04 executed cleanly in 39 min; 2 Rule 1 bugs auto-fixed (input_dim mismatch, --quick path overwriting data)
 
 *Updated after each plan completion*
 
@@ -79,6 +79,12 @@ Recent decisions affecting current work:
 - [03-02]: Cluster SLURM pipeline established (cluster/run_circuit_ensemble.sh, setup_env.sh, .regen.lock) — reusable for 03-03 perturbation sweeps
 - [03-02]: Invariant subspace corr=0.703 < 0.85 threshold → soft-fail accepted per plan; carried into 03-03 as open structural-validity concern
 - [03-02]: GPU device bug fixed — q must be recomputed on correct device at start of fit()/forward() (commit 973d50f)
+- [03-03]: Wave A picked n_latent=12 (corr=0.7833 cluster, Pareto spread=0.096); recommended_story="ran_out_of_fixes"
+- [03-04]: STORY_2 committed (ran out of fixes): Wave A Pareto spread pre-positioned; 0/50 significant perturbations at strengths [-0.5,0.5] is ambiguous (Q quality discrepancy — local corr=0.42 vs cluster=0.78 due to LatentNet stochastic eval)
+- [03-04]: set_num_tasks(1) in _eval_once — model trained with obs=5+ctx=1+reward=1=input_dim=7; set_num_tasks(2) gives 8-dim input, mismatches W_ih (64x7)
+- [03-04]: LatentNet sigma_rec=0.15 noise always active — cluster metrics (corr=0.78, nmse_y=0.247) were single-seed measurements right after training; fresh eval locally gives corr=0.42, nmse_y=4.9; stochastic eval is a pre-existing LatentNet limitation
+- [03-04]: --quick flag now redirects data/output to smoke_test/ subdirs (prevents overwriting canonical circuit_data.npz and output artifacts)
+- [03-04]: Phase 4 proceeds independently; Q's role in final pipeline is descriptive not causal-mechanistic
 
 ### Pending Todos
 
@@ -97,13 +103,16 @@ Recent decisions affecting current work:
 - [RESOLVED 03-01]: Context-DM trial length — T=500 (runs to max_steps); LatentNet handles arbitrary T
 - [RESOLVED 03-02]: n_trials=40 < batch_size=128 — FIXED by regen at n_trials=1000 (500/context)
 - [RESOLVED 03-02]: T=500 with ~5% task-relevant — PARTIALLY FIXED by T=75 regen (now ~20-40% task-relevant, not full fix)
-- [Phase 03-03 open]: Invariant subspace corr=0.703 < 0.85 — Q only partially linearises RNN connectivity. May contaminate perturbation analysis. Candidate causes: n_latent=16 over-parameterised, remaining task-structure/padding noise at T=75, or method limit at current data quality.
-- [Phase 03-03 open]: T=75 still has ~45-60 steps of blank/padding beyond task-active window (~15-30 steps at dt=100ms for ContextDecisionMaking). User flagged as concern — investigate whether this is noise affecting fit quality. Options: mask loss to task-active timesteps, shorten T, sliced fitting, or n_latent sweep.
-- [Phase 03-03 open]: n_latent=16 benchmark vs plan's 8 — sweep n_latent ∈ {4, 8, 12, 16} to find knee before committing to 16 for perturbation analysis.
+- [RESOLVED 03-04]: Invariant subspace corr sweep completed (n=8: 0.71, n=12: 0.78, n=16: 0.69); n=12 chosen; STORY_2 committed; CIRC-05 closed
+- [RESOLVED 03-04]: n_latent sweep completed (03-03); rank n=12 selected as best of tried
+- [v2 open]: T=75 padding noise — deferred fix: masked-loss fitting over task-active timesteps is highest-priority fix; would directly test T=75 padding hypothesis
+- [v2 open]: LatentNet stochastic eval — sigma_rec noise always active; cluster/local metric discrepancy is a pre-existing limitation; should fix before quantitative comparisons between runs
+- [v2 open]: Perturbation strengths [-0.5, 0.5] are modest relative to max |w_rec_ij|=4.17; testing ±2 to ±5 in v2 might reveal dose-response
+- [Phase 4 planning]: Nassar 2021 .mat file nested indexing not directly inspected — must run describe_mat_structure() before writing data loading code (research flag)
 - [Phase 4 planning]: Nassar 2021 .mat file nested indexing not directly inspected — must run describe_mat_structure() before writing data loading code (research flag)
 
 ## Session Continuity
 
-Last session: 2026-04-24
-Stopped at: Completed 03-02-PLAN.md — Phase 3 Plan 2 done (100-init GPU ensemble + validation; soft-fail on invariant subspace documented). Summary written post-hoc from cluster artifacts. Ready to discuss/plan 03-03 with open task-structure concern.
+Last session: 2026-04-26
+Stopped at: Completed 03-04-PLAN.md — Phase 3 COMPLETE (Wave B perturbation analysis; STORY_2 committed; CIRC-05 closed). Phase 4 unblocked.
 Resume file: None
