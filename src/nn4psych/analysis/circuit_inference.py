@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Circuit data collection for latent circuit inference.
 
@@ -606,4 +608,292 @@ def validate_latent_circuit(
         'nmse_q': nmse_q_val,
         'mse_z': mse_z_val,
         'threshold': invariant_threshold,
+    }
+
+
+def perturb_and_evaluate(
+    model: "ContinuousActorCritic",
+    latent_net: LatentNet,
+    env_class=SingleContextDecisionMakingWrapper,
+    modality_contexts: list[int] | None = None,
+    n_eval_trials: int = 200,
+    perturbation_strengths: list[float] | None = None,
+    n_baseline_runs: int = 5,
+    n_top_connections: int = 10,
+    significance_k: float = 2.0,
+    max_steps: int = 75,
+    device: str = "cpu",
+    env_kwargs: dict | None = None,
+    seed: int | None = None,
+) -> dict:
+    """Perturb the RNN's recurrent weights via Q-mapped rank-one perturbations.
+
+    Implements Langdon & Engel 2025 Eq. 6/23: a rank-one perturbation delta_ij
+    in the n-dim latent circuit corresponds to a rank-one perturbation in the
+    full N-dim RNN weight space via W_rec' = W_rec + (q.T @ delta_ij @ q),
+    where q has shape (n, N) (code convention; paper's Q is q.T).
+
+    Identifies the top |n_top_connections| largest-magnitude connections in the
+    inferred latent w_rec, applies each at every strength in
+    perturbation_strengths, re-evaluates the perturbed model on
+    ContextDecisionMaking, and reports reward deltas vs an unperturbed
+    baseline. Significance is judged against the natural trial-sampling
+    variability estimated from |n_baseline_runs| unperturbed runs.
+
+    Parameters
+    ----------
+    model : ContinuousActorCritic
+        Trained RNN (matched to the LatentNet via 03-02's ReLU rewrite).
+        Will be mutated in-place (W_hh.weight) per perturbation and restored.
+    latent_net : LatentNet
+        Wave A's chosen LatentNet (loaded from best_latent_circuit_waveA.pt).
+        Provides q (shape (n, N)) and recurrent_layer.weight (shape (n, n)).
+    env_class : type, optional
+        Environment wrapper class. Default SingleContextDecisionMakingWrapper.
+    modality_contexts : list of int, optional
+        Contexts to evaluate. Default [0, 1].
+    n_eval_trials : int, optional
+        Trials per context per evaluation. Default 200.
+    perturbation_strengths : list of float, optional
+        Multipliers applied to delta_ij. Default [-0.5, -0.2, 0.0, 0.2, 0.5].
+        The 0.0 entry serves as a same-conditions sanity check.
+    n_baseline_runs : int, optional
+        Independent unperturbed runs for baseline_std. Default 5.
+    n_top_connections : int, optional
+        Number of largest-magnitude w_rec entries to perturb. Default 10
+        (top 5 positive + top 5 negative as in Fig. 4 examples).
+    significance_k : float, optional
+        Multiplier on baseline_std for significance threshold. Default 2.0
+        (i.e. |delta| > 2 * baseline_std → significant).
+    max_steps : int, optional
+        Per-trial step cap inside the env loop. Default 75 (matches T from
+        03-02 circuit_data regen). MUST be the per-trial step bound, NOT the
+        number of trials. Lower this (e.g. max_steps=20) for smoke tests.
+    device : str, optional
+        Torch device. Default 'cpu' (perturbation eval is cheap; cluster GPU
+        not needed).
+    env_kwargs : dict, optional
+        Extra kwargs forwarded to env_class. Default {}.
+    seed : int, optional
+        Optional torch / numpy seed for the baseline runs (perturbation runs
+        each seed independently for reproducibility).
+
+    Returns
+    -------
+    dict
+        Keys: wave_a_chosen_rank, n_baseline_runs, n_eval_trials,
+        modality_contexts, perturbation_strengths, n_top_connections,
+        significance_k, baseline (with significance_threshold, mean/std per
+        context and pooled), perturbations (list of per-perturbation dicts with
+        reward_delta_by_context and significant flag), summary (n_significant,
+        mean/max abs reward delta).
+
+    Notes
+    -----
+    - W_hh.weight is restored after every perturbation eval. The model is
+      semantically unchanged on return.
+    - Reward is the per-trial environment reward (already softmax-bounded by
+      ContextDecisionMaking-v0); accuracy ≈ mean reward at this task.
+    """
+    if modality_contexts is None:
+        modality_contexts = [0, 1]
+    if perturbation_strengths is None:
+        perturbation_strengths = [-0.5, -0.2, 0.0, 0.2, 0.5]
+    if env_kwargs is None:
+        env_kwargs = {}
+
+    torch_device = torch.device(device)
+    model.eval()
+    latent_net.eval()
+
+    # --- Step 1: Extract Q and w_rec from Wave A's LatentNet ---
+    with torch.no_grad():
+        q = latent_net.q.detach().to(torch_device)                           # (n, N)
+        w_rec_inferred = latent_net.recurrent_layer.weight.data.detach()     # (n, n)
+    n = w_rec_inferred.shape[0]
+
+    # --- Step 2: Helper — single-evaluation pass for one (context, model_state) ---
+    def _eval_once(eval_seed: int | None) -> dict[int, float]:
+        """Run n_eval_trials trials per context, return mean reward per context."""
+        if eval_seed is not None:
+            torch.manual_seed(eval_seed)
+            np.random.seed(eval_seed)
+        rewards_by_ctx: dict[int, list[float]] = {ctx: [] for ctx in modality_contexts}
+        with torch.no_grad():
+            for ctx in modality_contexts:
+                env = env_class(context_id=0, modality_context=ctx, **env_kwargs)
+                # The cluster retraining in 03-02 used collect_circuit_data() which
+                # calls set_num_tasks(1), giving state = obs(5) + ctx(1) + reward(1)
+                # = input_dim=7. set_num_tasks(2) would give 8-dim input and
+                # mismatch the loaded W_ih (64×7). Use 1 here to match training.
+                env.set_num_tasks(1)
+                for _ in range(n_eval_trials):
+                    h = model.reset_hidden(
+                        batch_size=1, device=torch_device, preset_value=0.0
+                    )
+                    obs, done = env.reset()
+                    norm_obs = env.normalize_states(obs)
+                    reward = 0.0
+                    state = np.concatenate([norm_obs, env.context, [reward]])
+                    trial_total_reward = 0.0
+                    steps = 0
+                    while not done and steps < max_steps:
+                        x = (
+                            torch.tensor(state, dtype=torch.float32)
+                            .unsqueeze(0)
+                            .unsqueeze(0)
+                            .to(torch_device)
+                        )
+                        actor_logits, _, h = model(x, h)
+                        action = torch.argmax(
+                            torch.softmax(actor_logits, dim=-1), dim=-1
+                        ).item()
+                        obs, reward, done = env.step(action)
+                        trial_total_reward += float(reward)
+                        norm_obs = env.normalize_states(obs)
+                        state = np.concatenate([norm_obs, env.context, [reward]])
+                        steps += 1
+                    rewards_by_ctx[ctx].append(trial_total_reward)
+        return {ctx: float(np.mean(rs)) for ctx, rs in rewards_by_ctx.items()}
+
+    # --- Step 3: Establish baseline variability ---
+    baseline_per_ctx_per_run: list[dict[int, float]] = []
+    for run_idx in range(n_baseline_runs):
+        seed_for_run = (seed + run_idx) if seed is not None else None
+        baseline_per_ctx_per_run.append(_eval_once(seed_for_run))
+
+    baseline_means_by_ctx = {
+        ctx: float(np.mean([r[ctx] for r in baseline_per_ctx_per_run]))
+        for ctx in modality_contexts
+    }
+    baseline_stds_by_ctx = {
+        ctx: (
+            float(np.std([r[ctx] for r in baseline_per_ctx_per_run], ddof=1))
+            if n_baseline_runs > 1
+            else 0.0
+        )
+        for ctx in modality_contexts
+    }
+    pooled_baseline_runs = [
+        float(np.mean([r[ctx] for ctx in modality_contexts]))
+        for r in baseline_per_ctx_per_run
+    ]
+    baseline_mean_pooled = float(np.mean(pooled_baseline_runs))
+    baseline_std_pooled = (
+        float(np.std(pooled_baseline_runs, ddof=1)) if n_baseline_runs > 1 else 0.0
+    )
+    significance_threshold = significance_k * baseline_std_pooled
+
+    # --- Step 4: Identify top-magnitude latent w_rec connections ---
+    w_rec_np = w_rec_inferred.cpu().numpy()   # (n, n)
+    flat_indices = np.argsort(np.abs(w_rec_np).flatten())[::-1]   # descending magnitude
+    top_pos: list[tuple[int, int, float]] = []   # (i, j, w_ij) with w_ij > 0
+    top_neg: list[tuple[int, int, float]] = []   # (i, j, w_ij) with w_ij < 0
+    for idx in flat_indices:
+        i, j = int(idx // n), int(idx % n)
+        w_ij = float(w_rec_np[i, j])
+        if w_ij > 0 and len(top_pos) < n_top_connections // 2:
+            top_pos.append((i, j, w_ij))
+        elif w_ij < 0 and len(top_neg) < n_top_connections // 2:
+            top_neg.append((i, j, w_ij))
+        if len(top_pos) + len(top_neg) >= n_top_connections:
+            break
+    top_connections = top_pos + top_neg
+
+    # --- Step 5: Apply rank-one perturbations and evaluate ---
+    W_rec_original = model.W_hh.weight.data.clone()   # (N, N)
+    results: list[dict] = []
+
+    try:
+        for i, j, w_ij in top_connections:
+            for strength in perturbation_strengths:
+                # Build delta_ij in latent space
+                delta = torch.zeros(
+                    n, n, dtype=W_rec_original.dtype, device=torch_device
+                )
+                delta[i, j] = float(strength)
+
+                # Map to RNN space: q.T @ delta @ q  (paper Eq. 23 in code convention)
+                # q: (n, N), delta: (n, n) → (N, n) @ (n, n) @ (n, N) = (N, N)
+                W_rec_perturbation = (q.t() @ delta @ q).to(W_rec_original.dtype)
+
+                # Apply perturbation
+                model.W_hh.weight.data = W_rec_original + W_rec_perturbation
+
+                # Evaluate (single pass, deterministic given seed)
+                eval_seed_pert: int | None = None
+                if seed is not None:
+                    eval_seed_pert = (
+                        seed * 1000 + i * 100 + j * 10 + int(abs(strength) * 10)
+                    )
+                pert_per_ctx = _eval_once(eval_seed_pert)
+                pert_pooled = float(
+                    np.mean([pert_per_ctx[ctx] for ctx in modality_contexts])
+                )
+
+                reward_delta_pooled = pert_pooled - baseline_mean_pooled
+                reward_delta_by_ctx = {
+                    int(ctx): float(pert_per_ctx[ctx] - baseline_means_by_ctx[ctx])
+                    for ctx in modality_contexts
+                }
+                significant = bool(abs(reward_delta_pooled) > significance_threshold)
+
+                results.append({
+                    "i": int(i),
+                    "j": int(j),
+                    "w_rec_ij": float(w_ij),
+                    "strength": float(strength),
+                    "baseline_reward_pooled": float(baseline_mean_pooled),
+                    "perturbed_reward_pooled": float(pert_pooled),
+                    "reward_delta_pooled": float(reward_delta_pooled),
+                    "baseline_reward_by_context": {
+                        int(ctx): float(baseline_means_by_ctx[ctx])
+                        for ctx in modality_contexts
+                    },
+                    "perturbed_reward_by_context": {
+                        int(ctx): float(pert_per_ctx[ctx])
+                        for ctx in modality_contexts
+                    },
+                    "reward_delta_by_context": reward_delta_by_ctx,
+                    "significant": significant,
+                })
+    finally:
+        # ALWAYS restore original weights, even if a perturbation eval raises
+        model.W_hh.weight.data = W_rec_original
+
+    # --- Step 6: Compile and return results (all Python builtins — no np scalars) ---
+    abs_deltas = [abs(r["reward_delta_pooled"]) for r in results]
+    return {
+        "wave_a_chosen_rank": int(n),
+        "n_baseline_runs": int(n_baseline_runs),
+        "n_eval_trials": int(n_eval_trials),
+        "modality_contexts": [int(c) for c in modality_contexts],
+        "perturbation_strengths": [float(s) for s in perturbation_strengths],
+        "n_top_connections": int(n_top_connections),
+        "significance_k": float(significance_k),
+        "baseline": {
+            "mean_reward_pooled": float(baseline_mean_pooled),
+            "std_reward_pooled": float(baseline_std_pooled),
+            "mean_reward_by_context": {
+                int(c): float(baseline_means_by_ctx[c]) for c in modality_contexts
+            },
+            "std_reward_by_context": {
+                int(c): float(baseline_stds_by_ctx[c]) for c in modality_contexts
+            },
+            "significance_threshold": float(significance_threshold),
+        },
+        "perturbations": results,
+        "summary": {
+            "n_perturbations": int(len(results)),
+            "n_significant": int(sum(1 for r in results if r["significant"])),
+            "mean_abs_reward_delta": float(np.mean(abs_deltas)) if abs_deltas else 0.0,
+            "max_abs_reward_delta": float(np.max(abs_deltas)) if abs_deltas else 0.0,
+            "max_significant_delta": float(
+                max(
+                    (r["reward_delta_pooled"] for r in results if r["significant"]),
+                    default=0.0,
+                    key=abs,
+                )
+            ),
+        },
     }
