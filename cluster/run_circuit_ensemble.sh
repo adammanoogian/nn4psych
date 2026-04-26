@@ -49,6 +49,7 @@ INCLUDE_OUTPUT_LOSS=${INCLUDE_OUTPUT_LOSS:-1}  # Set to 0 to fit hidden states o
 FORCE_RETRAIN=${FORCE_RETRAIN:-0}  # Set to 1 to regenerate training data
 FORCE_RECOLLECT=${FORCE_RECOLLECT:-0}  # Set to 1 to re-collect circuit data (keep model)
 OUTPUT_SUBDIR=${OUTPUT_SUBDIR:-}   # If set, write to output/circuit_analysis/${OUTPUT_SUBDIR}/ instead of root
+MASKED=${MASKED:-0}  # Set to 1 for masked-loss fitting (Gap 1, Plan 03-05)
 
 # =============================================================================
 # Environment Setup
@@ -196,6 +197,29 @@ labels = {
 }
 print(f"  u={u.shape}, z={z.shape}, y={y.shape}")
 
+# MASKED=1 assertion (Plan 03-05): if the masked-loss path is requested,
+# circuit_data.npz MUST contain task_active_mask. If missing, the cluster
+# checkout is stale and the fallback regen (in the flock guard above) would
+# have re-collected WITHOUT the mask key — silently producing wrong results.
+masked_mode = bool(int(os.environ.get('MASKED', 0)))
+if masked_mode:
+    if 'task_active_mask' not in data.files:
+        raise KeyError(
+            "MASKED=1 set but circuit_data.npz lacks 'task_active_mask' key — "
+            "cluster checkout is stale; pull latest main:\n"
+            "  cd <project_root> && git pull origin main\n"
+            "Expected after Plan 03-05 Task 1D commits circuit_data.npz with "
+            "task_active_mask (1000, 75) bool."
+        )
+    task_active_mask = data['task_active_mask']
+    active_per_trial = task_active_mask.sum(axis=1)
+    print(
+        f"  task_active_mask: mean_active={float(active_per_trial.mean()):.1f}, "
+        f"min={int(active_per_trial.min())}, max={int(active_per_trial.max())} steps"
+    )
+else:
+    task_active_mask = None
+
 # Load trained model for W_rec extraction
 print("Loading trained model...")
 model = ContinuousActorCritic(
@@ -228,6 +252,7 @@ result = fit_latent_circuit_ensemble(
     device=device,
     verbose=True,
     include_output_loss=include_output_loss,
+    task_active_mask=task_active_mask,  # None when MASKED=0 (Wave A path unchanged)
 )
 
 elapsed = time.time() - start_time
@@ -259,26 +284,34 @@ val = validate_latent_circuit(
 # Save results
 val_report = {
     'phase': '03-latent-circuit-inference',
-    'plan': '02',
+    'plan': '05' if masked_mode else '02',
     'n_inits': n_inits,
     'n_latent': n_latent,
     'epochs': epochs,
     'device': device,
     'elapsed_minutes': round(elapsed / 60, 1),
-    'best_init_idx': result['best_init_idx'],
-    'best_nmse_y': result['best_nmse_y'],
-    'best_mse_z': result['best_mse_z'],
-    'invariant_subspace_corr': val['invariant_subspace_corr'],
-    'invariant_subspace_pass': val['invariant_subspace_pass'],
+    'best_init_idx': int(result['best_init_idx']),
+    'best_nmse_y': float(result['best_nmse_y']),
+    'best_nmse_y_full': float(result['best_nmse_y_full']),
+    'best_mse_z': float(result['best_mse_z']),
+    'masked': bool(masked_mode),
+    'invariant_subspace_corr': float(val['invariant_subspace_corr']),
+    'invariant_subspace_pass': bool(val['invariant_subspace_pass']),
     'invariant_subspace_threshold': 0.85,
-    'activity_r2_full_space': val['activity_r2_full_space'],
-    'activity_r2_latent_space': val['activity_r2_latent_space'],
-    'trial_avg_r2_full_space': val['trial_avg_r2_full_space'],
-    'trial_avg_r2_latent_space': val['trial_avg_r2_latent_space'],
-    'trial_avg_r2_by_condition': val['trial_avg_r2_by_condition'],
-    'nmse_y': val['nmse_y'],
-    'nmse_q': val['nmse_q'],
-    'mse_z': val['mse_z'],
+    'activity_r2_full_space': float(val['activity_r2_full_space'])
+        if val['activity_r2_full_space'] is not None else None,
+    'activity_r2_latent_space': float(val['activity_r2_latent_space'])
+        if val['activity_r2_latent_space'] is not None else None,
+    'trial_avg_r2_full_space': float(val['trial_avg_r2_full_space'])
+        if val['trial_avg_r2_full_space'] is not None else None,
+    'trial_avg_r2_latent_space': float(val['trial_avg_r2_latent_space'])
+        if val['trial_avg_r2_latent_space'] is not None else None,
+    'trial_avg_r2_by_condition': {
+        int(k): float(v) for k, v in val['trial_avg_r2_by_condition'].items()
+    } if val['trial_avg_r2_by_condition'] is not None else None,
+    'nmse_y': float(val['nmse_y']),
+    'nmse_q': float(val['nmse_q']),
+    'mse_z': float(val['mse_z']),
     'data_shape': {
         'n_trials': int(u.shape[0]),
         'T': int(u.shape[1]),
@@ -291,8 +324,10 @@ with open(os.path.join(_output_root, 'validation_results.json'), 'w') as f:
     json.dump(val_report, f, indent=2)
 
 diagnostics = {
-    'all_nmse_y': result['all_nmse_y'],
-    'all_mse_z': result['all_mse_z'],
+    'all_nmse_y': [float(v) for v in result['all_nmse_y']],
+    'all_nmse_y_full': [float(v) for v in result['all_nmse_y_full']],
+    'all_mse_z': [float(v) for v in result['all_mse_z']],
+    'masked': bool(masked_mode),
     'convergence_stats': {
         'mean_nmse_y': float(np.mean(result['all_nmse_y'])),
         'std_nmse_y': float(np.std(result['all_nmse_y'])),

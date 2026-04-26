@@ -2,9 +2,10 @@
 """08: Latent Circuit Inference Pipeline (Phase 3 end-to-end).
 
 Orchestrates the full Phase 3 workflow:
-  1. Collect (u, z, y) circuit data from a trained ContinuousActorCritic on
-     ContextDecisionMaking-v0 [Plan 03-01].
+  1. Collect (u, z, y, task_active_mask) circuit data from a trained
+     ContinuousActorCritic on ContextDecisionMaking-v0 [Plan 03-01].
   2. Fit a LatentNet ensemble at Wave A's chosen rank [Plan 03-02 + 03-03].
+     Pass --masked to use masked-loss fitting (Gap 1, Plan 03-05).
   3. Validate (invariant subspace, activity R^2, trial-avg R^2) [Plan 03-02].
   4. Perturb the RNN via Q-mapped rank-one perturbations [Plan 03-04].
 
@@ -13,6 +14,11 @@ output/circuit_analysis/n_latent_sweep/wave_a_selection.json (produced by
 Plan 03-03 Wave A). When --skip_fitting is passed, this script loads
 output/circuit_analysis/best_latent_circuit_waveA.pt (Wave A's chosen Q),
 NOT the legacy 03-02 benchmark output/circuit_analysis/best_latent_circuit.pt.
+
+For masked-loss fitting (--masked): the script reads task_active_mask from
+circuit_data.npz and passes it to fit_latent_circuit_ensemble. Artifacts land
+under output/circuit_analysis/n_latent_sweep_masked/n{N}/ so they never
+overwrite Wave A's output/circuit_analysis/n_latent_sweep/ artifacts.
 
 Preconditions
 -------------
@@ -31,6 +37,9 @@ Usage
 
     # Quick smoke test (5 inits, 50 epochs, 50 trials per context, 20 eval trials)
     python scripts/data_pipeline/08_infer_latent_circuits.py --quick
+
+    # Quick smoke test with masked-loss fitting (Gap 1)
+    python scripts/data_pipeline/08_infer_latent_circuits.py --quick --masked
 
     # Use existing data + Wave A's fitted Q; only run perturbation step
     python scripts/data_pipeline/08_infer_latent_circuits.py --skip_collection --skip_fitting
@@ -64,6 +73,10 @@ from envs.neurogym_wrapper import SingleContextDecisionMakingWrapper  # noqa: E4
 
 WAVE_A_SELECTION_PATH = Path("output/circuit_analysis/n_latent_sweep/wave_a_selection.json")
 WAVE_A_BEST_PT_PATH = Path("output/circuit_analysis/best_latent_circuit_waveA.pt")
+# Masked-sweep (03-05 Gap 1) artifacts live under n_latent_sweep_masked/
+WAVE_A_MASKED_SELECTION_PATH = Path(
+    "output/circuit_analysis/n_latent_sweep_masked/wave_a_masked_selection.json"
+)
 
 
 def load_wave_a_chosen_rank(path: Path = WAVE_A_SELECTION_PATH) -> int:
@@ -91,6 +104,31 @@ def load_wave_a_chosen_rank(path: Path = WAVE_A_SELECTION_PATH) -> int:
             "Expected location: output/circuit_analysis/n_latent_sweep/"
             "wave_a_selection.json"
         )
+    sel = json.loads(path.read_text())
+    return int(sel["chosen_rank"])
+
+
+def load_wave_a_masked_chosen_rank(
+    path: Path = WAVE_A_MASKED_SELECTION_PATH,
+) -> int | None:
+    """Read the masked Wave A chosen rank from the selection JSON.
+
+    Returns None (fall-through) if the file does not yet exist, so callers can
+    gracefully handle the case where the masked sweep has not completed.
+
+    Parameters
+    ----------
+    path : Path, optional
+        Default output/circuit_analysis/n_latent_sweep_masked/
+        wave_a_masked_selection.json.
+
+    Returns
+    -------
+    int or None
+        The chosen n_latent from the masked sweep, or None if unavailable.
+    """
+    if not path.exists():
+        return None
     sel = json.loads(path.read_text())
     return int(sel["chosen_rank"])
 
@@ -145,6 +183,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Load best_latent_circuit_waveA.pt (Wave A's chosen Q); skip fitting",
     )
+    parser.add_argument(
+        "--masked",
+        action="store_true",
+        help=(
+            "Use masked-loss fitting (Gap 1, Plan 03-05): compute NMSE_y and mse_z "
+            "over task-active timesteps only (stimulus+decision periods). "
+            "Requires circuit_data.npz to contain 'task_active_mask'. "
+            "Artifacts land under n_latent_sweep_masked/ not n_latent_sweep/."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -159,6 +207,13 @@ def main() -> int:
     configure_cpu_threads()
     args = parse_args()
 
+    # --masked: redirect default output dir to n_latent_sweep_masked/ BEFORE
+    # --quick path override so both interact correctly
+    if args.masked and args.output_dir == "output/circuit_analysis":
+        # Will be further qualified by n_latent after we read Wave A rank;
+        # we set the root here and append /n{N}/ below
+        args.output_dir = "output/circuit_analysis/n_latent_sweep_masked"
+
     if args.quick:
         args.n_inits = 5
         args.epochs = 50
@@ -167,12 +222,13 @@ def main() -> int:
         args.n_baseline_runs = 2
         # Redirect data and output paths so --quick never overwrites canonical
         # artifacts. The smoke run's circuit_data goes to a separate subdir.
+        # This applies regardless of --masked (both paths write to smoke_test/).
         if not args.skip_collection:
             args.data_path = str(
                 Path(args.data_path).parent / "smoke_test" / Path(args.data_path).name
             )
         if not args.skip_fitting:
-            args.output_dir = str(Path(args.output_dir) / "smoke_test")
+            args.output_dir = str(Path(args.output_dir).parent / "smoke_test")
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -213,6 +269,24 @@ def main() -> int:
     }
     print(f"Circuit data: u={u.shape}, z={z.shape}, y={y.shape}")
 
+    # Load task_active_mask when --masked is requested
+    task_active_mask = None
+    if args.masked:
+        if "task_active_mask" not in data_npz.files:
+            raise KeyError(
+                f"--masked requested but circuit_data.npz at '{args.data_path}' "
+                "lacks 'task_active_mask' key. "
+                "Regenerate circuit_data.npz via Task 1D of Plan 03-05 "
+                "(run collect_circuit_data with the updated circuit_inference.py)."
+            )
+        task_active_mask = data_npz["task_active_mask"]  # (n_trials, T), bool
+        active_per_trial = task_active_mask.sum(axis=1)
+        print(
+            f"task_active_mask: mean_active={float(active_per_trial.mean()):.1f}, "
+            f"min={int(active_per_trial.min())}, max={int(active_per_trial.max())} "
+            f"steps (of T={u.shape[1]})"
+        )
+
     # ---- Step 3: Fit (or load Wave A's chosen Q) ----
     if not args.skip_fitting:
         result = fit_latent_circuit_ensemble(
@@ -225,19 +299,30 @@ def main() -> int:
             lr=args.lr,
             l_y=args.l_y,
             weight_decay=args.weight_decay,
+            task_active_mask=task_active_mask,  # None → unmasked; set → Gap-1 masked
         )
-        # Save WITHOUT clobbering Wave A's archive — write to a wave_b path
-        torch.save(
-            result["best_model"].state_dict(),
-            output_dir / "best_latent_circuit_waveB_refit.pt",
-        )
-        with open(output_dir / "ensemble_diagnostics_waveB_refit.json", "w") as f:
+        # Choose artifact filename based on masked vs standard path
+        if args.masked:
+            pt_name = "best_latent_circuit.pt"
+            diag_name = "ensemble_diagnostics.json"
+        else:
+            # Preserve Wave A archive naming convention
+            pt_name = "best_latent_circuit_waveB_refit.pt"
+            diag_name = "ensemble_diagnostics_waveB_refit.json"
+
+        torch.save(result["best_model"].state_dict(), output_dir / pt_name)
+        with open(output_dir / diag_name, "w") as f:
             json.dump(
                 {
                     "all_nmse_y": [float(v) for v in result["all_nmse_y"]],
+                    "all_nmse_y_full": [float(v) for v in result["all_nmse_y_full"]],
                     "all_mse_z": [float(v) for v in result["all_mse_z"]],
                     "best_init_idx": int(result["best_init_idx"]),
                     "best_nmse_y": float(result["best_nmse_y"]),
+                    "best_nmse_y_full": float(result["best_nmse_y_full"]),
+                    "masked": bool(result["masked"]),
+                    "n_latent": int(result["n_latent"]),
+                    "n_inits": int(result["n_inits"]),
                 },
                 f,
                 indent=2,
@@ -307,31 +392,44 @@ def main() -> int:
         "N": int(y.shape[2]),
     }
     val_report["wave_a_chosen_rank"] = int(n_latent)
+    val_report["masked"] = bool(args.masked)  # downstream 03-08 can disambiguate
 
-    with open(output_dir / "validation_results_waveB.json", "w") as f:
+    # Choose output filename: masked runs write to validation_results.json
+    # (same name cluster scripts expect); waveB refit writes with suffix
+    val_out_name = "validation_results.json" if args.masked else "validation_results_waveB.json"
+    with open(output_dir / val_out_name, "w") as f:
         json.dump(val_report, f, indent=2)
     print(f"Invariant subspace corr: {val['invariant_subspace_corr']:.4f}")
-    print(f"Trial-avg R2 (full):     {val['trial_avg_r2_full_space']:.4f}")
+    if val['trial_avg_r2_full_space'] is not None:
+        print(f"Trial-avg R2 (full):     {val['trial_avg_r2_full_space']:.4f}")
+    print(f"Masked fit:              {bool(args.masked)}")
 
-    # ---- Step 5: Perturb ----
-    pert = perturb_and_evaluate(
-        model,
-        best_model,
-        SingleContextDecisionMakingWrapper,
-        n_eval_trials=args.n_eval_trials,
-        n_baseline_runs=args.n_baseline_runs,
-        n_top_connections=args.n_top_connections,
-        max_steps=args.max_steps,
-        seed=args.seed,
-    )
-    with open(output_dir / "perturbation_results.json", "w") as f:
-        json.dump(pert, f, indent=2)
+    # ---- Step 5: Perturb (skip for masked sweep — separate analysis) ----
+    if not args.masked:
+        pert = perturb_and_evaluate(
+            model,
+            best_model,
+            SingleContextDecisionMakingWrapper,
+            n_eval_trials=args.n_eval_trials,
+            n_baseline_runs=args.n_baseline_runs,
+            n_top_connections=args.n_top_connections,
+            max_steps=args.max_steps,
+            seed=args.seed,
+        )
+        with open(output_dir / "perturbation_results.json", "w") as f:
+            json.dump(pert, f, indent=2)
 
-    print(f"\nPerturbations tested:        {len(pert['perturbations'])}")
-    print(f"Baseline std (pooled):       {pert['baseline']['std_reward_pooled']:.4f}")
-    print(f"Significance threshold:      {pert['baseline']['significance_threshold']:.4f}")
-    print(f"Mean |reward delta|:         {pert['summary']['mean_abs_reward_delta']:.4f}")
-    print(f"Significant perturbations:   {pert['summary']['n_significant']}")
+        print(f"\nPerturbations tested:        {len(pert['perturbations'])}")
+        print(f"Baseline std (pooled):       {pert['baseline']['std_reward_pooled']:.4f}")
+        print(
+            f"Significance threshold:      "
+            f"{pert['baseline']['significance_threshold']:.4f}"
+        )
+        print(f"Mean |reward delta|:         {pert['summary']['mean_abs_reward_delta']:.4f}")
+        print(f"Significant perturbations:   {pert['summary']['n_significant']}")
+    else:
+        print("\n(--masked: perturbation step skipped — separate analysis in 03-04/03-08)")
+
     print(f"\nAll results in {output_dir}/")
     return 0
 
