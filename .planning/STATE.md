@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 3 of 5 (Latent Circuit Inference) — In gap-closure
-Plan: 4/4 base plans complete; Phase 3.1 gap-closure plans (03-05+) to be authored via /gsd:plan-phase 03 --gaps
-Status: 03-04 done; verifier flagged 2 soft-fails (SC-2, SC-4); user mandated Phase 3.1 gap closure. Phase 4 BLOCKED until gap closure attempt completes.
-Last activity: 2026-04-26 — Completed 03-04 + verifier ran + user chose Option B. About to invoke /gsd:plan-phase 03 --gaps.
+Plan: 4/4 base plans complete; 03-05 (masked-loss fits, cluster submitted); 03-06 partial (Task 1 done, Task 2 pending autopush)
+Status: 03-05 complete (cluster jobs submitted, awaiting autopush); 03-06 Task 1 complete — driver + cluster scripts + smoke test done, cluster submission pending manual run of `bash cluster/run_per_context_fits.sh` on Monash M3, Task 2 blocked on autopush delivery.
+Last activity: 2026-04-26 — Completed 03-06 Task 1 (per-context latent circuit driver, SLURM scripts, smoke test passed). Resume: run cluster/run_per_context_fits.sh on M3, then /gsd:execute-phase 03 --gaps-only after autopush.
 
-Progress: [████████░░] ~77% (10/~13 base plans + Phase 3.1 plans pending)
+Progress: [████████░░] ~77% (10/~13 base plans + Phase 3.1 plans in-progress)
 
 ## Performance Metrics
 
@@ -85,6 +85,9 @@ Recent decisions affecting current work:
 - [03-04]: LatentNet sigma_rec=0.15 noise always active — cluster metrics (corr=0.78, nmse_y=0.247) were single-seed measurements right after training; fresh eval locally gives corr=0.42, nmse_y=4.9; stochastic eval is a pre-existing LatentNet limitation
 - [03-04]: --quick flag now redirects data/output to smoke_test/ subdirs (prevents overwriting canonical circuit_data.npz and output artifacts)
 - [03-04]: Phase 4 proceeds independently; Q's role in final pipeline is descriptive not causal-mechanistic
+- [03-06]: sigma_rec=0.15 default (no eval-mode override) for per-context fits — cluster_same_seed_as_train matches Wave A pooled baseline for direct corr comparison
+- [03-06]: circuit_data.npz sliced READ-ONLY by modality_context — no writes, no race condition with 03-05's task_active_mask
+- [03-06]: afterany (not afterok) for autopush — push fires even if one context fit fails
 
 ### Pending Todos
 
@@ -104,9 +107,9 @@ Recent decisions affecting current work:
 - [RESOLVED 03-02]: n_trials=40 < batch_size=128 — FIXED by regen at n_trials=1000 (500/context)
 - [RESOLVED 03-02]: T=500 with ~5% task-relevant — PARTIALLY FIXED by T=75 regen (now ~20-40% task-relevant, not full fix)
 - [RESOLVED 03-04]: n_latent sweep completed (03-03); rank n=12 selected as best of tried; STORY_2 committed; CIRC-05 closed (with caveats per writeup)
-- [Phase 3.1 OPEN — Gap 1, priority 1]: T=75 padding noise — masked-loss fitting over task-active timesteps. Directly targets the T=75 padding hypothesis. See 03-VERIFICATION.md Gaps section.
-- [Phase 3.1 OPEN — Gap 2, priority 2]: Shorter T regen (T≈25-40 with delay=0) — orthogonal probe of same hypothesis.
-- [Phase 3.1 OPEN — Gap 3, priority 3 / diagnostic]: Condition-sliced fitting (per-context Qs) — diagnostic on whether RNN's structure is itself non-low-rank vs two interleaved low-rank circuits.
+- [Phase 3.1 IN-PROGRESS — Gap 1, priority 1 — 03-05]: T=75 padding noise — masked-loss fitting over task-active timesteps. 03-05 cluster jobs submitted; awaiting autopush. task_active_mask added to circuit_data.npz.
+- [Phase 3.1 IN-PROGRESS — Gap 3, priority 3 / diagnostic — 03-06]: Per-context fitting (modality_context 0 vs 1) — Task 1 complete (driver + cluster scripts + smoke test). Cluster submission pending: `bash cluster/run_per_context_fits.sh` on Monash M3. Task 2 (aggregation + conclusion) awaits autopush.
+- [Phase 3.1 OPEN — Gap 2, priority 2]: Shorter T regen (T≈25-40 with delay=0) — orthogonal probe of same hypothesis. Not yet planned.
 - [Phase 3.1 OPEN — confound]: LatentNet stochastic eval — sigma_rec noise always active; cluster/local metric discrepancy is a pre-existing limitation; should fix or pin a single eval seed before quantitative comparisons between runs (Gap 4 candidate?).
 - [Phase 3.1 OPEN — diagnostic]: Perturbation strengths [-0.5, 0.5] are modest relative to max |w_rec_ij|=4.17; if Q quality is fixed, re-running with stronger strengths may give cleaner SC-4 evidence.
 - [Phase 4 planning]: Nassar 2021 .mat file nested indexing not directly inspected — must run describe_mat_structure() before writing data loading code (research flag)
@@ -114,5 +117,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-04-26
-Stopped at: Completed 03-04 (Wave B perturbation analysis; STORY_2 committed). Verifier returned `human_needed` (SC-2 + SC-4 soft-fails). User chose Option B → pursue Phase 3.1 gap closure before Phase 4. About to invoke /gsd:plan-phase 03 --gaps.
+Stopped at: Completed 03-06 Task 1 (per-context latent circuit fitting driver + cluster scripts + smoke test). Cluster submission pending on Monash M3. Task 2 awaits autopush delivery.
+Resume: (1) On Monash M3: `bash cluster/run_per_context_fits.sh`; (2) After autopush: `/gsd:execute-phase 03 --gaps-only` to run Task 2.
 Resume file: None
