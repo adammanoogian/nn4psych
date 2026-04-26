@@ -226,6 +226,12 @@ stage_files "output/circuit_analysis/n_latent_sweep/n*/ensemble_diagnostics.json
 stage_files "output/circuit_analysis/n_latent_sweep/*.json" "sweep aggregates (Pareto + selection)"
 stage_files "output/circuit_analysis/n_latent_sweep/*.png" "sweep plots (Pareto)"
 
+# Per-context diagnostic fit artifacts (Plan 03-06 — run_per_context_fits.sh)
+stage_files "output/circuit_analysis/per_context/context_*/best_latent_circuit.pt" "per-context checkpoints"
+stage_files "output/circuit_analysis/per_context/context_*/validation_results.json" "per-context validation"
+stage_files "output/circuit_analysis/per_context/context_*/ensemble_diagnostics.json" "per-context diagnostics"
+stage_files "output/circuit_analysis/per_context/*.json" "per-context aggregate results"
+
 # Canonical RNN model + provenance metadata (INPUTS to circuit analysis).
 # The embedded retrain in run_circuit_ensemble.sh writes these on the cluster;
 # pushing them lets collaborators run 08_infer_latent_circuits.py without
