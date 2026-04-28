@@ -65,6 +65,9 @@ figs*
 # Wave A n_latent sweep tree (per-rank ensemble outputs + Pareto aggregates)
 !/output/circuit_analysis/n_latent_sweep/
 !/output/circuit_analysis/n_latent_sweep/**
+# 03-05 masked-loss sweep tree (parallel to Wave A, per-rank + aggregates)
+!/output/circuit_analysis/n_latent_sweep_masked/
+!/output/circuit_analysis/n_latent_sweep_masked/**
 # Per-context diagnostic fits (Plan 03-06)
 !/output/circuit_analysis/per_context/
 !/output/circuit_analysis/per_context/**
