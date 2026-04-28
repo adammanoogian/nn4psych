@@ -1,0 +1,35 @@
+{
+  "phase": "03-latent-circuit-inference",
+  "plan": "05",
+  "n_inits": 100,
+  "n_latent": 8,
+  "epochs": 500,
+  "device": "cuda",
+  "elapsed_minutes": 93.5,
+  "best_init_idx": 75,
+  "best_nmse_y": 0.04577142372727394,
+  "best_nmse_y_full": 0.462747722864151,
+  "best_mse_z": 0.1297433227300644,
+  "masked": true,
+  "invariant_subspace_corr": 0.4296011055099454,
+  "invariant_subspace_pass": false,
+  "invariant_subspace_threshold": 0.85,
+  "activity_r2_full_space": 0.8420872688293457,
+  "activity_r2_latent_space": 0.6304751038551331,
+  "trial_avg_r2_full_space": 0.9666652977466583,
+  "trial_avg_r2_latent_space": 0.9211533963680267,
+  "trial_avg_r2_by_condition": {
+    "0": 0.965726375579834,
+    "1": 0.9676042199134827
+  },
+  "nmse_y": 0.46190890669822693,
+  "nmse_q": 0.09317239373922348,
+  "mse_z": 0.12955746054649353,
+  "data_shape": {
+    "n_trials": 1000,
+    "T": 75,
+    "N": 64
+  },
+  "status": "soft-fail",
+  "output_subdir": "n_latent_sweep_masked/n8"
+}
