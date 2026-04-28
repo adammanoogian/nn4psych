@@ -226,6 +226,13 @@ stage_files "output/circuit_analysis/n_latent_sweep/n*/ensemble_diagnostics.json
 stage_files "output/circuit_analysis/n_latent_sweep/*.json" "sweep aggregates (Pareto + selection)"
 stage_files "output/circuit_analysis/n_latent_sweep/*.png" "sweep plots (Pareto)"
 
+# 03-05 masked-loss sweep artifacts (run_n_latent_sweep_masked.sh per-rank outputs)
+stage_files "output/circuit_analysis/n_latent_sweep_masked/n*/best_latent_circuit.pt" "masked per-rank checkpoints"
+stage_files "output/circuit_analysis/n_latent_sweep_masked/n*/validation_results.json" "masked per-rank validation"
+stage_files "output/circuit_analysis/n_latent_sweep_masked/n*/ensemble_diagnostics.json" "masked per-rank diagnostics"
+stage_files "output/circuit_analysis/n_latent_sweep_masked/*.json" "masked sweep aggregates (Pareto + selection)"
+stage_files "output/circuit_analysis/n_latent_sweep_masked/*.png" "masked sweep plots (Pareto)"
+
 # Per-context diagnostic fit artifacts (Plan 03-06 — run_per_context_fits.sh)
 stage_files "output/circuit_analysis/per_context/context_*/best_latent_circuit.pt" "per-context checkpoints"
 stage_files "output/circuit_analysis/per_context/context_*/validation_results.json" "per-context validation"
