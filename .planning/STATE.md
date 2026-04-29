@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** RNN agent trainable on multiple cognitive tasks with analyzable hidden representations comparable to human data via Bayesian model fitting
-**Current focus:** Phase 3 — base plans (03-01..03-04) all DONE, but verifier returned `human_needed` on SC-2 / SC-4 soft-fails. User chose Option B (2026-04-26): pursue Phase 3.1 gap closure (masked-loss fitting + shorter T regen + condition-sliced fitting) BEFORE Phase 4. Phase 3 is therefore in gap-closure (NOT closed).
+**Current focus:** Phase 4 (Bayesian Model Fitting / Nassar 2021). User pivot 2026-04-29: Phase 3.1 closure paused after Wave 5. 03-05 + 03-06 evidence (both negative deltas — masked Δ=-0.21, per-context Δ_ctx0=-0.12 / Δ_ctx1=-0.14) sufficient to refute padding + structural-separation hypotheses; 03-07 (shorter-T regen) and 03-08 (writeup closure) deferred. Phase 4 may proceed independently per 03-04 decision (Q's role in final pipeline is descriptive, not causal-mechanistic). Phase 3 will return to closure (03-07/08) after Phase 4 ships.
 
 ## Current Position
 
-Phase: 3 of 5 (Latent Circuit Inference) — In gap-closure
-Plan: 4/4 base plans complete; 03-05 COMPLETE; 03-06 COMPLETE (both Wave 5 plans done)
-Status: 03-05 COMPLETE — masked-loss sweep done, wave_a_masked_selection.json written (chosen_rank=12, corr=0.5699, crossed_85=false, delta=-0.2134); 03-06 COMPLETE — per_context_results.json written (ctx-0 corr=0.6628, ctx-1 corr=0.6406, conclusion=AMBIGUOUS, both deltas negative-large, structural-separation ruled out).
-Last activity: 2026-04-29 — 03-06 Task 2 complete: aggregate_per_context.py + per_context_results.json + full SUMMARY.md committed. Conclusion=AMBIGUOUS: both per-context corrs below pooled, structural-separation hypothesis ruled out. Wave 5 fully done.
+Phase: 4 of 5 (Bayesian Model Fitting / Nassar 2021) — Not yet planned
+Plan: Phase 3 base 4/4 + Wave 5 closure (03-05, 03-06) DONE; 03-07/08 DEFERRED (user pivot 2026-04-29). Phase 4 plans 04-01..04-04 listed in ROADMAP but no PLAN.md files yet.
+Status: Phase 4 needs planning. Suggested next: `/gsd:discuss-phase 04` or `/gsd:plan-phase 04`. Phase 3 returns to closure (03-07/08) after Phase 4 ships.
+Last activity: 2026-04-29 — User pivoted from Phase 3 closure to Phase 4 after Wave 5 evidence (both diagnostics negative). 03-05 + 03-06 SUMMARYs committed; 03-07/08 deferred.
 
-Progress: [█████████░] ~85% (12/~13 base plans + Phase 3.1 plans in-progress; 03-07 and 03-08 remain)
+Progress: [█████████░] ~85% (Phase 3 effectively complete pending writeup closure; Phase 4 starting)
 
 ## Performance Metrics
 
@@ -119,8 +119,8 @@ Recent decisions affecting current work:
 - [RESOLVED 03-04]: n_latent sweep completed (03-03); rank n=12 selected as best of tried; STORY_2 committed; CIRC-05 closed (with caveats per writeup)
 - [RESOLVED 2026-04-29 — Gap 1, priority 1 — 03-05]: Masked-loss sweep COMPLETE. chosen_rank=12, corr=0.5699, crossed_85=false, delta_vs_wave_a=-0.2134. Padding hypothesis ruled out. wave_a_masked_selection.json written. Story tilts to STORY_1 (method/data limit).
 - [RESOLVED 2026-04-29 — Gap 3, priority 3 / diagnostic — 03-06]: Per-context fitting COMPLETE. ctx-0 corr=0.6628, ctx-1 corr=0.6406, both BELOW pooled 0.7833 (deltas -0.1205 and -0.1427). Conclusion=AMBIGUOUS. Structural-separation hypothesis ruled out. per_context_results.json written.
-- [Phase 3.1 PLANNED — Gap 2, priority 2 — 03-07]: Shorter T regen (T≈30 with delay=0) — orthogonal probe of T=75 padding hypothesis. Plan committed (01d2fdf). Conditional: 03-07 auto-skips if 03-05's wave_a_masked_selection.json reports crossed_85_threshold=true. Wave 6 in execution order.
-- [Phase 3.1 PLANNED — closure — 03-08]: Aggregate Phase 3.1 evidence (03-05 + 03-06 + 03-07), update wave_b_writeup.md story commit (STORY_0 if any gap >= 0.85, else STORY_1 method/data limit). autonomous: false — checkpoint before Phase 4 unblock. Wave 7.
+- [Phase 3.1 DEFERRED — 03-07]: Shorter T regen (T≈30 with delay=0). Skipped on 2026-04-29 by user pivot — 03-05 negative delta (-0.21) is stronger refutation of padding hypothesis than 03-07's binary skip rule anticipated; 03-07 would replicate same answer at higher cluster cost. Plan committed (01d2fdf) preserved for v2 future work.
+- [Phase 3.1 DEFERRED — 03-08]: Phase 3.1 closure writeup (STORY_1 method/data limit). Skipped on 2026-04-29 by user pivot to Phase 4. Will be picked up after Phase 4 ships — STORY_1 commitment is well-supported by Wave 5 evidence already on disk; the writeup is a documentation task, not blocking science.
 - [Phase 3.1 OPEN — confound]: LatentNet stochastic eval — sigma_rec noise always active; cluster/local metric discrepancy is a pre-existing limitation; should fix or pin a single eval seed before quantitative comparisons between runs (Gap 4 candidate?).
 - [Phase 3.1 OPEN — diagnostic]: Perturbation strengths [-0.5, 0.5] are modest relative to max |w_rec_ij|=4.17; if Q quality is fixed, re-running with stronger strengths may give cleaner SC-4 evidence.
 - [Phase 4 planning]: Nassar 2021 .mat file nested indexing not directly inspected — must run describe_mat_structure() before writing data loading code (research flag)
@@ -129,5 +129,5 @@ Recent decisions affecting current work:
 
 Last session: 2026-04-29T20:10:00Z (approximate)
 Stopped at: Completed 03-06 Task 2 — aggregate_per_context.py + per_context_results.json committed; full SUMMARY.md written; STATE.md updated. Wave 5 (03-05 + 03-06) both complete.
-Resume: Run 03-07 (shorter-T regen, Wave 6), then 03-08 (writeup closure checkpoint, Wave 7). Both per-context and masked-loss evidence converge on STORY_1 (method/data limit).
+Resume: User pivoted to Phase 4. Run `/gsd:discuss-phase 04` to gather context for Nassar 2021 Bayesian model fitting, or `/gsd:plan-phase 04` to plan directly. Phase 3.1 closure (03-07/08) returns after Phase 4 ships.
 Resume file: None
