@@ -1,0 +1,56 @@
+{
+  "masked": true,
+  "comparable_full_pareto": "output\\circuit_analysis\\n_latent_sweep\\pareto_curve.json",
+  "ranks_attempted": [
+    8,
+    12,
+    16
+  ],
+  "ranks_succeeded": [
+    8,
+    12,
+    16
+  ],
+  "ranks_missing": [],
+  "rows": [
+    {
+      "n_latent": 8,
+      "best_nmse_y": 0.04577142372727394,
+      "best_nmse_y_full": 0.462747722864151,
+      "best_mse_z": 0.1297433227300644,
+      "invariant_subspace_corr": 0.4296011055099454,
+      "trial_avg_r2_full_space": 0.9666652977466583,
+      "per_trial_r2_full_space": 0.8420872688293457,
+      "ensemble_std_nmse_y": 0.0035963854193886715,
+      "elapsed_minutes": 93.5,
+      "status": "soft-fail",
+      "masked": true
+    },
+    {
+      "n_latent": 12,
+      "best_nmse_y": 0.03521847724914551,
+      "best_nmse_y_full": 0.3908836543560028,
+      "best_mse_z": 0.13521578907966614,
+      "invariant_subspace_corr": 0.5698781504343705,
+      "trial_avg_r2_full_space": 0.9753956198692322,
+      "per_trial_r2_full_space": 0.866391658782959,
+      "ensemble_std_nmse_y": 0.0032296908196569525,
+      "elapsed_minutes": 190.6,
+      "status": "soft-fail",
+      "masked": true
+    },
+    {
+      "n_latent": 16,
+      "best_nmse_y": 0.03546426445245743,
+      "best_nmse_y_full": 0.40359213948249817,
+      "best_mse_z": 0.13549862802028656,
+      "invariant_subspace_corr": 0.4558242303139979,
+      "trial_avg_r2_full_space": 0.9695912599563599,
+      "per_trial_r2_full_space": 0.8618821501731873,
+      "ensemble_std_nmse_y": 0.004313008753931003,
+      "elapsed_minutes": 157.8,
+      "status": "soft-fail",
+      "masked": true
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "chosen_rank": 12,
+  "metrics": {
+    "invariant_subspace_corr": 0.5698781504343705,
+    "masked_nmse_y": 0.03521847724914551,
+    "nmse_y_full": 0.3908836543560028,
+    "trial_avg_r2_full": 0.9753956198692322
+  },
+  "all_ranks": [
+    {
+      "n": 8,
+      "corr": 0.4296011055099454
+    },
+    {
+      "n": 12,
+      "corr": 0.5698781504343705
+    },
+    {
+      "n": 16,
+      "corr": 0.4558242303139979
+    }
+  ],
+  "crossed_85_threshold": false,
+  "delta_vs_wave_a": -0.213389,
+  "wave_a_baseline_corr": 0.7832673556806835,
+  "eval_procedure": "cluster_same_seed_as_train",
+  "masked": true,
+  "comparable_full_selection": "output\\circuit_analysis\\n_latent_sweep\\wave_a_selection.json",
+  "pareto_spread": 0.140277,
+  "story_note": "Masked corr WORSE than Wave A baseline (delta=-0.2134). Padding hypothesis ruled out \u2014 focusing loss on task-active timesteps did not improve connectivity alignment. Tilt Phase 3.1 story toward STORY_1 (method/data limit). 03-07 (shorter T regen) will still RUN per its conditional skip rule (crossed_85=false), but the negative delta is a strong prior that shorter T also won't help."
+}

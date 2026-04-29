@@ -1,0 +1,20 @@
+{
+  "n_latent": 12,
+  "context_0": {
+    "corr": 0.6628119931538798,
+    "nmse_y": 0.2454647421836853,
+    "n_trials": 500
+  },
+  "context_1": {
+    "corr": 0.6405663273357787,
+    "nmse_y": 0.24513448774814606,
+    "n_trials": 500
+  },
+  "pooled_corr_reference": 0.7832673556806835,
+  "delta_ctx0": -0.120455,
+  "delta_ctx1": -0.142701,
+  "separation_threshold": 0.05,
+  "conclusion": "AMBIGUOUS",
+  "eval_procedure": "cluster_same_seed_as_train",
+  "either_above_85": false
+}
