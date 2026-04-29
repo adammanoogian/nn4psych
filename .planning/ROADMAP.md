@@ -80,13 +80,15 @@ Plans:
   2. Parameter recovery simulation on 50 synthetic datasets shows recovered vs true parameter correlation >= 0.85 for all parameters
   3. Per-subject MCMC fits on human schizophrenia data complete with R-hat <= 1.01, ESS >= 400, and zero divergences
   4. Per-model MCMC fits on RNN behavioral outputs complete with the same convergence criteria
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
-- [ ] 04-01: Archive PyEM models; implement src/nn4psych/bayesian/ subpackage with Nassar 2021 reduced model in NumPyro/JAX
-- [ ] 04-02: Implement MCMC convergence diagnostics (R-hat, ESS, trace plots via ArviZ) and parameter recovery simulation (50 synthetic datasets)
-- [ ] 04-03: Fit model to Nassar 2021 human .mat files (per-subject, per-condition); wire scripts/data_pipeline/09_fit_human_data.py
-- [ ] 04-04: Fit model to RNN behavioral outputs; wire scripts/data_pipeline/10_fit_rnn_data.py
+- [ ] 04-01-PLAN.md — Implement reduced_bayesian.py with paper-aligned priors; close BAYES-01 (PyEM/PyMC archived); 4-CPU-chain support (Wave 1)
+- [ ] 04-02-PLAN.md — Diagnostics module (rhat/ess/divergences via ArviZ, retry helper, JSON shape) + parameter recovery on 50 synthetic Nassar datasets; updates REQUIREMENTS/ROADMAP SC wording (Wave 2)
+- [ ] 04-03-PLAN.md — Fetch Brain2021Code raw data (gate); fit Reduced Bayesian per-subject x per-condition to human schizophrenia data; verify priors against Nassar supplement (Wave 3)
+- [ ] 04-04a-PLAN.md — Re-train K=20 RNN seeds via SLURM array on cluster; pull checkpoints to local (Wave 4)
+- [ ] 04-04b-PLAN.md — Replay human sequences through each RNN seed; fit Reduced Bayesian to RNN behavior pooled across modality_context (Wave 5)
+- [ ] 04-05-PLAN.md — *Gated/optional* CHMM-CRP prototype on single human subject + posterior predictive; user-gated execute-or-defer (Wave 6, autonomous: false)
 
 ### Phase 5: Human-vs-RNN Comparison
 **Goal**: Learning rates are extracted from human data and RNN outputs on a comparable basis, and a group-level statistical comparison (schizophrenia vs control vs RNN) is produced with WAIC model comparison.
