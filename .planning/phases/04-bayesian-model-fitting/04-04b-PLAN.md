@@ -10,6 +10,7 @@ files_modified:
   - scripts/data_pipeline/10_fit_rnn_data.py
   - scripts/data_pipeline/replay_human_sequences.py
   - cluster/run_rnn_fits.sh
+  - cluster/99_push_results.slurm
   - data/processed/bayesian/rnn_fits/
 user_setup:
   - service: monash_m3_cluster
@@ -25,9 +26,11 @@ must_haves:
     - "Per-fit JSON written to data/processed/bayesian/rnn_fits/per_fit/seed_{k:02d}_{subject_id}_{condition}.json"
     - "Aggregate summary CSV usable by Phase 5 cohort comparison"
     - "Replay logic preserves human stimulus sequences exactly (no re-randomization); RNN sees identical bag observations as the corresponding human subject"
+    - "Obs schema (PIE_CP_OB_v2 6-field tuple) is documented in replay_human_sequences.py module docstring with line citations from envs/pie_environment.py and bucket-position range is asserted at runtime (M7 fix)"
+    - "99_push_results.slurm has stage_files calls for data/processed/bayesian/rnn_fits/ (M6 fix)"
   artifacts:
     - path: "scripts/data_pipeline/replay_human_sequences.py"
-      provides: "replay_seed_on_subject(seed_idx, subject_trial_data) -> (bag_positions, bucket_positions); drives RNN forward on human sequence and extracts predicted bucket positions"
+      provides: "replay_seed_on_subject(seed_idx, subject_trial_data) -> (bag_positions, bucket_positions); drives RNN forward on human sequence and extracts predicted bucket positions; module docstring cites obs schema from envs/pie_environment.py"
       contains: "def replay_seed_on_subject"
     - path: "scripts/data_pipeline/10_fit_rnn_data.py"
       provides: "End-to-end driver: load cohort_manifest.json + subject_trials.npy → for each (seed, subject, condition) call replay+fit_with_retry → write JSONs"
@@ -35,6 +38,9 @@ must_haves:
     - path: "cluster/run_rnn_fits.sh"
       provides: "SLURM array (--array=0-19) over seeds; each task fits ALL subjects for one seed sequentially (~6h wall per seed; total ~6h with 20 parallel)"
       contains: "SBATCH --array=0-19"
+    - path: "cluster/99_push_results.slurm"
+      provides: "Autopush extended with stage_files for RNN behavioral fits (M6 fix)"
+      contains: "rnn_fits"
     - path: "data/processed/bayesian/rnn_fits/per_fit/"
       provides: "5360 per-fit JSONs (20 seeds x 134 subjects x 2 conditions)"
     - path: "data/processed/bayesian/rnn_fits/summary.csv"
@@ -46,7 +52,7 @@ must_haves:
       pattern: "cohort_manifest"
     - from: "scripts/data_pipeline/10_fit_rnn_data.py"
       to: "scripts/data_pipeline/replay_human_sequences.py"
-      via: "from replay_human_sequences import replay_seed_on_subject"
+      via: "sys.path.insert(0, str(Path(__file__).parent)); from replay_human_sequences import replay_seed_on_subject (M8 fix: scripts/ is not on sys.path when invoked from repo root)"
       pattern: "replay_seed_on_subject"
     - from: "scripts/data_pipeline/10_fit_rnn_data.py"
       to: "data/processed/nassar2021/subject_trials.npy"
@@ -62,9 +68,10 @@ Replay each human subject's bag-position sequence through each of the K=20 RNN s
 Purpose: BAYES-05 + ROADMAP Phase 4 SC-4 evidence. Produces RNN posterior parameter distributions matched to humans (same stimulus sequences) for Phase 5 schizophrenia-vs-control-vs-RNN comparison.
 
 Output:
-- `replay_human_sequences.py` (RNN forward driver on human stimulus sequences)
-- `10_fit_rnn_data.py` (per-seed-per-subject-per-condition fit driver)
+- `replay_human_sequences.py` (RNN forward driver on human stimulus sequences) with documented obs schema (M7)
+- `10_fit_rnn_data.py` (per-seed-per-subject-per-condition fit driver) with `sys.path.insert` so the import works from repo root (M8)
 - `cluster/run_rnn_fits.sh` (SLURM array over seeds)
+- `cluster/99_push_results.slurm` extended with stage_files for RNN fits (M6)
 - `data/processed/bayesian/rnn_fits/per_fit/*.json` + `summary.csv`
 </objective>
 
@@ -85,6 +92,7 @@ Output:
 @.planning/phases/04-bayesian-model-fitting/04-04a-SUMMARY.md
 @scripts/training/train_rnn_canonical.py
 @scripts/data_pipeline/extract_nassar_trials.py
+@envs/pie_environment.py
 @src/nn4psych/bayesian/reduced_bayesian.py
 @src/nn4psych/bayesian/diagnostics.py
 @cluster/run_rnn_cohort.sh
@@ -96,14 +104,17 @@ Output:
   <name>Task 1: Implement replay_human_sequences.py — drive RNN forward on human stimuli</name>
   <files>scripts/data_pipeline/replay_human_sequences.py</files>
   <action>
-Create `scripts/data_pipeline/replay_human_sequences.py`. Follow project conventions: `from __future__ import annotations`, `matplotlib.use('Agg')` only if pyplot is imported (likely not needed here), NumPy-style docstrings, absolute imports, line length 88, Python 3.10+ types.
+Create `scripts/data_pipeline/replay_human_sequences.py`. Follow project conventions: `from __future__ import annotations`, NumPy-style docstrings, absolute imports, line length 88, Python 3.10+ types.
 
-Module setup:
+Module setup (m10 fix — defensive matplotlib backend pinning per project CLAUDE.md "Never call plt.show()"):
 ```python
 from __future__ import annotations
 import os
 os.environ.setdefault('JAX_PLATFORM_NAME', 'cpu')
 os.environ.setdefault('XLA_PYTHON_CLIENT_PREALLOCATE', 'false')
+
+import matplotlib  # m10: pin Agg backend defensively even if pyplot is not used in this module
+matplotlib.use('Agg')
 
 from pathlib import Path
 import numpy as np
@@ -111,6 +122,13 @@ import torch
 
 from nn4psych.models.actor_critic import ActorCritic   # check exact import path; Phase 2 should have it
 ```
+
+**M7 fix — module docstring MUST cite the PIE_CP_OB_v2 obs schema explicitly with line citations.** The PIE environment in `envs/pie_environment.py` constructs the observation tuple in two places:
+
+- Lines ~214-238 (`reset` method): `[helicopter_pos|hide_variable, bucket_pos, hide_variable, pred_error, prev_bucket_pos, prev_bag_pos]` (6 fields, dtype float32)
+- The `step` method follows the same schema.
+
+Document this in the module docstring, with the field names, dtypes, value ranges (bucket_pos ∈ [`min_obs_size=1`, `max_obs_size=301`]), and the field order. The docstring must include a line of the form: "Obs schema (per envs/pie_environment.py lines 214-238): `[modality_context_or_helicopter, bucket_pos, hide_variable, pred_error, prev_bucket_pos, prev_bag_pos]` (np.float32 6-tuple)." This satisfies M7 done criteria.
 
 Public function:
 ```python
@@ -129,7 +147,7 @@ def replay_seed_on_subject(
     model_path : Path
         Path to the trained checkpoint (model.pt from 04-04a).
     bag_positions : np.ndarray, shape (n_trials,)
-        Human-observed bag positions (in bag-screen coordinates 0–300).
+        Human-observed bag positions (in bag-screen coordinates 1–301).
     condition : str
         'changepoint' or 'oddball'. Mapped to environment context flag for the RNN.
     pool_modality_context : bool, default True
@@ -146,13 +164,14 @@ def replay_seed_on_subject(
         Echoed input (for downstream fitting interface compatibility).
     bucket_positions : np.ndarray, shape (n_trials,)
         RNN-generated bucket positions, derived from RNN action choices each trial.
+        Range is enforced at [1, 301] per envs/pie_environment.py min/max_obs_size.
 
     Notes
     -----
-    The PIE_CP_OB_v2 environment expects observations including modality_context,
-    bag, and previous reward. This function constructs synthetic per-trial
-    observations from the human bag sequence and the RNN's previous action
-    (bucket position from prior trial) to maintain the closed-loop assumption.
+    Obs schema (per envs/pie_environment.py lines 214-238):
+    `[modality_context_or_helicopter, bucket_pos, hide_variable, pred_error, prev_bucket_pos, prev_bag_pos]`
+    (np.float32 6-tuple). See module docstring for details and the precise
+    helicopter-vs-hide-variable branching for `train_cond` mode.
     """
 ```
 
@@ -171,9 +190,7 @@ bucket_positions = []
 
 for t in range(n_trials):
     bag_t = torch.tensor([[bag_positions[t]]], dtype=torch.float32, device=device)
-    # Build observation: modality_context, bag_t, prev_action, prev_reward, condition_flag
-    # Match exact obs schema used by train_rnn_canonical.py — read the script to confirm
-    # the obs concatenation order before implementing.
+    # Build observation: 6-tuple per envs/pie_environment.py lines 214-238
     obs = build_obs(modality_context_value, bag_t, prev_action, prev_reward, condition_flag)
     with torch.no_grad():
         logits, value, hx = model(obs, hx)
@@ -185,11 +202,17 @@ for t in range(n_trials):
     prev_action = torch.tensor([[bucket_t]], dtype=torch.float32, device=device)
 ```
 
-**CRITICAL CAVEAT for executor:** The exact obs schema for PIE_CP_OB_v2 must be inferred from `scripts/training/train_rnn_canonical.py` and `envs/pie_environment.py` (project structure shows these exist). Read those files BEFORE implementing `build_obs`. Document the observed schema in the script's docstring. If the schema changes between Phase 2 and Phase 4 (it should not — TRAIN-01 stable), this is a regression to flag.
+**CRITICAL CAVEAT for executor:** The exact obs schema for PIE_CP_OB_v2 must be confirmed against `envs/pie_environment.py` (lines 214-238 `reset` and the matching block in `step`) AND `scripts/training/train_rnn_canonical.py`. Document the observed schema at the module docstring. If the schema changes between Phase 2 and Phase 4 (it should not — TRAIN-01 stable), this is a regression to flag.
 
 If `pool_modality_context=True`: run the loop twice (modality_context=0 and =1), average the two bucket trajectories trial-by-trial, return the averaged sequence.
 
-4. Return `(bag_positions, np.array(bucket_positions, dtype=np.float64))`.
+4. **M7 fix — bucket-position range assertion.** Before returning, defensively assert:
+```python
+bucket_arr = np.asarray(bucket_positions, dtype=np.float64)
+assert bucket_arr.min() >= 0 and bucket_arr.max() <= 300, \
+    f'bucket out of range: [{bucket_arr.min():.1f}, {bucket_arr.max():.1f}] (expected [0, 300] per envs/pie_environment.py)'
+```
+This catches obs-schema mismatches that would silently produce out-of-range trajectories. Return `(bag_positions, bucket_arr)`.
 
 Add a CLI for one-off smoke testing:
 ```python
@@ -209,16 +232,30 @@ if __name__ == "__main__":
 ```
 # Smoke test on a single 04-04a checkpoint (smoke if cohort exists; otherwise on /tmp/rnn_smoke from 04-04a Task 1)
 /c/Users/aman0087/AppData/Local/miniforge3/envs/actinf-py-scripts/python.exe scripts/data_pipeline/replay_human_sequences.py --model_path data/processed/rnn_cohort/seed_00/model.pt --n_trials 50
-# Expected: prints bag/bucket shapes (50,) and bucket value range; no exception
+# Expected: prints bag/bucket shapes (50,) and bucket value range; no exception; bucket range within [0, 300]
 
 # Or with smoke checkpoint:
 /c/Users/aman0087/AppData/Local/miniforge3/envs/actinf-py-scripts/python.exe scripts/data_pipeline/replay_human_sequences.py --model_path /tmp/rnn_smoke/model.pt --n_trials 30
+
+# M7 fix: docstring cites obs schema from pie_environment.py with line numbers
+grep -E "envs/pie_environment\.py lines 21[0-9]" scripts/data_pipeline/replay_human_sequences.py
+# Expected: at least 1 match (in the module docstring or function docstring)
+
+# M7 fix: bucket-range assertion present
+grep -c "bucket out of range" scripts/data_pipeline/replay_human_sequences.py
+# Expected: >= 1
+
+# m10 fix: matplotlib.use('Agg') is pinned at module top
+grep -c "matplotlib.use('Agg')" scripts/data_pipeline/replay_human_sequences.py
+# Expected: 1
 ```
   </verify>
   <done>
 - `replay_human_sequences.py` exists with `replay_seed_on_subject`.
 - Smoke run succeeds against at least one checkpoint.
-- Obs schema documented in module docstring.
+- Obs schema match documented in module docstring (M7 fix; cites envs/pie_environment.py lines 214-238).
+- Bucket-position range assertion catches out-of-range trajectories at runtime (M7 fix).
+- `matplotlib.use('Agg')` pinned at module top (m10 fix).
 - Pool-across-modality_context implemented (enabled by default).
   </done>
 </task>
@@ -229,7 +266,7 @@ if __name__ == "__main__":
   <action>
 Create `scripts/data_pipeline/10_fit_rnn_data.py`. Mirror the structure of `09_fit_human_data.py` from 04-03 — same diagnostics + retry helpers, same JSON shape via `make_fit_summary`, same exception/skip handling.
 
-Module setup (identical preamble to 09_fit_human_data.py):
+Module setup (identical preamble to 09_fit_human_data.py PLUS the M8 sys.path fix):
 ```python
 from __future__ import annotations
 import os
@@ -240,6 +277,7 @@ import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module='arviz')
 
 import json
+import sys
 from pathlib import Path
 import argparse
 import numpy as np
@@ -249,8 +287,15 @@ import jax
 import nn4psych.bayesian as bayes
 from nn4psych.bayesian import reduced_bayesian_model, fit_with_retry, make_fit_summary, to_jsonable
 
-from scripts.data_pipeline.replay_human_sequences import replay_seed_on_subject
+# M8 fix: scripts/ is NOT on sys.path when this script is invoked from repo root via
+# `python scripts/data_pipeline/10_fit_rnn_data.py`. Add this script's parent directory
+# (scripts/data_pipeline/) so `from replay_human_sequences import replay_seed_on_subject`
+# resolves. Document this manipulation in the module docstring.
+sys.path.insert(0, str(Path(__file__).parent))
+from replay_human_sequences import replay_seed_on_subject
 ```
+
+The module docstring must include a "## sys.path manipulation" note explaining the `sys.path.insert` line and why it is required (per M8: scripts directory is not a Python package and is not on sys.path when scripts are invoked from repo root). Cite this plan (04-04b Task 2) and checker iteration 1 (M8) for traceability.
 
 CLI:
 - `--cohort_manifest` (default `data/processed/rnn_cohort/cohort_manifest.json`)
@@ -318,7 +363,7 @@ Pipeline:
   </action>
   <verify>
 ```
-# Smoke run completes
+# Smoke run completes (M8: confirms sys.path import works when invoked from repo root)
 /c/Users/aman0087/AppData/Local/miniforge3/envs/actinf-py-scripts/python.exe scripts/data_pipeline/10_fit_rnn_data.py --smoke
 ls data/processed/bayesian/rnn_fits/per_fit/ | wc -l
 # Expected: >= 4
@@ -338,10 +383,15 @@ print('shape OK; status=', fit['status'], 'rnn_seed=', fit['rnn_seed'])
 # Aggregate (smoke)
 /c/Users/aman0087/AppData/Local/miniforge3/envs/actinf-py-scripts/python.exe scripts/data_pipeline/10_fit_rnn_data.py --aggregate_only
 ls data/processed/bayesian/rnn_fits/summary.csv
+
+# M8 fix: verify the sys.path.insert line is present and the import resolves correctly
+grep -c "sys.path.insert(0, str(Path(__file__).parent))" scripts/data_pipeline/10_fit_rnn_data.py
+# Expected: 1
 ```
   </verify>
   <done>
 - `10_fit_rnn_data.py` smoke run produces per-fit JSONs with `rnn_seed` column.
+- M8 fix: `sys.path.insert(0, str(Path(__file__).parent))` is present at module top, and `from replay_human_sequences import replay_seed_on_subject` resolves when invoked via `python scripts/data_pipeline/10_fit_rnn_data.py` from repo root.
 - `--single_seed_idx` flag works (for cluster array).
 - `aggregate_summary` produces summary.csv.
 - Exception handler verified.
@@ -349,10 +399,10 @@ ls data/processed/bayesian/rnn_fits/summary.csv
 </task>
 
 <task type="auto">
-  <name>Task 3: Write cluster/run_rnn_fits.sh SLURM array (one task per seed)</name>
-  <files>cluster/run_rnn_fits.sh</files>
+  <name>Task 3: Write cluster/run_rnn_fits.sh SLURM array (one task per seed); add stage_files calls for rnn_fits to 99_push_results.slurm</name>
+  <files>cluster/run_rnn_fits.sh,cluster/99_push_results.slurm</files>
   <action>
-Create `cluster/run_rnn_fits.sh` modeled on `cluster/run_rnn_cohort.sh` (04-04a) but CPU-only (no GPU needed for MCMC; NumPyro NUTS runs on CPU per Phase 1 decision):
+**A. Create `cluster/run_rnn_fits.sh`** modeled on `cluster/run_rnn_cohort.sh` (04-04a) but CPU-only (no GPU needed for MCMC; NumPyro NUTS runs on CPU per Phase 1 decision):
 
 ```bash
 #!/bin/bash
@@ -414,12 +464,30 @@ Notes:
 - `--cpus-per-task=4` matches the 4 chains; SLURM allocates 4 CPU cores per array task.
 - `--partition=comp` (CPU partition on M3 — confirm naming with cluster docs; if `comp` is wrong, document in SUMMARY for fix).
 - `--time=10:00:00` is conservative; per-seed timing was 6h estimate per RESEARCH.md Section 6.
-- Autopush staging needs `data/processed/bayesian/rnn_fits/` covered. Verify in `cluster/99_push_results.slurm`; add if missing.
 
 Run CRLF strip:
 ```
 sed -i 's/\r$//' cluster/run_rnn_fits.sh
 chmod +x cluster/run_rnn_fits.sh
+```
+
+**B. M6 fix — Extend `cluster/99_push_results.slurm` with `stage_files` calls for RNN behavioral fits.**
+
+Append the following EXACT lines after the rnn_cohort block added by 04-04a:
+
+```bash
+# Phase 4 RNN behavioral fits (04-04b)
+stage_files "data/processed/bayesian/rnn_fits/per_fit/seed_*_*_*.json" "RNN behavioral fits (per-seed-subject-condition JSONs)"
+stage_files "data/processed/bayesian/rnn_fits/summary.csv" "RNN behavioral fits aggregate summary"
+```
+
+The pattern `seed_*_*_*.json` matches the file naming `seed_{k:02d}_{subject_id}_{condition}.json` from Task 2. If the executor adapts the naming (e.g., flat path vs subdirectory), update the pattern to MATCH THE ACTUAL PATHS in the implemented `out_path = output_dir / 'per_fit' / ...`. The verify command below grep-counts that `rnn_fits` appears in at least 2 stage_files calls.
+
+Do NOT use `git add` for these paths. Do NOT touch the existing rules from 04-04a or earlier phases.
+
+CRLF strip:
+```
+sed -i 's/\r$//' cluster/99_push_results.slurm
 ```
   </action>
   <verify>
@@ -432,25 +500,28 @@ grep -E "^#SBATCH --array=0-19" cluster/run_rnn_fits.sh
 grep -c "10_fit_rnn_data.py" cluster/run_rnn_fits.sh
 grep -c "single_seed_idx" cluster/run_rnn_fits.sh
 
-# Autopush coverage
-grep -c "rnn_fits\|bayesian/rnn" cluster/99_push_results.slurm
-# Expected: >= 1
+# M6 fix: autopush has stage_files calls for rnn_fits (NOT bare git add)
+grep -c "stage_files \"data/processed/bayesian/rnn_fits/" cluster/99_push_results.slurm
+# Expected: 2 (per_fit JSON pattern + summary.csv)
+
+# M6 fix: no bare git-add for rnn_fits
+test "$(grep -E "^\s*git add.*rnn_fits" cluster/99_push_results.slurm | wc -l)" -eq 0 && echo "no bare git-add OK"
 ```
   </verify>
   <done>
 - `cluster/run_rnn_fits.sh` exists; CRLF stripped; executable.
 - Array directive covers 0-19; CPU partition specified; XLA_FLAGS exported.
-- Autopush includes `data/processed/bayesian/rnn_fits/`.
+- M6 fix: `cluster/99_push_results.slurm` has 2 new `stage_files` calls covering `data/processed/bayesian/rnn_fits/per_fit/seed_*_*_*.json` and `data/processed/bayesian/rnn_fits/summary.csv`. No bare `git add` introduced.
   </done>
 </task>
 
 <task type="checkpoint:human-verify" gate="blocking">
   <name>Task 4: User submits cluster array; pull aggregated fits and run summary aggregation</name>
   <what-built>
-- `replay_human_sequences.py` (RNN forward driver)
-- `10_fit_rnn_data.py` (fit driver with cluster + smoke modes)
+- `replay_human_sequences.py` (RNN forward driver with documented obs schema and bucket-range assertion per M7; matplotlib Agg backend per m10)
+- `10_fit_rnn_data.py` (fit driver with cluster + smoke modes; sys.path.insert per M8)
 - `cluster/run_rnn_fits.sh` (SLURM array over 20 seeds)
-- Autopush integration
+- `cluster/99_push_results.slurm` extended with stage_files calls for rnn_fits per M6
   </what-built>
   <how-to-verify>
 **Step 1 (user):** Push and submit:
@@ -533,17 +604,20 @@ print('PASS')
 - BAYES-05 met: 20 RNN seeds x 134 subjects x 2 conditions fit cells produced (allowing some skips/errors per CONTEXT.md FAILED policy).
 - ROADMAP Phase 4 SC-4 evidence: median R-hat <= 1.01 and median ESS_bulk >= 400 across PASS fits; divergence distribution documented.
 - Pool-across-modality_context implemented and verified in replay logic.
+- Obs schema documented in replay_human_sequences.py module docstring with line citations from envs/pie_environment.py (M7); bucket-position range asserted at runtime.
+- `sys.path.insert` present in 10_fit_rnn_data.py so cross-script import works from repo root (M8).
+- Autopush stage_files calls cover rnn_fits artifacts (M6).
 - summary.csv ready for Phase 5 cohort comparison.
 - Pass rate >= 80% across all (seed, subject, condition) cells.
 </success_criteria>
 
 <output>
 After completion, create `.planning/phases/04-bayesian-model-fitting/04-04b-SUMMARY.md`:
-- What was built: replay driver, fit driver, cluster script
+- What was built: replay driver, fit driver, cluster script, autopush stage_files extension
 - Cluster job ID, timing, per-seed completion
 - Pass-rate breakdown by seed and by condition
 - Median R-hat, ESS_bulk, divergences
-- Decisions logged: obs schema confirmed for replay; modality_context pooling method
+- Decisions logged: obs schema confirmed for replay (M7); modality_context pooling method; sys.path manipulation rationale (M8)
 - Tech-stack additions: none new
 - Required-by-next-plan: Phase 5 ingests human summary.csv (04-03) + RNN summary.csv (04-04b) for group comparison
 - Open follow-ups: any seeds with high error rates; whether to re-train problematic seeds before Phase 5

@@ -9,6 +9,7 @@ autonomous: false
 files_modified:
   - cluster/run_rnn_cohort.sh
   - cluster/setup_env.sh
+  - cluster/99_push_results.slurm
   - data/processed/rnn_cohort/
   - scripts/training/train_rnn_canonical.py
 user_setup:
@@ -23,7 +24,7 @@ must_haves:
   truths:
     - "K=20 independent seeds of the canonical PIE_CP_OB_v2 RNN are trained via SLURM array job"
     - "Each seed's trained model checkpoint and final reward curve are saved to data/processed/rnn_cohort/seed_{i:02d}/"
-    - "Checkpoints are pulled from cluster to local via the established autopush mechanism (run_circuit_ensemble.sh pattern)"
+    - "Checkpoints are pulled from cluster to local via the established autopush mechanism (run_circuit_ensemble.sh pattern), and 99_push_results.slurm has the required stage_files calls for rnn_cohort artifacts (M6 fix)"
     - "All 20 checkpoints loadable via existing nn4psych.models.actor_critic.ActorCritic loader"
     - "Training reward curves indicate learning (final reward not flat or diverging) for at least 18/20 seeds; failed seeds documented but not blocking 04-04b"
   artifacts:
@@ -38,6 +39,9 @@ must_haves:
     - path: "data/processed/rnn_cohort/cohort_manifest.json"
       provides: "List of seed indices with checkpoint paths and final reward; consumed by 04-04b for RNN cohort iteration"
       contains: "seeds"
+    - path: "cluster/99_push_results.slurm"
+      provides: "Autopush script extended with stage_files calls for rnn_cohort artifacts (M6 fix)"
+      contains: "rnn_cohort"
   key_links:
     - from: "cluster/run_rnn_cohort.sh"
       to: "scripts/training/train_rnn_canonical.py"
@@ -58,6 +62,7 @@ Purpose: BAYES-05 prerequisite. Phase 4 needs 20 RNN seeds to fit Reduced Bayesi
 
 Output:
 - `cluster/run_rnn_cohort.sh` (new SLURM array script)
+- `cluster/99_push_results.slurm` extended with `stage_files` calls for rnn_cohort (M6 fix)
 - `data/processed/rnn_cohort/seed_{00..19}/` (20 directories with model.pt + training_log.json)
 - `data/processed/rnn_cohort/cohort_manifest.json`
 </objective>
@@ -164,10 +169,10 @@ print('smoke OK; final_reward=', log['final_reward'])
 </task>
 
 <task type="auto">
-  <name>Task 2: Write cluster/run_rnn_cohort.sh SLURM array job (K=20 seeds)</name>
-  <files>cluster/run_rnn_cohort.sh</files>
+  <name>Task 2: Write cluster/run_rnn_cohort.sh SLURM array job (K=20 seeds) and add stage_files calls to 99_push_results.slurm</name>
+  <files>cluster/run_rnn_cohort.sh,cluster/99_push_results.slurm</files>
   <action>
-Create `cluster/run_rnn_cohort.sh` modeled on `cluster/run_circuit_ensemble.sh` (which is the reference for Phase-3-established cluster infrastructure: setup_env.sh, miniforge3 module, autopush pattern, CRLF strip).
+**A. Create `cluster/run_rnn_cohort.sh`** modeled on `cluster/run_circuit_ensemble.sh` (which is the reference for Phase-3-established cluster infrastructure: setup_env.sh, miniforge3 module, autopush pattern, CRLF strip).
 
 Structure:
 
@@ -244,12 +249,40 @@ Notes:
 - GPU partition matches Phase 3 setup; if M3 partition naming differs, document in SUMMARY (planner has limited cluster-side visibility).
 - `setup_env.sh` already creates the cluster conda env per Phase 3 — reuse, do not duplicate.
 
-Verify autopush patterns in `cluster/99_push_results.slurm` already handle `data/processed/rnn_cohort/` — Phase 3 commit history shows autopush rules are pattern-based (`data/processed/rnn_behav/`, `n_latent_sweep_masked/`, etc.). If `rnn_cohort/` is NOT in the autopush staging patterns, add it to `99_push_results.slurm` (a defensive `git add data/processed/rnn_cohort/` line). Reference STATE.md decision: "fix(03-05): un-ignore n_latent_sweep_masked tree for autopush" shows the pattern.
-
 Run CRLF strip locally:
 ```
 sed -i 's/\r$//' cluster/run_rnn_cohort.sh
 chmod +x cluster/run_rnn_cohort.sh
+```
+
+**B. M6 fix — Extend `cluster/99_push_results.slurm` with explicit `stage_files` calls for rnn_cohort artifacts.**
+
+The existing `cluster/99_push_results.slurm` defines a `stage_files <pattern> <description>` function (around line 205) that all autopush rules use. **Bare `git add` lines bypass dry-run logic and break parity with the rest of the autopush workflow.** Per checker iteration 1, the previous draft suggested a "defensive `git add`" — that is INCORRECT for this script. Use `stage_files` only.
+
+Locate the `stage_files` block in `99_push_results.slurm` (after the existing rules for `output/circuit_analysis/...` and `data/processed/rnn_behav/...`). Append these EXACT lines (must match RNN-cohort artifact paths exactly):
+
+```bash
+# Phase 4 RNN cohort (04-04a)
+stage_files "data/processed/rnn_cohort/seed_*/model.pt" "RNN cohort checkpoints"
+stage_files "data/processed/rnn_cohort/seed_*/training_log.json" "RNN cohort training logs"
+stage_files "data/processed/rnn_cohort/cohort_manifest.json" "RNN cohort manifest"
+```
+
+Do NOT use `git add` for these paths. Do NOT add wildcards above the seed level. Do NOT touch the existing rules.
+
+Verify the patterns are present and use the `stage_files` function (not bare `git add`):
+```
+grep -c "stage_files \"data/processed/rnn_cohort/" cluster/99_push_results.slurm
+# Expected: 3 (one for model.pt, one for training_log.json, one for cohort_manifest.json)
+
+# Defensive: confirm no bare git-add lines for rnn_cohort were introduced
+grep -E "^\s*git add.*rnn_cohort" cluster/99_push_results.slurm | wc -l
+# Expected: 0
+```
+
+Run CRLF strip on 99_push_results.slurm:
+```
+sed -i 's/\r$//' cluster/99_push_results.slurm
 ```
   </action>
   <verify>
@@ -267,15 +300,18 @@ grep -E "^#SBATCH --array=0-19" cluster/run_rnn_cohort.sh
 grep -c "scripts/training/train_rnn_canonical.py" cluster/run_rnn_cohort.sh
 grep -c -- "--seed \${SLURM_ARRAY_TASK_ID}" cluster/run_rnn_cohort.sh
 
-# Autopush staging covers rnn_cohort
-grep -c "rnn_cohort" cluster/99_push_results.slurm
-# Expected: >= 1 (either pre-existing pattern or newly added)
+# M6 fix: autopush staging uses stage_files (NOT bare git add) for rnn_cohort
+grep -c "stage_files \"data/processed/rnn_cohort/" cluster/99_push_results.slurm
+# Expected: 3
+
+# M6 fix: no bare git-add for rnn_cohort
+test "$(grep -E "^\s*git add.*rnn_cohort" cluster/99_push_results.slurm | wc -l)" -eq 0 && echo "no bare git-add OK"
 ```
   </verify>
   <done>
 - `cluster/run_rnn_cohort.sh` exists with #SBATCH --array=0-19, GPU directive, and full training command.
 - CRLF stripped, executable.
-- Autopush staging includes `data/processed/rnn_cohort/`.
+- M6 fix: `cluster/99_push_results.slurm` has exactly 3 new `stage_files` calls covering `seed_*/model.pt`, `seed_*/training_log.json`, and `cohort_manifest.json`. No bare `git add` lines were introduced.
   </done>
 </task>
 
@@ -284,7 +320,7 @@ grep -c "rnn_cohort" cluster/99_push_results.slurm
   <what-built>
 - `cluster/run_rnn_cohort.sh` SLURM array (K=20)
 - `train_rnn_canonical.py` updated with --seed and --output_dir
-- Autopush integration in `cluster/99_push_results.slurm`
+- `cluster/99_push_results.slurm` updated with 3 `stage_files` calls for rnn_cohort artifacts (M6)
   </what-built>
   <how-to-verify>
 **Step 1 (user):** Push branch and SSH to M3.
@@ -391,6 +427,7 @@ print('checkpoints OK')
 
 <success_criteria>
 - `cluster/run_rnn_cohort.sh` SLURM array submitted and completed.
+- `cluster/99_push_results.slurm` has 3 `stage_files` calls for rnn_cohort artifacts (M6 fix; no bare `git add` lines).
 - 18+ of 20 seeds have valid `model.pt` and `training_log.json`.
 - `cohort_manifest.json` enumerates all OK seeds.
 - Failed seeds (if any < 2) documented in SUMMARY but do not block 04-04b.
@@ -399,7 +436,7 @@ print('checkpoints OK')
 
 <output>
 After completion, create `.planning/phases/04-bayesian-model-fitting/04-04a-SUMMARY.md`:
-- What was built: SLURM array, train script CLI updates, manifest
+- What was built: SLURM array, train script CLI updates, manifest, autopush stage_files extension (M6)
 - Cluster job ID and timing
 - Per-seed final reward distribution
 - Decisions logged: any partition / wall-time tweaks; failed seeds and why
