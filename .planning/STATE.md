@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 3 of 5 (Latent Circuit Inference) — In gap-closure
-Plan: 4/4 base plans complete; 03-05 COMPLETE (all 3 tasks done); 03-06 Task 1 done (cluster scripts ready, Task 2 pending per_context autopush)
-Status: 03-05 COMPLETE — masked-loss sweep done, wave_a_masked_selection.json written (chosen_rank=12, corr=0.5699, crossed_85=false, delta=-0.2134); 03-06 Task 1 complete — driver + cluster scripts + smoke test done, Task 2 (aggregation) awaiting autopush.
-Last activity: 2026-04-29 — 03-05 Task 3 complete: aggregate_n_latent_sweep_masked.py + pareto_curve_masked.json + wave_a_masked_selection.json committed (f4574c8). Padding hypothesis ruled out; story tilts to STORY_1.
+Plan: 4/4 base plans complete; 03-05 COMPLETE; 03-06 COMPLETE (both Wave 5 plans done)
+Status: 03-05 COMPLETE — masked-loss sweep done, wave_a_masked_selection.json written (chosen_rank=12, corr=0.5699, crossed_85=false, delta=-0.2134); 03-06 COMPLETE — per_context_results.json written (ctx-0 corr=0.6628, ctx-1 corr=0.6406, conclusion=AMBIGUOUS, both deltas negative-large, structural-separation ruled out).
+Last activity: 2026-04-29 — 03-06 Task 2 complete: aggregate_per_context.py + per_context_results.json + full SUMMARY.md committed. Conclusion=AMBIGUOUS: both per-context corrs below pooled, structural-separation hypothesis ruled out. Wave 5 fully done.
 
-Progress: [████████░░] ~80% (11/~13 base plans + Phase 3.1 plans in-progress)
+Progress: [█████████░] ~85% (12/~13 base plans + Phase 3.1 plans in-progress; 03-07 and 03-08 remain)
 
 ## Performance Metrics
 
@@ -94,6 +94,7 @@ Recent decisions affecting current work:
 - [03-06]: sigma_rec=0.15 default (no eval-mode override) for per-context fits — cluster_same_seed_as_train matches Wave A pooled baseline for direct corr comparison
 - [03-06]: circuit_data.npz sliced READ-ONLY by modality_context — no writes, no race condition with 03-05's task_active_mask
 - [03-06]: afterany (not afterok) for autopush — push fires even if one context fit fails
+- [03-06 Task 2]: Conclusion=AMBIGUOUS (by exhaustion): both per-context corrs LOWER than pooled by 0.12-0.14 — structural-separation hypothesis ruled out; Q quality cap is method/data-bound; converges with 03-05 STORY_1 evidence
 - [03-05 Task 3]: Masked-loss corr=0.5699 at n=12 WORSE than Wave A 0.7833 (delta=-0.2134) — padding hypothesis ruled out; story direction for 03-08 is STORY_1 (method/data limit)
 - [03-05 Task 3]: Negative delta (masked < full) is decisive regardless of Pareto spread (0.14) — masking hurt corr, direction is the signal
 - [03-05 Task 3]: 03-07 still runs (crossed_85=false) but negative delta is strong prior shorter T won't help either
@@ -117,7 +118,7 @@ Recent decisions affecting current work:
 - [RESOLVED 03-02]: T=500 with ~5% task-relevant — PARTIALLY FIXED by T=75 regen (now ~20-40% task-relevant, not full fix)
 - [RESOLVED 03-04]: n_latent sweep completed (03-03); rank n=12 selected as best of tried; STORY_2 committed; CIRC-05 closed (with caveats per writeup)
 - [RESOLVED 2026-04-29 — Gap 1, priority 1 — 03-05]: Masked-loss sweep COMPLETE. chosen_rank=12, corr=0.5699, crossed_85=false, delta_vs_wave_a=-0.2134. Padding hypothesis ruled out. wave_a_masked_selection.json written. Story tilts to STORY_1 (method/data limit).
-- [Phase 3.1 IN-PROGRESS — Gap 3, priority 3 / diagnostic — 03-06]: Per-context fitting (modality_context 0 vs 1) — Task 1 complete (driver + cluster scripts + smoke test). Cluster submission pending: `bash cluster/run_per_context_fits.sh` on Monash M3. Task 2 (aggregation + conclusion) awaits autopush.
+- [RESOLVED 2026-04-29 — Gap 3, priority 3 / diagnostic — 03-06]: Per-context fitting COMPLETE. ctx-0 corr=0.6628, ctx-1 corr=0.6406, both BELOW pooled 0.7833 (deltas -0.1205 and -0.1427). Conclusion=AMBIGUOUS. Structural-separation hypothesis ruled out. per_context_results.json written.
 - [Phase 3.1 PLANNED — Gap 2, priority 2 — 03-07]: Shorter T regen (T≈30 with delay=0) — orthogonal probe of T=75 padding hypothesis. Plan committed (01d2fdf). Conditional: 03-07 auto-skips if 03-05's wave_a_masked_selection.json reports crossed_85_threshold=true. Wave 6 in execution order.
 - [Phase 3.1 PLANNED — closure — 03-08]: Aggregate Phase 3.1 evidence (03-05 + 03-06 + 03-07), update wave_b_writeup.md story commit (STORY_0 if any gap >= 0.85, else STORY_1 method/data limit). autonomous: false — checkpoint before Phase 4 unblock. Wave 7.
 - [Phase 3.1 OPEN — confound]: LatentNet stochastic eval — sigma_rec noise always active; cluster/local metric discrepancy is a pre-existing limitation; should fix or pin a single eval seed before quantitative comparisons between runs (Gap 4 candidate?).
@@ -126,7 +127,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-29T22:05:00Z (approximate)
-Stopped at: Completed 03-05 Task 3 — aggregate_n_latent_sweep_masked.py + wave_a_masked_selection.json + pareto_curve_masked.json committed (f4574c8). SUMMARY.md replaced (full). STATE.md updated.
-Resume: Run 03-06 Task 2 (aggregation) after per_context autopush lands. Then 03-07 (shorter-T regen), then 03-08 (writeup closure, checkpoint).
+Last session: 2026-04-29T20:10:00Z (approximate)
+Stopped at: Completed 03-06 Task 2 — aggregate_per_context.py + per_context_results.json committed; full SUMMARY.md written; STATE.md updated. Wave 5 (03-05 + 03-06) both complete.
+Resume: Run 03-07 (shorter-T regen, Wave 6), then 03-08 (writeup closure checkpoint, Wave 7). Both per-context and masked-loss evidence converge on STORY_1 (method/data limit).
 Resume file: None
