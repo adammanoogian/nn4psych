@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 
 ## Current Position
 
-Phase: 4 of 5 (Bayesian Model Fitting / Nassar 2021) — Not yet planned
-Plan: Phase 3 base 4/4 + Wave 5 closure (03-05, 03-06) DONE; 03-07/08 DEFERRED (user pivot 2026-04-29). Phase 4 plans 04-01..04-04 listed in ROADMAP but no PLAN.md files yet.
-Status: Phase 4 needs planning. Suggested next: `/gsd:discuss-phase 04` or `/gsd:plan-phase 04`. Phase 3 returns to closure (03-07/08) after Phase 4 ships.
-Last activity: 2026-04-29 — User pivoted from Phase 3 closure to Phase 4 after Wave 5 evidence (both diagnostics negative). 03-05 + 03-06 SUMMARYs committed; 03-07/08 deferred.
+Phase: 4 of 5 (Bayesian Model Fitting / Nassar 2021) — In progress
+Plan: 04-01 COMPLETE. Next: 04-02 (Diagnostics + Parameter Recovery).
+Status: Phase 4 Wave 1 complete. Phase 3.1 closure (03-07/08) still deferred per 2026-04-29 user pivot.
+Last activity: 2026-04-30 — Completed 04-01-PLAN.md (reduced_bayesian.py, BAYES-01 closure, 6 smoke tests, arviz pin).
 
-Progress: [█████████░] ~85% (Phase 3 effectively complete pending writeup closure; Phase 4 starting)
+Progress: [█████████░] ~88% (04-01 done; 04-02..04-04 remaining)
 
 ## Performance Metrics
 
@@ -30,6 +30,7 @@ Progress: [█████████░] ~85% (Phase 3 effectively complete pe
 | 01-infrastructure-and-organization | 3/3 COMPLETE | ~24 min | ~8 min |
 | 02-rnn-training-verification | 3/3 COMPLETE | ~42 min | ~14 min |
 | 03-latent-circuit-inference | 4/4 COMPLETE | ~320 min compute + 5 weeks iteration | ~80 min |
+| 04-bayesian-model-fitting | 1/4 in progress | ~15 min | ~15 min (Wave 1 only) |
 
 **Recent Trend:**
 - Last 9 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min), 02-01 (12 min), 02-02 (15 min), 02-03 (15 min), 03-01 (75 min), 03-02 (205 min GPU ensemble + ~5 weeks iteration), 03-03 (~?), 03-04 (39 min)
@@ -98,6 +99,13 @@ Recent decisions affecting current work:
 - [03-05 Task 3]: Masked-loss corr=0.5699 at n=12 WORSE than Wave A 0.7833 (delta=-0.2134) — padding hypothesis ruled out; story direction for 03-08 is STORY_1 (method/data limit)
 - [03-05 Task 3]: Negative delta (masked < full) is decisive regardless of Pareto spread (0.14) — masking hurt corr, direction is the signal
 - [03-05 Task 3]: 03-07 still runs (crossed_85=false) but negative delta is strong prior shorter T won't help either
+- [04-01]: All five RBO priors are FALLBACK weakly-informative defaults pending Nassar 2021 supplement; prior verification gated on 04-03 Task 1 Brain2021Code download
+- [04-01]: Predictive NOT re-exported from nn4psych.bayesian (m9); downstream callers import from numpyro.infer directly
+- [04-01]: run_mcmc arg order is bag_positions first, bucket_positions second (semantic clarity; differs from old numpyro_models.py)
+- [04-01]: compute_rbo_forward uses full predictive-variance-weighted tau update (numpyro_models.py lines 133-138), not simplified tau/UU from metrics.py; flagged for 04-02 validation
+- [04-01]: numpyro_models.py deprecated (DeprecationWarning at import) but retained for git-history continuity
+- [04-01]: arviz pinned >=0.17.0,<0.25.0 in pyproject.toml (RESEARCH.md Open Question 5)
+- [04-01]: XLA_FLAGS set in __init__.py via os.environ.setdefault() before any jax import; 4 virtual CPU devices verified
 
 ### Pending Todos
 
@@ -127,7 +135,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-29T20:10:00Z (approximate)
-Stopped at: Completed 03-06 Task 2 — aggregate_per_context.py + per_context_results.json committed; full SUMMARY.md written; STATE.md updated. Wave 5 (03-05 + 03-06) both complete.
-Resume: User pivoted to Phase 4. Run `/gsd:discuss-phase 04` to gather context for Nassar 2021 Bayesian model fitting, or `/gsd:plan-phase 04` to plan directly. Phase 3.1 closure (03-07/08) returns after Phase 4 ships.
+Last session: 2026-04-30T06:15:21Z
+Stopped at: Completed 04-01-PLAN.md — reduced_bayesian.py + __init__.py + numpyro_models.py M2 cleanup + BAYES-01 archive + 6 smoke tests + arviz pin committed. 04-01-SUMMARY.md written. STATE.md updated.
+Resume: Continue Phase 4 with 04-02 (Diagnostics + Parameter Recovery). 04-02 imports nn4psych.bayesian canonical surface; implements run_diagnostics, retry loop, make_fit_summary, 50-dataset recovery.
 Resume file: None
