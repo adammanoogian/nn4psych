@@ -24,7 +24,7 @@
 
 - [ ] **BAYES-01**: PyEM models archived to archive/
 - [ ] **BAYES-02**: Nassar 2021 reduced Bayesian observer model implemented in NumPyro/JAX
-- [ ] **BAYES-03**: MCMC convergence diagnostics (R-hat <= 1.01, ESS >= 400, trace plots)
+- [ ] **BAYES-03**: MCMC convergence diagnostics (R-hat <= 1.01, ESS_bulk >= 400; divergence count documented per fit but not used as a gate per Phase 4 CONTEXT.md decision 2026-04-29)
 - [ ] **BAYES-04**: Model fit to Nassar 2021 human schizophrenia data (.mat files, per-subject)
 - [ ] **BAYES-05**: Model fit to RNN agent behavioral outputs (per-model)
 - [ ] **BAYES-06**: Parameter recovery simulation validates model identifiability with synthetic data

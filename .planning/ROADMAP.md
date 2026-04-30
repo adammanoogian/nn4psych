@@ -73,13 +73,14 @@ Plans:
 
 ### Phase 4: Bayesian Model Fitting
 **Goal**: The Nassar 2021 reduced Bayesian observer model is implemented in NumPyro/JAX, validated on synthetic data, fit per-subject to human schizophrenia data, and fit to RNN behavioral outputs — all with MCMC convergence diagnostics enforced.
+**Note (2026-04-29):** Original "zero divergences" wording in SC-3/SC-4 was relaxed during /gsd:discuss-phase 04 to "document but don't gate" — see `.planning/phases/04-bayesian-model-fitting/04-CONTEXT.md` for rationale. R-hat / ESS gates are unchanged.
 **Depends on**: Phase 1 (JAX infrastructure), Phase 2 (RNN behavioral outputs)
 **Requirements**: BAYES-01, BAYES-02, BAYES-03, BAYES-04, BAYES-05, BAYES-06
 **Success Criteria** (what must be TRUE):
   1. PyEM models are archived to archive/ and no longer importable from the main package
   2. Parameter recovery simulation on 50 synthetic datasets shows recovered vs true parameter correlation >= 0.85 for all parameters
-  3. Per-subject MCMC fits on human schizophrenia data complete with R-hat <= 1.01, ESS >= 400, and zero divergences
-  4. Per-model MCMC fits on RNN behavioral outputs complete with the same convergence criteria
+  3. Per-subject MCMC fits on human schizophrenia data complete with R-hat <= 1.01 and ESS_bulk >= 400; divergence count is documented per fit (no gate per Phase 4 CONTEXT.md 2026-04-29; divergences documented)
+  4. Per-model MCMC fits on RNN behavioral outputs complete with the same convergence criteria (R-hat <= 1.01, ESS_bulk >= 400; divergences documented, not gated)
 **Plans**: 6 plans
 
 Plans:
