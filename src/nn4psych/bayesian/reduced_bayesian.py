@@ -1,0 +1,591 @@
+"""Reduced Bayesian Observer (RBO) model for the helicopter-bag task.
+
+Implements the Nassar 2010+2021 Reduced Bayesian Observer in NumPyro/JAX.
+This is the canonical Phase 4 forward model.
+
+References
+----------
+Nassar, M. R., Wilson, R. C., Heasly, B., & Gold, J. I. (2010).
+    An approximately Bayesian delta-rule model explains the dynamics of
+    belief updating in a changing environment.
+    Journal of Neuroscience, 30(37), 12366-12378.
+
+Nassar, M. R., et al. (2021). PMC8041039. Reduced Bayesian observer for
+    changepoint/oddball conditions. Equations referenced:
+    - Omega (changepoint probability): Eq. 4
+    - tau (relative uncertainty):      Eq. 5
+    - alpha (learning rate):           Eqs. 2-3
+    - update (mean estimate):          Eqs. 6-7
+
+Notes
+-----
+Priors below are weakly-informative defaults until verified against
+Nassar 2021 supplement (see Plan 04-03 Task 1 for Brain2021Code data
+fetch which gates supplement access).
+
+Math-symbol naming (H, LW, UU, tau, omega, alpha) is intentionally
+contained within this module. Descriptive names are used at the API
+boundary per project three-layer naming convention.
+"""
+
+from __future__ import annotations
+
+import jax
+import jax.numpy as jnp
+import numpyro
+import numpyro.distributions as dist
+import numpy as np
+from jax.scipy.stats import norm as jax_norm
+from jax.scipy.stats import uniform as jax_uniform
+from numpyro.infer import MCMC, NUTS, Predictive
+
+# ---------------------------------------------------------------------------
+# Module-level constants
+# ---------------------------------------------------------------------------
+
+SIGMA_N: float = 20.0
+"""Bag placement noise (SD), in screen-space units (range 0-300).
+
+Confirmed from Nassar 2021 PMC text. This is a FIXED generative constant,
+not a free parameter.
+"""
+
+BAG_RANGE: float = 300.0
+"""Uniform support for the bag position (screen-space range 0-300)."""
+
+
+# ---------------------------------------------------------------------------
+# Forward model
+# ---------------------------------------------------------------------------
+
+
+def compute_rbo_forward(
+    params: dict[str, jax.Array],
+    pred_errors: jax.Array,
+    context: str,
+    sigma_N: float = SIGMA_N,
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    """Compute Reduced Bayesian Observer forward pass given parameters.
+
+    Core forward model implementing Equations 2-7 from Nassar 2010/2021.
+    JAX-traceable: uses ``jax.lax.scan`` + ``jax.lax.cond`` with the
+    Phase 1 (01-03) pattern — ``is_changepoint`` computed OUTSIDE
+    ``step_fn`` so it is a closed-over, tracer-compatible constant.
+
+    Parameters
+    ----------
+    params : dict[str, jax.Array]
+        Free parameters with keys: ``'H'``, ``'LW'``, ``'UU'``.
+        ``'sigma_motor'`` and ``'sigma_LR'`` are not needed for the
+        forward pass (they enter the likelihood only).
+    pred_errors : jax.Array
+        Prediction errors ``delta_t = bag_t - bucket_t``, shape ``(n,)``.
+    context : str
+        ``'changepoint'`` or ``'oddball'``.
+    sigma_N : float
+        Bag placement SD (fixed constant from paper, default 20.0).
+
+    Returns
+    -------
+    learning_rate : jax.Array
+        Per-trial learning rates ``alpha_t``, shape ``(n,)``.
+    normative_update : jax.Array
+        Predicted updates ``alpha_t * delta_t``, shape ``(n,)``.
+    omega : jax.Array
+        Per-trial changepoint/oddball probabilities ``Omega_t``, shape ``(n,)``.
+    tau : jax.Array
+        Relative uncertainty (includes initial ``tau_0``), shape ``(n+1,)``.
+
+    Notes
+    -----
+    Equation references (Nassar 2010/2021):
+    - Eq. 4: ``Omega_t`` — changepoint probability
+    - Eq. 5: ``tau`` update — full predictive-variance-weighted form
+    - Eqs. 2-3: ``alpha_t`` — learning rate (CP vs OB branch)
+    - Eq. 6-7: Likelihood (computed in ``reduced_bayesian_model``)
+    """
+    H = params["H"]
+    LW = params["LW"]
+    UU = params["UU"]
+
+    n_trials = pred_errors.shape[0]
+
+    # Initial relative uncertainty
+    tau_0 = 0.5 / UU
+
+    # Compute is_changepoint OUTSIDE step_fn: closed-over, tracer-safe.
+    # See Phase 1 lesson 01-03: jnp.bool_(context == 'changepoint') must
+    # be evaluated at Python trace time (not inside jax.lax.scan).
+    is_changepoint = jnp.bool_(context == "changepoint")
+
+    def step_fn(
+        carry: jax.Array, t: jax.Array
+    ) -> tuple[jax.Array, tuple[jax.Array, jax.Array, jax.Array, jax.Array]]:
+        """Single-trial update (scanned over all trials)."""
+        tau_prev = carry
+
+        delta = pred_errors[t]
+
+        # ---------------------------------------------------------------
+        # EQUATION 4: Changepoint/Oddball Probability (Omega_t)
+        # ---------------------------------------------------------------
+        # Uniform component: extreme outcomes (denominator of Eq. 4)
+        U_val = jax_uniform.pdf(delta, loc=0.0, scale=BAG_RANGE) ** LW
+
+        # Normal component: expected outcomes given current uncertainty
+        sigma_t = sigma_N / (tau_prev + 1e-10)
+        N_val = jax_norm.pdf(delta, loc=0.0, scale=sigma_t) ** LW
+
+        # Changepoint/oddball probability (same equation for both contexts)
+        omega_t = (H * U_val) / (H * U_val + (1 - H) * N_val + 1e-10)
+
+        # ---------------------------------------------------------------
+        # EQUATION 5: Relative Uncertainty (tau_t)
+        # Full predictive-variance-weighted form (from numpyro_models.py
+        # lines 133-138; cf. Loosen et al. 2023 / McGuire et al. 2014).
+        # NOTE: tau update equation correctness vs Nassar 2021 supplement
+        # is flagged for validation in 04-02.
+        # ---------------------------------------------------------------
+        numerator = (
+            (omega_t * sigma_N)
+            + ((1 - omega_t) * sigma_t * tau_prev)
+            + (omega_t * (1 - omega_t) * (delta * (1 - tau_prev)) ** 2)
+        )
+        denominator = numerator + sigma_N
+        this_tau = numerator / (denominator + 1e-10)
+
+        # Apply uncertainty underestimation (UU < 1 → shrinks tau faster)
+        tau_next = this_tau / (UU + 1e-10)
+
+        # ---------------------------------------------------------------
+        # EQUATIONS 2 & 3: Learning Rate (alpha_t)
+        # jax.lax.cond for JAX-compatible branching inside scan.
+        # Python if/else would silently produce dead code inside scan.
+        # ---------------------------------------------------------------
+        lr_t = jax.lax.cond(
+            is_changepoint,
+            lambda _: omega_t + tau_prev - (omega_t * tau_prev),  # Eq. 2: CP
+            lambda _: tau_prev - (omega_t * tau_prev),  # Eq. 3: OB
+            operand=None,
+        )
+
+        # ---------------------------------------------------------------
+        # EQUATION 1: Normative Update
+        # ---------------------------------------------------------------
+        norm_update_t = lr_t * delta
+
+        return tau_next, (lr_t, norm_update_t, omega_t, tau_next)
+
+    # Run scan over all trials
+    _, (learning_rate, normative_update, omega, tau_scan) = jax.lax.scan(
+        step_fn, tau_0, jnp.arange(n_trials)
+    )
+
+    # Prepend initial tau so tau has shape (n_trials + 1,)
+    tau = jnp.concatenate([jnp.array([tau_0]), tau_scan])
+
+    return learning_rate, normative_update, omega, tau
+
+
+# ---------------------------------------------------------------------------
+# NumPyro probabilistic model
+# ---------------------------------------------------------------------------
+
+
+def reduced_bayesian_model(
+    bucket_positions: jax.Array | None = None,
+    bag_positions: jax.Array | None = None,
+    context: str = "changepoint",
+    sigma_N: float = SIGMA_N,
+) -> None:
+    """NumPyro model for the Nassar 2010+2021 Reduced Bayesian Observer.
+
+    Defines the full generative model with paper-informed priors and
+    the observation likelihood (Eqs. 6-7). Use with MCMC for posterior
+    inference.
+
+    Parameters
+    ----------
+    bucket_positions : jax.Array, optional
+        Observed bucket positions (agent actions), shape ``(n_trials,)``.
+    bag_positions : jax.Array, optional
+        Observed bag landing positions, shape ``(n_trials,)``.
+    context : str
+        ``'changepoint'`` or ``'oddball'``.
+    sigma_N : float
+        Bag placement SD (fixed from paper, default 20.0).
+
+    Notes
+    -----
+    Prior status annotations:
+    - ``# PAPER_VERIFIED``: prior confirmed from Nassar 2021 supplement.
+    - ``# FALLBACK pending Nassar 2021 supplement``: weakly-informative
+      default used until Plan 04-03 Task 1 downloads Brain2021Code and
+      the supplement prior spec can be extracted.
+
+    All five priors are currently ``FALLBACK`` — see Plan 04-03 Task 1
+    for Brain2021Code data fetch which gates supplement access.
+    """
+    # -------------------------------------------------------------------
+    # PRIORS (weakly-informative defaults per RESEARCH.md Section 1)
+    # -------------------------------------------------------------------
+
+    H = numpyro.sample(
+        "H",
+        dist.Beta(1.5, 8),
+        # FALLBACK pending Nassar 2021 supplement.
+        # Rationale: Beta(1.5, 8) mean ≈ 0.158, which is close to the
+        # true hazard rate used in the task (0.125). Favors low hazard
+        # rates without being overly rigid. The paper uses "informed prior
+        # derived from MLE fits" (exact form in supplement — not yet
+        # available). Ref: RESEARCH.md Section 1.
+    )
+
+    LW = numpyro.sample(
+        "LW",
+        dist.Beta(2, 2),
+        # FALLBACK pending Nassar 2021 supplement.
+        # Rationale: Beta(2, 2) is symmetric, centered at 0.5, weakly
+        # informative. LW exponentiates both U_val and N_val in Eq. 4;
+        # typical fitted values are 0.3-0.9 in McGuire et al. 2014.
+    )
+
+    UU = numpyro.sample(
+        "UU",
+        dist.HalfNormal(0.5),
+        # FALLBACK pending Nassar 2021 supplement.
+        # Rationale: HalfNormal(0.5) concentrates near zero but allows
+        # UU up to ~2. UU=1 means no underestimation of uncertainty;
+        # UU<1 means tau shrinks too fast (underestimation). Most subjects
+        # show mild underestimation (UU slightly < 1).
+    )
+
+    sigma_motor = numpyro.sample(
+        "sigma_motor",
+        dist.HalfNormal(10.0),
+        # FALLBACK pending Nassar 2021 supplement.
+        # Rationale: HalfNormal(10.0) is weakly regularizing in screen
+        # units (0-300). Typical motor noise for this task is 5-30 units.
+        # Scale chosen to avoid pinning near 0 while staying in the range
+        # of physically plausible motor variability.
+    )
+
+    sigma_LR = numpyro.sample(
+        "sigma_LR",
+        dist.HalfNormal(1.0),
+        # FALLBACK pending Nassar 2021 supplement.
+        # Rationale: HalfNormal(1.0) keeps the multiplicative variance
+        # slope small and positive. sigma_LR scales update variance
+        # proportionally to update magnitude (Eq. 7).
+    )
+
+    # -------------------------------------------------------------------
+    # LIKELIHOOD (only when observed data is provided)
+    # -------------------------------------------------------------------
+    if bucket_positions is not None and bag_positions is not None:
+        n_trials = bucket_positions.shape[0]
+
+        # Prediction errors: bag_t - bucket_t
+        pred_errors = bag_positions - bucket_positions
+
+        params = {
+            "H": H,
+            "LW": LW,
+            "UU": UU,
+            "sigma_motor": sigma_motor,
+            "sigma_LR": sigma_LR,
+        }
+
+        learning_rate, normative_update, omega, tau = compute_rbo_forward(
+            params, pred_errors, context, sigma_N=sigma_N
+        )
+
+        # EQUATION 6-7: Observed bucket updates
+        # bucket_update_t = diff(bucket_positions), prepending first position
+        # so the first update is treated as starting from the same position.
+        bucket_update = jnp.diff(bucket_positions, prepend=bucket_positions[0])
+
+        # EQUATION 7: Update variance
+        sigma_update = sigma_motor + jnp.abs(normative_update) * sigma_LR
+
+        # EQUATION 6: Update likelihood
+        with numpyro.plate("trials", n_trials):
+            numpyro.sample(
+                "bucket_update",
+                dist.Normal(normative_update, sigma_update),
+                obs=bucket_update,
+            )
+
+        # Store derived quantities for posterior predictive checks
+        # (used by 04-02 diagnostics and 04-03 summary outputs)
+        numpyro.deterministic("learning_rate", learning_rate)
+        numpyro.deterministic("normative_update", normative_update)
+        numpyro.deterministic("omega", omega)
+        numpyro.deterministic("tau", tau[:-1])  # align length with n_trials
+
+
+# ---------------------------------------------------------------------------
+# MCMC entry point
+# ---------------------------------------------------------------------------
+
+
+def run_mcmc(
+    bag_positions: np.ndarray | jax.Array,
+    bucket_positions: np.ndarray | jax.Array,
+    context: str,
+    *,
+    num_warmup: int = 2000,
+    num_samples: int = 2000,
+    num_chains: int = 4,
+    target_accept_prob: float = 0.95,
+    max_tree_depth: int = 10,
+    seed: int = 42,
+    progress_bar: bool = False,
+) -> MCMC:
+    """Run NUTS MCMC for the Reduced Bayesian Observer.
+
+    Phase 4 canonical defaults: 4 chains x 2000 warmup x 2000 draws,
+    target_accept_prob=0.95, extra_fields=('diverging',).
+
+    Parameters
+    ----------
+    bag_positions : array-like
+        Bag landing positions, shape ``(n_trials,)``.
+    bucket_positions : array-like
+        Bucket positions (agent actions), shape ``(n_trials,)``.
+    context : str
+        ``'changepoint'`` or ``'oddball'``.
+    num_warmup : int
+        NUTS warmup/adaptation steps (default: 2000).
+    num_samples : int
+        Posterior samples per chain (default: 2000).
+    num_chains : int
+        Number of parallel MCMC chains (default: 4).
+    target_accept_prob : float
+        NUTS target acceptance probability (default: 0.95).
+    max_tree_depth : int
+        Maximum NUTS tree depth (default: 10).
+    seed : int
+        Random seed for reproducibility (default: 42).
+    progress_bar : bool
+        Whether to display a progress bar (default: False).
+
+    Returns
+    -------
+    MCMC
+        NumPyro MCMC object with posterior samples accessible via
+        ``mcmc.get_samples()``. Divergence counts accessible via
+        ``mcmc.get_extra_fields()['diverging'].sum()``.
+
+    Notes
+    -----
+    ``extra_fields=('diverging',)`` is passed to ``mcmc.run()`` — this is
+    REQUIRED for 04-02 diagnostics module to extract divergence counts via
+    ``mcmc.get_extra_fields()['diverging']``.
+
+    Four chains require ``XLA_FLAGS=--xla_force_host_platform_device_count=4``
+    set before any JAX import. This is handled in ``nn4psych.bayesian.__init__``
+    (see RESEARCH.md Pitfall 3).
+    """
+    bag_jax = jnp.array(bag_positions)
+    bucket_jax = jnp.array(bucket_positions)
+
+    kernel = NUTS(
+        reduced_bayesian_model,
+        target_accept_prob=target_accept_prob,
+        max_tree_depth=max_tree_depth,
+    )
+
+    mcmc = MCMC(
+        kernel,
+        num_warmup=num_warmup,
+        num_samples=num_samples,
+        num_chains=num_chains,
+        progress_bar=progress_bar,
+    )
+
+    rng_key = jax.random.PRNGKey(seed)
+    mcmc.run(
+        rng_key,
+        bucket_positions=bucket_jax,
+        bag_positions=bag_jax,
+        context=context,
+        extra_fields=("diverging",),
+    )
+
+    return mcmc
+
+
+# ---------------------------------------------------------------------------
+# Helper utilities
+# ---------------------------------------------------------------------------
+
+
+def prior_sampler(
+    model_fn: object,
+    num_samples: int,
+    rng_key: jax.Array,
+) -> dict[str, jax.Array]:
+    """Draw prior samples from a NumPyro model.
+
+    Wraps ``numpyro.infer.Predictive`` with no ``posterior_samples``
+    argument (which causes it to sample from the prior).
+
+    Parameters
+    ----------
+    model_fn : callable
+        NumPyro model function (e.g., ``reduced_bayesian_model``).
+    num_samples : int
+        Number of prior samples to draw.
+    rng_key : jax.Array
+        JAX random key.
+
+    Returns
+    -------
+    dict[str, jax.Array]
+        Prior samples keyed by parameter name. Each value has shape
+        ``(num_samples,)`` for scalar parameters.
+
+    Examples
+    --------
+    >>> key = jax.random.PRNGKey(0)
+    >>> samples = prior_sampler(reduced_bayesian_model, 50, key)
+    >>> samples['H'].shape
+    (50,)
+    """
+    predictive = Predictive(model_fn, num_samples=num_samples)
+    return predictive(rng_key)
+
+
+def simulate_synthetic_data(
+    params: dict[str, float],
+    n_trials: int,
+    hazard: float,
+    context: str,
+    seed: int,
+) -> tuple[jax.Array, jax.Array]:
+    """Generate a synthetic Nassar-paradigm trial sequence.
+
+    Produces ``(bag_positions, bucket_positions)`` by simulating the
+    generative process and running the participant forward model.
+
+    For parameter recovery in 04-02: draw ``params`` from the prior
+    using ``prior_sampler``, call this function to generate data, then
+    fit MCMC to verify recovery.
+
+    Parameters
+    ----------
+    params : dict[str, float]
+        Model parameters: ``'H'``, ``'LW'``, ``'UU'``, ``'sigma_motor'``,
+        ``'sigma_LR'``.
+    n_trials : int
+        Number of trials to simulate.
+    hazard : float
+        True hazard rate for the generative process.
+    context : str
+        ``'changepoint'`` or ``'oddball'``.
+    seed : int
+        NumPy random seed for reproducibility.
+
+    Returns
+    -------
+    bag_positions : jax.Array
+        Simulated bag landing positions, shape ``(n_trials,)``.
+    bucket_positions : jax.Array
+        Simulated bucket positions (agent behavior), shape ``(n_trials,)``.
+
+    Notes
+    -----
+    Generative process:
+    - **changepoint**: Helicopter at ``heli_0 ~ Uniform(0, 300)``.
+      Each trial: ``heli`` jumps with prob ``hazard`` to new
+      ``Uniform(0, 300)``; bag ``~ Normal(heli, sigma_N)``.
+    - **oddball**: Drift process, ``heli_t = heli_{t-1} + N(0, 7.5)``.
+      Occasional bags from ``Uniform(0, BAG_RANGE)`` with prob ``hazard``.
+
+    Bucket positions are generated by running the participant forward
+    model: given prediction errors, compute normative updates, then
+    add ``Normal(0, sigma_motor + |update| * sigma_LR)`` noise.
+    """
+    rng = np.random.default_rng(seed)
+
+    # --- Generative model: bag positions ---
+    bag_positions_np = np.zeros(n_trials)
+
+    if context == "changepoint":
+        heli = rng.uniform(0, BAG_RANGE)
+        for t in range(n_trials):
+            if rng.random() < hazard:
+                heli = rng.uniform(0, BAG_RANGE)
+            bag_positions_np[t] = rng.normal(heli, SIGMA_N)
+    else:  # oddball
+        heli = rng.uniform(0, BAG_RANGE)
+        drift_sd = 7.5
+        for t in range(n_trials):
+            heli = heli + rng.normal(0, drift_sd)
+            heli = float(np.clip(heli, 0, BAG_RANGE))
+            if rng.random() < hazard:
+                bag_positions_np[t] = rng.uniform(0, BAG_RANGE)
+            else:
+                bag_positions_np[t] = rng.normal(heli, SIGMA_N)
+
+    # Clip bag positions to valid range
+    bag_positions_np = np.clip(bag_positions_np, 0, BAG_RANGE)
+
+    # --- Participant forward model: bucket positions ---
+    # Bucket starts at the midpoint of the range
+    bucket_positions_np = np.zeros(n_trials)
+    bucket_positions_np[0] = BAG_RANGE / 2.0
+
+    for t in range(1, n_trials):
+        pred_err_t = bag_positions_np[t - 1] - bucket_positions_np[t - 1]
+        pred_errors_so_far = jnp.array([pred_err_t])
+        lr, norm_upd, _, _ = compute_rbo_forward(
+            {k: jnp.array(float(v)) for k, v in params.items()},
+            pred_errors_so_far,
+            context,
+        )
+        motor_noise = rng.normal(
+            0,
+            float(params["sigma_motor"])
+            + abs(float(norm_upd[0])) * float(params["sigma_LR"]),
+        )
+        bucket_positions_np[t] = float(
+            np.clip(
+                bucket_positions_np[t - 1] + float(norm_upd[0]) + motor_noise,
+                0,
+                BAG_RANGE,
+            )
+        )
+
+    return jnp.array(bag_positions_np), jnp.array(bucket_positions_np)
+
+
+def assert_jax_devices(expected: int = 4) -> None:
+    """Assert that at least ``expected`` JAX CPU devices are available.
+
+    Verifies that ``XLA_FLAGS=--xla_force_host_platform_device_count=N``
+    was set before any JAX import (required for 4-chain NUTS parallelism).
+
+    Parameters
+    ----------
+    expected : int
+        Minimum expected number of JAX devices (default: 4).
+
+    Raises
+    ------
+    RuntimeError
+        If actual device count is less than ``expected``. Message includes
+        expected vs actual per CLAUDE.md error convention.
+
+    Examples
+    --------
+    >>> assert_jax_devices(expected=4)  # passes if XLA_FLAGS was set
+    """
+    actual = jax.local_device_count()
+    if actual < expected:
+        raise RuntimeError(
+            f"Expected at least {expected} JAX devices but got {actual}; "
+            f"set XLA_FLAGS=--xla_force_host_platform_device_count={expected} "
+            f"before importing jax"
+        )
