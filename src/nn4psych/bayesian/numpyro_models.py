@@ -1,5 +1,9 @@
-"""
-NumPyro-based Bayesian Normative Model Implementation
+"""NumPyro-based Bayesian Normative Model Implementation.
+
+DEPRECATED in Phase 4. Use nn4psych.bayesian.reduced_bayesian instead.
+This module is retained for git-history continuity and as a reference
+for the original placeholder priors. Functions here are NOT re-exported
+from nn4psych.bayesian.__init__ as of Plan 04-01.
 
 This module implements the Bayesian normative model using NumPyro for full
 Bayesian inference via MCMC (No-U-Turn Sampler). Built on JAX for fast
@@ -16,6 +20,17 @@ Reference:
     McGuire et al. (2014) - Functionally dissociable influences on learning rate
 """
 
+from __future__ import annotations
+
+import warnings
+
+warnings.warn(
+    "nn4psych.bayesian.numpyro_models is deprecated; "
+    "use nn4psych.bayesian.reduced_bayesian",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 import numpy as np
 import jax
 import jax.numpy as jnp
@@ -27,7 +42,6 @@ import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS, Predictive
 from numpyro.diagnostics import hpdi
 import arviz as az
-from typing import Dict, Optional, Tuple
 
 
 def sigmoid_transform(x: jnp.ndarray, max_val: float = 5.0) -> jnp.ndarray:
@@ -67,11 +81,11 @@ def logistic_transform(x: jnp.ndarray) -> jnp.ndarray:
 
 
 def compute_normative_model(
-    params: Dict[str, jnp.ndarray],
+    params: dict[str, jnp.ndarray],
     pred_errors: jnp.ndarray,
     context: str,
     sigma_N: float = 20.0,
-) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """
     Compute normative model outputs given parameters and prediction errors.
 
@@ -173,8 +187,8 @@ def compute_normative_model(
 
 
 def normative_model(
-    bucket_positions: Optional[jnp.ndarray] = None,
-    bag_positions: Optional[jnp.ndarray] = None,
+    bucket_positions: jnp.ndarray | None = None,
+    bag_positions: jnp.ndarray | None = None,
     context: str = 'changepoint',
     prior_scale: float = 1.0,
 ) -> None:
@@ -344,7 +358,7 @@ def run_mcmc(
     return mcmc
 
 
-def summarize_posterior(mcmc: MCMC, prob: float = 0.89) -> Dict:
+def summarize_posterior(mcmc: MCMC, prob: float = 0.89) -> dict:
     """
     Summarize posterior samples from MCMC.
 
@@ -395,7 +409,7 @@ def posterior_predictive(
     context: str,
     num_samples: int = 1000,
     seed: int = 0,
-) -> Dict[str, np.ndarray]:
+) -> dict[str, np.ndarray]:
     """
     Generate posterior predictive samples.
 
@@ -452,7 +466,7 @@ def posterior_predictive(
 
 
 def compute_waic(mcmc: MCMC, bucket_positions: np.ndarray,
-                 bag_positions: np.ndarray, context: str) -> Dict[str, float]:
+                 bag_positions: np.ndarray, context: str) -> dict[str, float]:
     """
     Compute WAIC (Watanabe-Akaike Information Criterion) for model comparison.
 
@@ -502,7 +516,7 @@ def compute_waic(mcmc: MCMC, bucket_positions: np.ndarray,
     }
 
 
-def get_map_estimate(mcmc: MCMC) -> Dict[str, float]:
+def get_map_estimate(mcmc: MCMC) -> dict[str, float]:
     """
     Get Maximum A Posteriori (MAP) point estimate from posterior samples.
 
