@@ -45,7 +45,7 @@ bayesian = [
     "jax>=0.4.0",
     "jaxlib>=0.4.0",
     "numpyro>=0.13.0",
-    "arviz>=0.17.0",
+    "arviz>=0.17.0,<0.25.0",
 ]
 neurogym = [
     "neurogym @ git+https://github.com/neurogym/neurogym",
