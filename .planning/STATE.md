@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 4 of 5 (Bayesian Model Fitting / Nassar 2021) — In progress
-Plan: 04-01 COMPLETE. Next: 04-02 (Diagnostics + Parameter Recovery).
-Status: Phase 4 Wave 1 complete. Phase 3.1 closure (03-07/08) still deferred per 2026-04-29 user pivot.
-Last activity: 2026-04-30 — Completed 04-01-PLAN.md (reduced_bayesian.py, BAYES-01 closure, 6 smoke tests, arviz pin).
+Plan: 04-02 COMPLETE. Next: 04-03 (Human Data Fits) — BLOCKED on full param recovery + Brain2021Code download.
+Status: Phase 4 Wave 2 complete. Full 50-dataset overnight run queued (background_task_id=bcaxsbh0c, started 2026-04-30T07:10:31Z). Phase 3.1 closure (03-07/08) still deferred per 2026-04-29 user pivot.
+Last activity: 2026-04-30 — Completed 04-02-PLAN.md (diagnostics module, smoke recovery, REQUIREMENTS/ROADMAP wording updates, full run queued).
 
-Progress: [█████████░] ~88% (04-01 done; 04-02..04-04 remaining)
+Progress: [█████████░] ~90% (04-01/02 done; 04-03..04-04 remaining; 04-03 blocked)
 
 ## Performance Metrics
 
@@ -30,7 +30,7 @@ Progress: [█████████░] ~88% (04-01 done; 04-02..04-04 remain
 | 01-infrastructure-and-organization | 3/3 COMPLETE | ~24 min | ~8 min |
 | 02-rnn-training-verification | 3/3 COMPLETE | ~42 min | ~14 min |
 | 03-latent-circuit-inference | 4/4 COMPLETE | ~320 min compute + 5 weeks iteration | ~80 min |
-| 04-bayesian-model-fitting | 1/4 in progress | ~15 min | ~15 min (Wave 1 only) |
+| 04-bayesian-model-fitting | 2/6 in progress | ~66 min (code) + 33 min smoke | ~33 min (excl smoke) |
 
 **Recent Trend:**
 - Last 9 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min), 02-01 (12 min), 02-02 (15 min), 02-03 (15 min), 03-01 (75 min), 03-02 (205 min GPU ensemble + ~5 weeks iteration), 03-03 (~?), 03-04 (39 min)
@@ -106,6 +106,12 @@ Recent decisions affecting current work:
 - [04-01]: numpyro_models.py deprecated (DeprecationWarning at import) but retained for git-history continuity
 - [04-01]: arviz pinned >=0.17.0,<0.25.0 in pyproject.toml (RESEARCH.md Open Question 5)
 - [04-01]: XLA_FLAGS set in __init__.py via os.environ.setdefault() before any jax import; 4 virtual CPU devices verified
+- [04-02]: stat_focus='stats'/'diagnostics' is the correct ArviZ 0.23.4 kwarg in az.summary (not kind=); validated at runtime (M3 fix)
+- [04-02]: NumPyro get_extra_fields() always returns {'diverging': ...} in this version regardless of extra_fields kwarg — divergence access is always available
+- [04-02]: Per-condition recovery design (CP+OB fits averaged) matches actual human fitting pipeline — correct identifiability validation
+- [04-02]: Smoke N=4 r values are not formal BAYES-06 evidence; full 50-dataset run (bcaxsbh0c) is the gate
+- [04-02]: Smoke MCMC settings (200 warmup) cause all fits to fail convergence gates + retry; full run (2000/4000 warmup) required for proper convergence
+- [04-02]: nn4psych.bayesian scripts need both src/ AND project root on sys.path — src/ for package discovery, project root for envs.PIE_CP_OB_v2 in nn4psych.__init__
 
 ### Pending Todos
 
@@ -132,10 +138,12 @@ Recent decisions affecting current work:
 - [Phase 3.1 OPEN — confound]: LatentNet stochastic eval — sigma_rec noise always active; cluster/local metric discrepancy is a pre-existing limitation; should fix or pin a single eval seed before quantitative comparisons between runs (Gap 4 candidate?).
 - [Phase 3.1 OPEN — diagnostic]: Perturbation strengths [-0.5, 0.5] are modest relative to max |w_rec_ij|=4.17; if Q quality is fixed, re-running with stronger strengths may give cleaner SC-4 evidence.
 - [Phase 4 planning]: Nassar 2021 .mat file nested indexing not directly inspected — must run describe_mat_structure() before writing data loading code (research flag)
+- [OPEN — 04-02]: Full 50-dataset param recovery run in progress (background_task_id=bcaxsbh0c, started 2026-04-30T07:10:31Z, ~17h worst case). BAYES-06 NOT YET CLOSED. 04-03 Task 2 gates on recovery_report.json with all r >= 0.85.
+- [OPEN — 04-02]: Smoke convergence behavior — all 8 smoke fits triggered retry, suggesting 200 warmup is insufficient for Nassar posterior geometry. First diagnostic if full-run r < 0.85: check tau update equation (RESEARCH.md Pitfall 1).
 
 ## Session Continuity
 
-Last session: 2026-04-30T06:15:21Z
-Stopped at: Completed 04-01-PLAN.md — reduced_bayesian.py + __init__.py + numpyro_models.py M2 cleanup + BAYES-01 archive + 6 smoke tests + arviz pin committed. 04-01-SUMMARY.md written. STATE.md updated.
-Resume: Continue Phase 4 with 04-02 (Diagnostics + Parameter Recovery). 04-02 imports nn4psych.bayesian canonical surface; implements run_diagnostics, retry loop, make_fit_summary, 50-dataset recovery.
+Last session: 2026-04-30T07:11:03Z
+Stopped at: Completed 04-02-PLAN.md — diagnostics.py + test_diagnostics.py (5 tests passing) + 09a_param_recovery.py + smoke recovery (4 datasets, 33 min) + REQUIREMENTS.md/ROADMAP.md updates. Full 50-dataset run queued (background_task_id=bcaxsbh0c). 04-02-SUMMARY.md written. STATE.md updated.
+Resume: Continue Phase 4 with 04-03 (Human Data Fits) AFTER: (1) full param recovery completes with all r >= 0.85, (2) Brain2021Code downloaded from sites.brown.edu/mattlab/resources/. Both gate 04-03.
 Resume file: None
