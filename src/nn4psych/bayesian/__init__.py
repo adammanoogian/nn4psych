@@ -27,6 +27,12 @@ from nn4psych.bayesian.reduced_bayesian import (
     assert_jax_devices,
     SIGMA_N,
 )
+from nn4psych.bayesian.diagnostics import (
+    run_diagnostics,
+    fit_with_retry,
+    make_fit_summary,
+    to_jsonable,
+)
 
 __all__ = [
     "reduced_bayesian_model",
@@ -36,4 +42,8 @@ __all__ = [
     "simulate_synthetic_data",
     "assert_jax_devices",
     "SIGMA_N",
+    "run_diagnostics",
+    "fit_with_retry",
+    "make_fit_summary",
+    "to_jsonable",
 ]
