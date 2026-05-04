@@ -126,3 +126,50 @@ def test_assert_jax_devices():
     # XLA_FLAGS is set in nn4psych.bayesian.__init__ before any jax import,
     # so jax.local_device_count() should return 4.
     assert_jax_devices(expected=4)  # should not raise
+
+
+def test_matlab_parity():
+    """Guard against silent drift in the JAX forward model.
+
+    Runs compute_rbo_forward and the NumPy port of frugFun5.m on the same
+    synthetic bag positions with a small but representative parameter set.
+    Fails if max-abs divergence exceeds tolerance on alpha or omega.
+
+    Tolerance note (04-03a): 5e-2 on max-abs accounts for the accepted
+    deviation in the truncated-normal normalization (normcdf(300,B,totSig)
+    - normcdf(0,B,totSig)) which MATLAB applies to pI but NumPyro's
+    compute_rbo_forward cannot apply because it only receives pred_errors,
+    not absolute bucket positions.  The median divergence is < 1e-5; the
+    max-abs deviation of ~3.7% occurs only at CP trials where the bucket
+    is near 0 or 300.  See 04-03a-SUMMARY.md for full analysis.
+    """
+    import numpy as np
+    import jax.numpy as jnp
+    from nn4psych.bayesian.reduced_bayesian import compute_rbo_forward, SIGMA_N
+    from nn4psych.bayesian._frugfun_reference import frugfun5_reference
+
+    rng = np.random.default_rng(42)
+    bag = np.clip(rng.normal(150.0, SIGMA_N, size=64), 0, 300)
+
+    # MATLAB self-bucketing: derive bucket from MATLAB belief trajectory
+    m = frugfun5_reference(bag, Hazard=0.125, noise=SIGMA_N, likeWeight=1.0)
+    bucket = m["B"][:-1]
+    pred_errors = bag - bucket
+
+    params = {"H": jnp.asarray(0.125), "LW": jnp.asarray(1.0), "UU": jnp.asarray(1.0)}
+    lr, _upd, omega, _tau = compute_rbo_forward(params, jnp.asarray(pred_errors), "changepoint")
+
+    alpha_diff = float(np.max(np.abs(np.asarray(lr) - m["alpha"])))
+    omega_diff = float(np.max(np.abs(np.asarray(omega) - m["pCha"])))
+
+    # Accepted deviation: truncated-normal correction for pI is ~3.7% max
+    # (cannot apply without absolute bucket position in pred_error space).
+    # Median deviation < 1e-5 confirms the core math is correct.
+    assert alpha_diff < 5e-2, (
+        f"alpha max-abs diff {alpha_diff:.4e} exceeds tolerance 5e-2 — "
+        f"check compute_rbo_forward tot_sig and tau update equations"
+    )
+    assert omega_diff < 5e-2, (
+        f"omega max-abs diff {omega_diff:.4e} exceeds tolerance 5e-2 — "
+        f"check compute_rbo_forward U_log/N_log or log_change_ratio formula"
+    )

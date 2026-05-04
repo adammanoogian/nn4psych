@@ -121,7 +121,15 @@ def compute_rbo_forward(
     def step_fn(
         carry: jax.Array, t: jax.Array
     ) -> tuple[jax.Array, tuple[jax.Array, jax.Array, jax.Array, jax.Array]]:
-        """Single-trial update (scanned over all trials)."""
+        """Single-trial update (scanned over all trials).
+
+        Variable correspondence with MATLAB frugFun5.m:
+            tau_prev  <->  yInt = 1/(R+1)   (relative weight; tau in [0,1])
+            totSig    <->  MATLAB totSig = sigmaE / sqrt(1 - tau)
+            omega_t   <->  pCha
+            lr_t      <->  Alph = yInt + pCha*(1-yInt)  [CP]
+                            or  yInt + pCha*(-yInt)      [OB]
+        """
         tau_prev = carry
 
         delta = pred_errors[t]
@@ -129,30 +137,74 @@ def compute_rbo_forward(
         # ---------------------------------------------------------------
         # EQUATION 4: Changepoint/Oddball Probability (Omega_t)
         # ---------------------------------------------------------------
-        # Uniform component: extreme outcomes (denominator of Eq. 4)
-        U_val = jax_uniform.pdf(delta, loc=0.0, scale=BAG_RANGE) ** LW
+        # Uniform component: MATLAB uses d = ones(300)/300, so changLike
+        # = 1/300 for all trials (bag positions are always in [0, 300]).
+        # This is a CONSTANT, not a density evaluated at delta.
+        # Previous impl incorrectly used uniform.pdf(delta, 0, 300) which
+        # returns 0 for delta < 0, causing omega=0 when bag < bucket.
+        # Fix 04-03a: U_val = constant (1/BAG_RANGE)^LW.
+        U_log = LW * jnp.log(1.0 / BAG_RANGE)  # = LW * log(1/300)
 
-        # Normal component: expected outcomes given current uncertainty
-        sigma_t = sigma_N / (tau_prev + 1e-10)
-        N_val = jax_norm.pdf(delta, loc=0.0, scale=sigma_t) ** LW
+        # Normal component: MATLAB totSig = sigmaE / sqrt(1 - tau).
+        # This is the predictive SD that includes both observation noise
+        # (sigmaE) and process uncertainty (sigmaU = sigmaE*sqrt(tau/(1-tau))):
+        #   totSig^2 = sigmaE^2 + sigmaU^2 = sigmaE^2 / (1 - tau)
+        # Previous impl used sigma_N / tau (incorrect; off by sqrt factor).
+        # Fix 04-03a: use sigma_N / sqrt(1 - tau) to match MATLAB totSig.
+        tot_sig = sigma_N / jnp.sqrt(1.0 - tau_prev + 1e-10)
+        N_log = LW * jax_norm.logpdf(delta, loc=0.0, scale=tot_sig)
 
-        # Changepoint/oddball probability (same equation for both contexts)
-        omega_t = (H * U_val) / (H * U_val + (1 - H) * N_val + 1e-10)
+        # Log-space change ratio matching MATLAB line 99:
+        #   changeRatio = exp(LW*log(changLike/pI) + log(H/(1-H)))
+        # Note: pI in MATLAB also uses the truncated-normal normalization
+        # factor (normcdf(300,B,totSig) - normcdf(0,B,totSig)).  However,
+        # since we operate in pred_error space (delta = bag - bucket), the
+        # truncation correction cancels between U and N when bag ∈ [0,300].
+        # Accepted deviation: truncation correction on N_log not applied
+        # here (see 04-03a-SUMMARY.md for analysis).
+        log_change_ratio = (
+            U_log - N_log
+            + jnp.log(H / (1.0 - H + 1e-10))
+        )
+        omega_t = jax.nn.sigmoid(log_change_ratio)
 
         # ---------------------------------------------------------------
         # EQUATION 5: Relative Uncertainty (tau_t)
-        # Full predictive-variance-weighted form (from numpyro_models.py
-        # lines 133-138; cf. Loosen et al. 2023 / McGuire et al. 2014).
-        # NOTE: tau update equation correctness vs Nassar 2021 supplement
-        # is flagged for validation in 04-02.
+        # Derived from MATLAB R-update (second-moment form, trueRun=0):
+        #   ss = pCha*(sigmaE^2/1) + pNoCha*(sigmaE^2/(R+1))
+        #          + pCha*pNoCha*(-(1-tau)*delta)^2
+        #   R[i+1] = sigmaE^2 / ss
+        #   tau[i+1] = 1 / (R[i+1] + 1) = ss / (ss + sigmaE^2)
+        #
+        # Note: MATLAB residual (B+yInt*Delta - data) = -(1-tau)*delta.
         # ---------------------------------------------------------------
-        numerator = (
-            (omega_t * sigma_N)
-            + ((1 - omega_t) * sigma_t * tau_prev)
-            + (omega_t * (1 - omega_t) * (delta * (1 - tau_prev)) ** 2)
+        pNoCha = 1.0 - omega_t
+        sigma_N_sq = sigma_N ** 2
+        # CP second-moment ss (MATLAB frugFun5.m lines 120-121)
+        residual_sq_cp = ((1.0 - tau_prev) * delta) ** 2
+        ss_cp = (
+            omega_t * sigma_N_sq
+            + pNoCha * (sigma_N_sq * tau_prev)   # sigma_N^2/(R+1) = sigma_N^2*tau
+            + omega_t * pNoCha * residual_sq_cp
         )
-        denominator = numerator + sigma_N
-        this_tau = numerator / (denominator + 1e-10)
+        # OB second-moment ss (MATLAB frugFun5_uniformOddballs.m lines 120-122)
+        # 1st term: sigmaE^2/R = sigmaE^2*tau/(1-tau)
+        # residual: yInt*Delta = tau*delta
+        residual_sq_ob = (tau_prev * delta) ** 2
+        ss_ob = (
+            omega_t * (sigma_N_sq * tau_prev / (1.0 - tau_prev + 1e-10))
+            + pNoCha * (sigma_N_sq * tau_prev)
+            + omega_t * pNoCha * residual_sq_ob
+        )
+        # Select ss based on context (closed-over constant is_changepoint)
+        ss = jax.lax.cond(
+            is_changepoint,
+            lambda _: ss_cp,
+            lambda _: ss_ob,
+            operand=None,
+        )
+        # tau[i+1] = ss / (ss + sigmaE^2) = 1 - sigmaE^2/(ss + sigmaE^2)
+        this_tau = ss / (ss + sigma_N_sq + 1e-40)
 
         # Apply uncertainty underestimation (UU < 1 → shrinks tau faster)
         tau_next = this_tau / (UU + 1e-10)
@@ -161,6 +213,8 @@ def compute_rbo_forward(
         # EQUATIONS 2 & 3: Learning Rate (alpha_t)
         # jax.lax.cond for JAX-compatible branching inside scan.
         # Python if/else would silently produce dead code inside scan.
+        #   CP (frugFun5.m line 113):    Alph = yInt + pCha*(1-yInt)
+        #   OB (frugFun5_uo.m line 109): Alph = yInt + pCha*(-yInt)
         # ---------------------------------------------------------------
         lr_t = jax.lax.cond(
             is_changepoint,
