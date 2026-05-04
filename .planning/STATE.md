@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 4 of 5 (Bayesian Model Fitting / Nassar 2021) — In progress
-Plan: 04-04a COMPLETE (axis-all cohort manifest). Next options: (a) 04-04b (replay-and-fit RBO over the 1,884-cohort) — runnable now; (b) 04-03 (Human Data Fits) — still BLOCKED on Brain2021Code download.
-Status: Phase 4 waves 1, 2, 4 complete. Wave 3 (04-03) blocked on external user action. Param-recovery background task (bcaxsbh0c) from 2026-04-30 is gone (no recovery_report.json on disk, .bg-shell/manifest.json empty); BAYES-06 still open.
-Last activity: 2026-05-04 — Pivoted 04-04a away from cluster K=20 to local axis-all manifest. Built 09b_build_rnn_cohort_manifest.py (5-axis classifier, Kumar 2025 Fig. 2A monotonicity reproduced); cohort_manifest.json + delta_area_by_axis.png committed (5 commits: 03ff4ec, 68c4f15, 2b10e0e, f788bc9, 95fe5ca). Stale K=20 SLURM commits dropped via stash+reset; 16 phase-4 commits pushed to origin/main.
+Plan: 04-03a COMPLETE (MATLAB parity + human data cleaning). Next options: (a) 04-03 (Human Data Fits — UNBLOCKED, forward model now validated); (b) 04-04b (replay-and-fit RBO over the 1,884-cohort, also unblocked); (c) BAYES-06 re-queue (50-dataset param recovery with corrected model).
+Status: Phase 4 waves 1, 2, 3a, 4 complete. Wave 3 (04-03) now unblocked: Brain2021Code data cleaned, compute_rbo_forward math validated against MATLAB. BAYES-06 still open (need re-queue).
+Last activity: 2026-05-04 — Ran human data cleaning pipeline (134 subjects, 55,992 valid trials). Fixed 3 math bugs in compute_rbo_forward: U_val constant, tot_sig=sigma_N/sqrt(1-tau), MATLAB ss R-update. All 7 tests pass. 3 task commits (d1014ac, ec8d151, 648e54c).
 
-Progress: [██████████] ~93% (04-01/02/04a done; 04-04b runnable; 04-03 blocked; 04-05 user-gated optional)
+Progress: [██████████] ~95% (04-01/02/03a/04a done; 04-03/04b runnable; 04-05 user-gated optional)
 
 ## Performance Metrics
 
@@ -112,6 +112,11 @@ Recent decisions affecting current work:
 - [04-02]: Smoke N=4 r values are not formal BAYES-06 evidence; full 50-dataset run (bcaxsbh0c) is the gate
 - [04-02]: Smoke MCMC settings (200 warmup) cause all fits to fail convergence gates + retry; full run (2000/4000 warmup) required for proper convergence
 - [04-02]: nn4psych.bayesian scripts need both src/ AND project root on sys.path — src/ for package discovery, project root for envs.PIE_CP_OB_v2 in nn4psych.__init__
+- [04-03a]: U_val in compute_rbo_forward must be constant (1/BAG_RANGE)^LW, not uniform.pdf(delta). MATLAB changLike = 1/300 because bag positions are always in [0,300]; pred_errors (bag-bucket) can be negative where uniform.pdf returns 0.
+- [04-03a]: tot_sig = sigma_N/sqrt(1-tau) (MATLAB totSig = sqrt(sigmaE^2+sigmaU^2)); previous code used sigma_N/tau which was off by a sqrt factor. At tau=0.5: correct=28.28, previous=40.0.
+- [04-03a]: Tau update now uses MATLAB second-moment ss formula (cp and ob variants via lax.cond). CP first term sigmaE^2/1; OB first term sigmaE^2/R. Residual: CP = -(1-tau)*delta; OB = tau*delta.
+- [04-03a]: Accepted deviation: truncated-normal pI normalization (~3.7% max CP omega, ~0.12% OB) cannot be reproduced without absolute bucket position. Parity test tolerance = 5e-2, not 1e-3.
+- [04-03a]: Human data cleaning: 134 subjects (102 patients, 32 NC), 55,992 valid trials (2.8% excluded by first-3-per-block rule). data/processed/nassar2021/ committed to git (gitignore exception added).
 - [04-04a 2026-05-04]: PIVOT — discarded original K=20 SLURM-array re-training. Re-training homogeneous seeds collapses the schizophrenia-spectrum comparison; the existing 1,884 trained checkpoints in trained_models/checkpoints/model_params_101000/ already span the Kumar et al. 2025 CCN per-axis design (γ, p_reset, τ, β_δ × 50 seeds), making them the right cohort for 04-04b's RBO fitting. No cluster compute used.
 - [04-04a]: 5-hyperparameter design in trained_models — paper publishes 4 axes (γ, β_δ, p_reset, τ) but the data has a 5th `td_penalty` axis swept around 0.0. Empirically td_penalty has no detectable effect on ΔArea; included in cohort tagged `tdpenalty` (supplementary).
 - [04-04a]: Canonical config (γ=0.95, p_reset=0, τ=100, β_δ=1, td_penalty=0) has 50 unique seeds (0–49) — this is the "control"-region for the schizophrenia-spectrum projection in 04-04b/05.
@@ -144,18 +149,20 @@ Recent decisions affecting current work:
 - [Phase 3.1 DEFERRED — 03-08]: Phase 3.1 closure writeup (STORY_1 method/data limit). Skipped on 2026-04-29 by user pivot to Phase 4. Will be picked up after Phase 4 ships — STORY_1 commitment is well-supported by Wave 5 evidence already on disk; the writeup is a documentation task, not blocking science.
 - [Phase 3.1 OPEN — confound]: LatentNet stochastic eval — sigma_rec noise always active; cluster/local metric discrepancy is a pre-existing limitation; should fix or pin a single eval seed before quantitative comparisons between runs (Gap 4 candidate?).
 - [Phase 3.1 OPEN — diagnostic]: Perturbation strengths [-0.5, 0.5] are modest relative to max |w_rec_ij|=4.17; if Q quality is fixed, re-running with stronger strengths may give cleaner SC-4 evidence.
-- [Phase 4 planning]: Nassar 2021 .mat file nested indexing not directly inspected — must run describe_mat_structure() before writing data loading code (research flag)
+- [RESOLVED 2026-05-04 — Phase 4 planning]: Nassar 2021 .mat file structure confirmed working; extract_nassar_trials.py successfully loaded 134 subjects' statusData with blockCompletedTrials, currentOutcome, currentPrediction, currentUpdate, currentDelta, currentMean, isChangeTrial fields.
 - [OPEN — 04-02]: Full 50-dataset param recovery run from 2026-04-30 (background_task_id=bcaxsbh0c) appears to have failed silently or run elsewhere — no recovery_report.json on disk, .bg-shell/manifest.json empty, only smoke synth_000-003 fits present (~7 of 8). BAYES-06 NOT YET CLOSED. 04-03 Task 2 gates on recovery_report.json with all r >= 0.85; will need to re-queue (likely on cluster given 16GB RAM constraint here).
-- [OPEN — 04-02]: Smoke convergence behavior — all 8 smoke fits triggered retry, suggesting 200 warmup is insufficient for Nassar posterior geometry. First diagnostic if re-run r < 0.85: check tau update equation (RESEARCH.md Pitfall 1).
-- [OPEN — 04-03]: Brain2021Code raw data NOT downloaded. Manual user action required (sites.brown.edu/mattlab/resources/). Blocks 04-03 Task 1.
+- [OPEN — 04-02 UPDATED]: Smoke convergence behavior — 200 warmup insufficient. ADDITIONALLY: tau update equation in compute_rbo_forward was wrong (RESEARCH.md Pitfall 1 confirmed). Now fixed in 04-03a. Re-queue with corrected model.
+- [RESOLVED 2026-05-04 — 04-03 prereq]: Brain2021Code cleaned. 134 subjects loaded; data/processed/nassar2021/ committed. 04-03 now unblocked.
 - [RESOLVED 2026-05-04 — 04-04a]: Cohort manifest built. 1,884 PIE_CP_OB_v2 checkpoints inventoried, ΔArea computed, manifest written. Kumar Fig. 2A replicated. cohort_manifest.json + figure committed (95fe5ca).
 - [OPEN — 04-04a deviations]: p_reset panel doesn't match Kumar Fig. 2C monotonic decrease (we see flat noise). Possible env-param drift or RNG-seed difference; non-blocking but flag for 04-04b verification.
+- [OPEN — 04-03a accepted deviation]: truncated-normal pI normalization not applied in compute_rbo_forward (needs absolute bucket position, not available in pred_error space). ~3.7% max CP omega offset. Consider refactoring to accept bag+bucket separately if BAYES-06 r < 0.85 after re-run.
 
 ## Session Continuity
 
-Last session: 2026-05-04T18:30Z
-Stopped at: Completed 04-04a-PLAN.md (pivoted from K=20 SLURM array → axis-all local). Built scripts/data_pipeline/09b_build_rnn_cohort_manifest.py; ran 81-min behavior extraction on 1,884 checkpoints; wrote cohort_manifest.json (n_in_cohort=1884, axis_counts={canonical:50, gamma:350, preset:349, rollout:385, tdscale:400, tdpenalty:350}); reproduced Kumar 2025 Fig. 2A. 5 commits on main (03ff4ec → 95fe5ca), 16 commits pushed to origin (clearing local backlog).
+Last session: 2026-05-04T17:33Z
+Stopped at: Completed 04-03a-PLAN.md. Cleaned 134-subject Brain2021Code data (55,992 valid trials). Fixed 3 math bugs in compute_rbo_forward (U_val constant, tot_sig formula, MATLAB ss R-update). All 7 RBO tests pass. 3 task commits + 1 docs commit (d1014ac, ec8d151, 648e54c, + docs).
 Resume options:
-1. **04-04b** (replay-and-fit RBO over the 1,884-cohort) — runnable now; consumes cohort_manifest.json + needs Nassar 2021 bag-position sequences from data/raw/nassar2021/.
-2. **04-03 unblock** — manual download of Brain2021Code; THEN 04-03 Task 1 + re-queue param recovery (BAYES-06 gate).
+1. **04-03** (Human Data Fits) — UNBLOCKED. data/processed/nassar2021/ ready, forward model validated. Still gated on BAYES-06 for Task 2.
+2. **BAYES-06 re-queue** — re-run 50-dataset param recovery with corrected compute_rbo_forward. Likely needs cluster (16GB RAM constraint).
+3. **04-04b** (replay-and-fit RBO over the 1,884-cohort) — runnable now; same forward model fixes apply.
 Resume file: None
