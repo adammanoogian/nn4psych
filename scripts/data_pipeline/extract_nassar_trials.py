@@ -30,10 +30,10 @@ from typing import Dict, List, Tuple
 
 # Add project root
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from config import OUTPUT_DIR
+from config import OUTPUT_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR
 
-# Nassar data directory
-NASSAR_DIR = Path('C:/Users/aman0087/Documents/Github/Nassar_et_al_2021/Brain2021Code')
+# Nassar data directory — points at the extracted Brain2021Code in the repo
+NASSAR_DIR = RAW_DATA_DIR / 'nassar2021' / 'Brain2021Code'
 REAL_SUBJECTS_DIR = NASSAR_DIR / 'realSubjects'
 
 # Data cleaning parameters (from AASP_mastList.m)
@@ -354,7 +354,7 @@ def extract_all_subjects():
     print(f"{'='*70}")
 
     # Save data
-    output_dir = OUTPUT_DIR / 'processed' / 'nassar2021'
+    output_dir = PROCESSED_DATA_DIR / 'nassar2021'
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Save trial data

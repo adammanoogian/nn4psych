@@ -97,6 +97,14 @@ figs*
 # 03-05: pre-masked backup — fixed name so it never pollutes git status
 data/processed/rnn_behav/circuit_data.npz.pre_masked_backup
 
+# 04-03a: cleaned nassar2021 behavioral data (134 subjects, 55,992 valid trials).
+# subject_trials.npy is ~11 MB (pickle dict list); subject_metadata.csv is <1 KB.
+# Committing these avoids re-running the 134-subject MATLAB loading pipeline on
+# every fresh checkout. Brain2021Code raw data stays gitignored (see below).
+!/data/processed/nassar2021/
+!/data/processed/nassar2021/subject_trials.npy
+!/data/processed/nassar2021/subject_metadata.csv
+
 # 04-04a: RNN cohort manifest is committed (consumer-facing schema for 04-04b);
 # parquet stays local (regenerable from script in ~80 min and large enough
 # that LFS would be more appropriate if shared).
