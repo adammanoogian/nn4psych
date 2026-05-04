@@ -92,8 +92,19 @@ figs*
 # 03-05: pre-masked backup — fixed name so it never pollutes git status
 data/processed/rnn_behav/circuit_data.npz.pre_masked_backup
 
+# 04-04a: RNN cohort manifest is committed (consumer-facing schema for 04-04b);
+# parquet stays local (regenerable from script in ~80 min and large enough
+# that LFS would be more appropriate if shared).
+!/data/processed/rnn_cohort/
+!/data/processed/rnn_cohort/cohort_manifest.json
+/data/processed/rnn_cohort/*.parquet
+
 /figures/*
 !/figures/.gitkeep
+# 04-04a: rnn_cohort sanity figure (Kumar 2025 Fig. 2 replication)
+!/figures/rnn_cohort/
+!/figures/rnn_cohort/*.png
+!/figures/rnn_cohort/*.svg
 
 # Cluster log bulk — keep repo lean, logs live on the cluster
 /cluster/logs/*.out
