@@ -5,72 +5,63 @@ type: execute
 wave: 4
 depends_on: ["04-01"]
 gap_closure: false
-autonomous: false
+autonomous: true
 files_modified:
-  - cluster/run_rnn_cohort.sh
-  - cluster/setup_env.sh
-  - cluster/99_push_results.slurm
-  - data/processed/rnn_cohort/
-  - scripts/training/train_rnn_canonical.py
-user_setup:
-  - service: monash_m3_cluster
-    why: "Cluster GPU allocation for SLURM array K=20 RNN training; SSH/SLURM submission requires user-side authentication"
-    dashboard_config:
-      - task: "Push branch to origin so cluster can git pull updated cluster/run_rnn_cohort.sh and train_rnn_canonical.py"
-        location: "Local repo (git push origin main)"
-      - task: "SSH to Monash M3, pull repo, sbatch cluster/run_rnn_cohort.sh, and run cluster/99_push_results.slurm afterany dependency"
-        location: "Monash M3 cluster (m3.massive.org.au)"
+  - scripts/data_pipeline/09b_build_rnn_cohort_manifest.py
+  - data/processed/rnn_cohort/checkpoint_metrics.parquet
+  - data/processed/rnn_cohort/cohort_manifest.json
+  - figures/rnn_cohort/delta_area_by_axis.png
+  - .gitignore
 must_haves:
   truths:
-    - "K=20 independent seeds of the canonical PIE_CP_OB_v2 RNN are trained via SLURM array job"
-    - "Each seed's trained model checkpoint and final reward curve are saved to data/processed/rnn_cohort/seed_{i:02d}/"
-    - "Checkpoints are pulled from cluster to local via the established autopush mechanism (run_circuit_ensemble.sh pattern), and 99_push_results.slurm has the required stage_files calls for rnn_cohort artifacts (M6 fix)"
-    - "All 20 checkpoints loadable via existing nn4psych.models.actor_critic.ActorCritic loader"
-    - "Training reward curves indicate learning (final reward not flat or diverging) for at least 18/20 seeds; failed seeds documented but not blocking 04-04b"
+    - "Existing 1,884 trained checkpoints in trained_models/checkpoints/model_params_101000/ are inventoried and tagged with axis_swept ∈ {gamma, preset, rollout, tdscale, canonical, off-axis} against the Kumar et al. 2025 canonical (γ=0.95, p_reset=0.0, τ=100, β_δ=1.0)."
+    - "Each checkpoint has a recomputed ΔArea (Area_CP − Area_OB) metric from re-running PIE_CP_OB_v2 behavior extraction at 8 epochs."
+    - "ΔArea distribution by gamma reproduces Kumar 2025 Fig. 2A: monotonic increase from γ≈0.1 to γ≈0.95 with a non-monotonic dip at γ=0.99 (credit-assignment / unbounded-V regime)."
+    - "cohort_manifest.json enumerates every axis-sweep checkpoint with its model_path, parsed hyperparameters, axis_swept tag, axis_value, and ΔArea — directly consumable by Plan 04-04b's RBO fit loop."
+    - "Off-axis checkpoints (those varying ≥2 hyperparameters off canonical) are excluded from the cohort but counted in n_off_axis_excluded."
   artifacts:
-    - path: "cluster/run_rnn_cohort.sh"
-      provides: "SLURM array job (--array=0-19) that trains 20 RNN seeds with --seed ${SLURM_ARRAY_TASK_ID}; SBATCH directives, env setup, output to data/processed/rnn_cohort/seed_$SLURM_ARRAY_TASK_ID/"
-      contains: "SBATCH --array"
-    - path: "data/processed/rnn_cohort/seed_00/model.pt"
-      provides: "Trained ActorCritic checkpoint for seed 0 (analogous for seeds 01..19)"
-    - path: "data/processed/rnn_cohort/seed_00/training_log.json"
-      provides: "Per-epoch reward curve and final stats for QA"
-      contains: "rewards"
+    - path: "scripts/data_pipeline/09b_build_rnn_cohort_manifest.py"
+      provides: "Resumable script that inventories checkpoints, classifies axis_swept, runs behavior extraction, computes ΔArea, writes manifest + sanity figure."
+      contains: "build_inventory"
+    - path: "data/processed/rnn_cohort/checkpoint_metrics.parquet"
+      provides: "Per-checkpoint table: gamma, preset_memory, rollout_size, td_scale, seed, axis_swept, axis_value, area_cp, area_ob, delta_area, status."
+      contains: "delta_area"
     - path: "data/processed/rnn_cohort/cohort_manifest.json"
-      provides: "List of seed indices with checkpoint paths and final reward; consumed by 04-04b for RNN cohort iteration"
-      contains: "seeds"
-    - path: "cluster/99_push_results.slurm"
-      provides: "Autopush script extended with stage_files calls for rnn_cohort artifacts (M6 fix)"
-      contains: "rnn_cohort"
+      provides: "Schema-versioned manifest consumed by 04-04b: {schema_version, n_total_checkpoints, n_in_cohort, canonical, axis_counts, seeds: [...]}."
+      contains: "schema_version"
+    - path: "figures/rnn_cohort/delta_area_by_axis.png"
+      provides: "2×2 panel of ΔArea vs each axis (Kumar 2025 Fig. 2 replication) — sanity check that the cohort matches published behavior."
+      contains: "delta_area_by_axis"
   key_links:
-    - from: "cluster/run_rnn_cohort.sh"
-      to: "scripts/training/train_rnn_canonical.py"
-      via: "python scripts/training/train_rnn_canonical.py --seed ${SLURM_ARRAY_TASK_ID} --output_dir data/processed/rnn_cohort/seed_${SLURM_ARRAY_TASK_ID}"
-      pattern: "train_rnn_canonical.py"
     - from: "data/processed/rnn_cohort/cohort_manifest.json"
       to: "scripts/data_pipeline/10_fit_rnn_data.py (Plan 04-04b)"
-      via: "04-04b reads manifest to iterate over K=20 seeds"
+      via: "04-04b reads manifest to iterate over the per-axis cohort and fit Reduced Bayesian Observer per checkpoint."
       pattern: "cohort_manifest"
 ---
 
 <objective>
-Re-train K=20 independent seeds of the canonical PIE_CP_OB_v2 RNN on the Monash M3 cluster via a SLURM array job, then pull all checkpoints to local. This is cluster-side compute that produces the RNN cohort consumed by 04-04b for replay-and-fit.
+Build a per-checkpoint cohort manifest from the existing 1,884 trained RNNs in
+`trained_models/checkpoints/model_params_101000/`. Use the per-axis sweep
+design from Kumar et al. 2025 (CCN, "Neurocomputational Underpinnings of
+Suboptimal Beliefs in Reinforcement Learning Agents") which varies four
+hyperparameters — γ (discount), p_reset (working-memory disruption), τ
+(rollout / episodic memory capacity), β_δ (advantage scaling) — one at a time
+around the canonical (γ=0.95, p_reset=0.0, τ=100, β_δ=1.0). Each checkpoint
+gets a re-extracted ΔArea metric (Area_CP − Area_OB; Eq. 8 of the paper) so
+Plan 04-04b can fit Reduced Bayesian Observer per checkpoint and project RBO
+parameters onto the schizophrenia-spectrum ΔArea axis.
 
-`autonomous: false` because cluster job submission requires SSH/SLURM authentication that Claude cannot perform headlessly — the user must `git push`, SSH to M3, and submit the job. After submission, cluster autopush returns checkpoints to local without further user action.
-
-Purpose: BAYES-05 prerequisite. Phase 4 needs 20 RNN seeds to fit Reduced Bayesian against (RNN-as-cognitive-cohort). This plan reuses the established Phase 3 cluster infrastructure (cluster/setup_env.sh, autopush via 99_push_results.slurm).
+This supersedes the original 04-04a (K=20 SLURM array of identical seeds),
+which was discarded as wrong-direction work because re-training homogeneous
+seeds throws away the existing ~50-seed × 4-axis behavioral diversity
+already published in Kumar 2025. No cluster compute required.
 
 Output:
-- `cluster/run_rnn_cohort.sh` (new SLURM array script)
-- `cluster/99_push_results.slurm` extended with `stage_files` calls for rnn_cohort (M6 fix)
-- `data/processed/rnn_cohort/seed_{00..19}/` (20 directories with model.pt + training_log.json)
-- `data/processed/rnn_cohort/cohort_manifest.json`
+- `scripts/data_pipeline/09b_build_rnn_cohort_manifest.py`
+- `data/processed/rnn_cohort/checkpoint_metrics.parquet` (cache)
+- `data/processed/rnn_cohort/cohort_manifest.json` (consumer schema for 04-04b)
+- `figures/rnn_cohort/delta_area_by_axis.png` (Kumar Fig. 2 replication)
 </objective>
-
-<execution_context>
-@C:\Users\aman0087\.claude/get-shit-done/workflows/execute-plan.md
-@C:\Users\aman0087\.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -78,368 +69,204 @@ Output:
 @.planning/ROADMAP.md
 @.planning/phases/04-bayesian-model-fitting/04-CONTEXT.md
 @.planning/phases/04-bayesian-model-fitting/04-RESEARCH.md
-@.planning/phases/04-bayesian-model-fitting/04-01-SUMMARY.md
-@cluster/run_circuit_ensemble.sh
-@cluster/setup_env.sh
-@cluster/99_push_results.slurm
-@scripts/training/train_rnn_canonical.py
+@docs/reference_papers/Kumar et al. 2025 CCN — Neurocomputational Underpinnings of Suboptimal Beliefs in RL Agents
+@scripts/data_pipeline/03_analyze_hyperparameter_sweeps.py  (existing parse_model_filename)
+@scripts/data_pipeline/04_visualize_behavioral_summary.py   (existing extract_model_behavior)
+@scripts/data_pipeline/05_visualize_hyperparameter_effects.py  (existing calculate_area_metric)
+@config.py  (GAMMA_VALUES, ROLLOUT_VALUES, PRESET_VALUES, SCALE_VALUES, paths)
+@trained_models/checkpoints/model_params_101000/  (1,884 .pth files)
 </context>
 
 <tasks>
 
 <task type="auto">
-  <name>Task 1: Add --seed and --output_dir CLI to train_rnn_canonical.py if not present; verify smoke locally</name>
-  <files>scripts/training/train_rnn_canonical.py</files>
+  <name>Task 1: Inventory + axis classification</name>
+  <files>scripts/data_pipeline/09b_build_rnn_cohort_manifest.py</files>
   <action>
-Read the current `scripts/training/train_rnn_canonical.py` to confirm its CLI surface. Per project CLAUDE.md, this script accepts `--epochs --trials --maxt`. For 04-04a, we need:
-- `--seed N` (integer; sets numpy / torch / random seeds; passes to env constructor for reproducible trial sequences)
-- `--output_dir PATH` (directory where the final model checkpoint and training log are saved as `model.pt` and `training_log.json`)
+Parse all `.pth` filenames in `trained_models/checkpoints/model_params_101000/`
+using a parser equivalent to `03_analyze_hyperparameter_sweeps.parse_model_filename`,
+extracting: gamma, preset_memory, rollout_size, td_scale, td_penalty, seed,
+performance_score, hidden_dim, epochs_trained, max_displacement, reward_size.
 
-If these flags ALREADY exist (likely from Phase 2), confirm and skip the edit. If they DO NOT exist, add them with minimal disruption:
+Tag each checkpoint with `axis_swept`:
+- 0 axes off-canonical → 'canonical' (γ=0.95 ∧ p_reset=0.0 ∧ τ=100 ∧ β_δ=1.0)
+- 1 axis off → 'gamma' / 'preset' / 'rollout' / 'tdscale'
+- ≥2 axes off → 'off-axis' (excluded from cohort but counted)
 
-1. Add to argparse:
-```python
-parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
-parser.add_argument('--output_dir', type=str, default='data/processed/rnn_canonical/', help='Output directory for checkpoint and log')
-```
-
-2. Apply seed at script start:
-```python
-import random
-import numpy as np
-import torch
-
-def set_seeds(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-```
-Call `set_seeds(args.seed)` before any model construction.
-
-3. After training, save:
-```python
-output_dir = Path(args.output_dir)
-output_dir.mkdir(parents=True, exist_ok=True)
-torch.save({
-    'model_state_dict': model.state_dict(),
-    'config': {...},
-    'seed': args.seed,
-}, output_dir / 'model.pt')
-with open(output_dir / 'training_log.json', 'w') as f:
-    json.dump({
-        'rewards': [float(r) for r in episode_rewards],   # cast for JSON
-        'final_reward': float(episode_rewards[-1]),
-        'n_epochs': int(args.epochs),
-        'seed': int(args.seed),
-    }, f, indent=2)
-```
-
-Cast all numpy / torch scalars to Python builtins before json.dump (recurring lesson STATE.md decision 02-03).
-
-4. Smoke test locally per project CLAUDE.md (small params, single process, 16GB RAM safe):
-```
-/c/Users/aman0087/AppData/Local/miniforge3/envs/actinf-py-scripts/python.exe scripts/training/train_rnn_canonical.py --epochs 3 --trials 10 --maxt 30 --seed 99 --output_dir /tmp/rnn_smoke
-```
-Confirm `/tmp/rnn_smoke/model.pt` and `/tmp/rnn_smoke/training_log.json` exist.
-
-If train_rnn_canonical.py is missing the canonical training loop (i.e. it's a placeholder), STOP and surface this to the user — do NOT scope-creep this plan into rewriting Phase 2 work. Reference: `scripts/training/train_rnn_canonical.py` should already be functional from Phase 2 (TRAIN-01 completed).
+Set `axis_value` to the value of the swept axis (NaN for off-axis).
   </action>
   <verify>
-```
-# Smoke run
-/c/Users/aman0087/AppData/Local/miniforge3/envs/actinf-py-scripts/python.exe scripts/training/train_rnn_canonical.py --epochs 3 --trials 10 --maxt 30 --seed 99 --output_dir /tmp/rnn_smoke
-ls /tmp/rnn_smoke/model.pt /tmp/rnn_smoke/training_log.json
-# Both exist; training_log.json contains 'rewards' list
-/c/Users/aman0087/AppData/Local/miniforge3/envs/actinf-py-scripts/python.exe -c "
-import json
-with open('/tmp/rnn_smoke/training_log.json') as f:
-    log = json.load(f)
-assert 'rewards' in log and 'seed' in log and log['seed'] == 99, f'log shape wrong: {log.keys()}'
-print('smoke OK; final_reward=', log['final_reward'])
-"
-```
+Smoke at `--max_models 8`: report axis_swept counts, ensure all 8 are tagged
+'gamma' (since the smoke set is dominated by gamma sweeps in alphabetical order).
   </verify>
   <done>
-- `train_rnn_canonical.py` accepts `--seed` and `--output_dir`.
-- Smoke run produces `model.pt` and `training_log.json` with seed-tagged content.
-- All numpy/torch scalars JSON-serializable.
+DataFrame with one row per checkpoint, columns include checkpoint_path
+(POSIX), axis_swept, axis_value, and all parsed hyperparameters.
   </done>
 </task>
 
 <task type="auto">
-  <name>Task 2: Write cluster/run_rnn_cohort.sh SLURM array job (K=20 seeds) and add stage_files calls to 99_push_results.slurm</name>
-  <files>cluster/run_rnn_cohort.sh,cluster/99_push_results.slurm</files>
+  <name>Task 2: Re-extract behavior + compute ΔArea (resumable)</name>
+  <files>scripts/data_pipeline/09b_build_rnn_cohort_manifest.py, data/processed/rnn_cohort/checkpoint_metrics.parquet</files>
   <action>
-**A. Create `cluster/run_rnn_cohort.sh`** modeled on `cluster/run_circuit_ensemble.sh` (which is the reference for Phase-3-established cluster infrastructure: setup_env.sh, miniforge3 module, autopush pattern, CRLF strip).
+For each checkpoint, load via `ActorCritic` and run
+`extract_model_behavior(model_path, epochs=8)` from
+`scripts/data_pipeline/04_visualize_behavioral_summary.py` — yields states of
+shape `(epochs, 2, 5, 200) = (epoch, condition, channels, trial)`.
 
-Structure:
+Compute Area_CP and Area_OB separately by integrating learning rate vs
+prediction error over `threshold=20` filtered trials, using `get_lrs_v2` from
+`nn4psych.utils.metrics`. ΔArea = Area_CP − Area_OB.
 
-```bash
-#!/bin/bash
-# =============================================================================
-# SLURM: K=20 RNN Cohort Re-Training (PIE_CP_OB_v2)
-# =============================================================================
-# Trains K=20 independent seeds of the canonical PIE RNN as a SLURM array job.
-# Each array task trains one seed and writes to data/processed/rnn_cohort/seed_${SLURM_ARRAY_TASK_ID}/.
-#
-# Usage:
-#   sbatch cluster/run_rnn_cohort.sh
-#   sbatch --export=K=20,EPOCHS=150,TRIALS=200 cluster/run_rnn_cohort.sh
-#
-# Auto-push results after all array tasks finish (Phase 3 pattern):
-#   sed -i 's/\r$//' cluster/*.slurm cluster/*.sh
-#   FIT_JID=$(sbatch --parsable cluster/run_rnn_cohort.sh)
-#   sbatch --parsable --dependency=afterany:${FIT_JID} \
-#       --export=ALL,PARENT_JOBS="${FIT_JID}" \
-#       cluster/99_push_results.slurm
-#
-# Performance estimate (per seed, GPU):
-#   ~30-60 min per seed; total wall ≈ 60 min if K parallel array tasks
-#
-# Reference: cluster/run_circuit_ensemble.sh (Phase 3) for the env-setup pattern
-# =============================================================================
+Cache results to `data/processed/rnn_cohort/checkpoint_metrics.parquet` every
+100 entries (resumable: subsequent runs skip checkpoints already in the
+parquet's checkpoint_id set).
 
-#SBATCH --job-name=rnn_cohort
-#SBATCH --output=cluster/logs/rnn_cohort_%A_%a.out
-#SBATCH --error=cluster/logs/rnn_cohort_%A_%a.err
-#SBATCH --array=0-19
-#SBATCH --time=02:00:00
-#SBATCH --mem=8G
-#SBATCH --gres=gpu:1
-#SBATCH --partition=gpu
-#SBATCH --cpus-per-task=2
-
-# Configuration overrides via --export
-EPOCHS=${EPOCHS:-150}
-TRIALS=${TRIALS:-200}
-MAXT=${MAXT:-100}
-
-# Environment setup (Phase 3 pattern)
-module load miniforge3 2>/dev/null || eval "$(conda shell.bash hook)" 2>/dev/null || true
-cd "${SLURM_SUBMIT_DIR:-$(dirname "$0")/..}"
-
-# Activate env via setup_env.sh (creates if missing)
-source cluster/setup_env.sh
-
-# Output directory: data/processed/rnn_cohort/seed_${SLURM_ARRAY_TASK_ID}/
-SEED_IDX=$(printf "%02d" ${SLURM_ARRAY_TASK_ID})
-OUT_DIR="data/processed/rnn_cohort/seed_${SEED_IDX}"
-mkdir -p "${OUT_DIR}"
-
-echo "[rnn_cohort] seed=${SLURM_ARRAY_TASK_ID} epochs=${EPOCHS} trials=${TRIALS} maxt=${MAXT} out=${OUT_DIR}"
-echo "[rnn_cohort] hostname=$(hostname) gpu=$(nvidia-smi -L 2>/dev/null || echo 'no nvidia-smi')"
-
-python scripts/training/train_rnn_canonical.py \
-    --seed ${SLURM_ARRAY_TASK_ID} \
-    --epochs ${EPOCHS} \
-    --trials ${TRIALS} \
-    --maxt ${MAXT} \
-    --output_dir "${OUT_DIR}"
-
-EXIT_CODE=$?
-echo "[rnn_cohort] seed=${SLURM_ARRAY_TASK_ID} exit_code=${EXIT_CODE}"
-exit ${EXIT_CODE}
-```
-
-Notes:
-- `--array=0-19` means 20 array tasks indexed 0-19, mapping to seed indices 0-19.
-- `EXIT_CODE` propagated so SLURM marks failed seeds as failed (autopush still fires via afterany).
-- GPU partition matches Phase 3 setup; if M3 partition naming differs, document in SUMMARY (planner has limited cluster-side visibility).
-- `setup_env.sh` already creates the cluster conda env per Phase 3 — reuse, do not duplicate.
-
-Run CRLF strip locally:
-```
-sed -i 's/\r$//' cluster/run_rnn_cohort.sh
-chmod +x cluster/run_rnn_cohort.sh
-```
-
-**B. M6 fix — Extend `cluster/99_push_results.slurm` with explicit `stage_files` calls for rnn_cohort artifacts.**
-
-The existing `cluster/99_push_results.slurm` defines a `stage_files <pattern> <description>` function (around line 205) that all autopush rules use. **Bare `git add` lines bypass dry-run logic and break parity with the rest of the autopush workflow.** Per checker iteration 1, the previous draft suggested a "defensive `git add`" — that is INCORRECT for this script. Use `stage_files` only.
-
-Locate the `stage_files` block in `99_push_results.slurm` (after the existing rules for `output/circuit_analysis/...` and `data/processed/rnn_behav/...`). Append these EXACT lines (must match RNN-cohort artifact paths exactly):
-
-```bash
-# Phase 4 RNN cohort (04-04a)
-stage_files "data/processed/rnn_cohort/seed_*/model.pt" "RNN cohort checkpoints"
-stage_files "data/processed/rnn_cohort/seed_*/training_log.json" "RNN cohort training logs"
-stage_files "data/processed/rnn_cohort/cohort_manifest.json" "RNN cohort manifest"
-```
-
-Do NOT use `git add` for these paths. Do NOT add wildcards above the seed level. Do NOT touch the existing rules.
-
-Verify the patterns are present and use the `stage_files` function (not bare `git add`):
-```
-grep -c "stage_files \"data/processed/rnn_cohort/" cluster/99_push_results.slurm
-# Expected: 3 (one for model.pt, one for training_log.json, one for cohort_manifest.json)
-
-# Defensive: confirm no bare git-add lines for rnn_cohort were introduced
-grep -E "^\s*git add.*rnn_cohort" cluster/99_push_results.slurm | wc -l
-# Expected: 0
-```
-
-Run CRLF strip on 99_push_results.slurm:
-```
-sed -i 's/\r$//' cluster/99_push_results.slurm
-```
+Use `torch.set_num_threads(1)` to avoid thrashing on the 16 GB / 8-core local
+machine. ~50 minutes total for 1,884 checkpoints @ 8 epochs.
   </action>
   <verify>
-```
-# File exists and is executable
-ls -la cluster/run_rnn_cohort.sh
-# SBATCH directives parseable (lint via grep)
-grep -c "^#SBATCH" cluster/run_rnn_cohort.sh
-# Expected: at least 8 (job-name, output, error, array, time, mem, gres, partition, cpus-per-task)
-
-# Array directive correct
-grep -E "^#SBATCH --array=0-19" cluster/run_rnn_cohort.sh
-
-# train_rnn_canonical.py invocation present with all required args
-grep -c "scripts/training/train_rnn_canonical.py" cluster/run_rnn_cohort.sh
-grep -c -- "--seed \${SLURM_ARRAY_TASK_ID}" cluster/run_rnn_cohort.sh
-
-# M6 fix: autopush staging uses stage_files (NOT bare git add) for rnn_cohort
-grep -c "stage_files \"data/processed/rnn_cohort/" cluster/99_push_results.slurm
-# Expected: 3
-
-# M6 fix: no bare git-add for rnn_cohort
-test "$(grep -E "^\s*git add.*rnn_cohort" cluster/99_push_results.slurm | wc -l)" -eq 0 && echo "no bare git-add OK"
-```
+- Resume works: rerun without `--no_resume` finds parquet rows already present and skips.
+- Smoke 8 ck @ 4 epochs: ΔArea at γ=0.1 is strongly negative (e.g. −1.27, near Kumar 2025 Fig. 2A's leftmost point).
   </verify>
   <done>
-- `cluster/run_rnn_cohort.sh` exists with #SBATCH --array=0-19, GPU directive, and full training command.
-- CRLF stripped, executable.
-- M6 fix: `cluster/99_push_results.slurm` has exactly 3 new `stage_files` calls covering `seed_*/model.pt`, `seed_*/training_log.json`, and `cohort_manifest.json`. No bare `git add` lines were introduced.
+Parquet exists with 1,884 rows. `status='ok'` for all (or `extraction_failed`
+documented in SUMMARY for any failures).
   </done>
 </task>
 
-<task type="checkpoint:human-verify" gate="blocking">
-  <name>Task 3: User submits SLURM array job and reports cohort manifest after autopush returns</name>
-  <what-built>
-- `cluster/run_rnn_cohort.sh` SLURM array (K=20)
-- `train_rnn_canonical.py` updated with --seed and --output_dir
-- `cluster/99_push_results.slurm` updated with 3 `stage_files` calls for rnn_cohort artifacts (M6)
-  </what-built>
-  <how-to-verify>
-**Step 1 (user):** Push branch and SSH to M3.
-```
-git push origin main   # or current branch; cluster pulls from origin
-ssh adam@m3.massive.org.au   # or the configured M3 SSH alias
-cd /path/to/nn4psych  # cluster checkout
-git pull origin main
+<task type="auto">
+  <name>Task 3: Write cohort_manifest.json</name>
+  <files>data/processed/rnn_cohort/cohort_manifest.json</files>
+  <action>
+Filter `checkpoint_metrics` to axis_swept ∈ {gamma, preset, rollout, tdscale,
+canonical}. For each row emit a `seeds[*]` record:
+
+```json
+{
+  "checkpoint_id": "<filename without .pth>",
+  "model_path": "trained_models/checkpoints/model_params_101000/<file>.pth",
+  "axis_swept": "gamma",
+  "axis_value": 0.5,
+  "gamma": 0.5,
+  "preset_memory": 0.0,
+  "rollout_size": 100,
+  "td_scale": 1.0,
+  "seed": 12,
+  "delta_area": -0.42,
+  "area_cp": ...,
+  "area_ob": ...,
+  "performance_score": ...,
+  "status": "ok"
+}
 ```
 
-**Step 2 (user):** Submit array job + autopush dependency:
+Top-level fields: schema_version="1.0", n_total_checkpoints, n_in_cohort,
+n_off_axis_excluded, canonical, axis_counts, seeds.
+  </action>
+  <verify>
+- JSON loads cleanly.
+- `n_in_cohort + n_off_axis_excluded == n_total_checkpoints`.
+- For each axis ∈ {gamma, preset, rollout, tdscale}: at least 50 entries (one per seed × per varied axis_value).
+  </verify>
+  <done>
+File exists; downstream `04-04b` can parse and iterate without re-deriving
+hyperparameters from filenames.
+  </done>
+</task>
+
+<task type="auto">
+  <name>Task 4: Sanity figure (Kumar Fig. 2 replication)</name>
+  <files>figures/rnn_cohort/delta_area_by_axis.png</files>
+  <action>
+2×2 panel: ΔArea vs each axis (γ, p_reset, τ log-x, β_δ), error bars = 95% CI
+across seeds within each cell. Add a horizontal zero line and the canonical
+ΔArea as a reference dot.
+
+Expected:
+- γ panel: monotonic increase 0.1 → 0.95, dip at 0.99 (Kumar Fig. 2A).
+- β_δ panel: monotonic increase (Fig. 2B).
+- p_reset panel: monotonic decrease (Fig. 2C).
+- τ panel: non-monotonic with peak around τ ∈ [20, 100] (Fig. 2D).
+
+If any panel deviates qualitatively from the paper's published curve, document
+in SUMMARY as an open question (could indicate a different RNG state, env
+parameter, or learning-rate-area helper version).
+  </action>
+  <verify>
+PNG + SVG saved. File size > 50 KB (i.e. not blank).
+  </verify>
+  <done>
+Sanity figure exists and qualitatively matches Kumar 2025 Fig. 2.
+  </done>
+</task>
+
+<task type="auto">
+  <name>Task 5: Update .gitignore to allow tracking the manifest + figure</name>
+  <files>.gitignore</files>
+  <action>
+Add unignore rules so collaborators (and future cluster pulls) get the
+manifest and sanity figure without binary-cache (parquet) noise:
+
 ```
-sed -i 's/\r$//' cluster/*.slurm cluster/*.sh
-FIT_JID=$(sbatch --parsable cluster/run_rnn_cohort.sh)
-echo "submitted array job: $FIT_JID"
-sbatch --parsable --dependency=afterany:${FIT_JID} \
-    --export=ALL,PARENT_JOBS="${FIT_JID}" \
-    cluster/99_push_results.slurm
+# 04-04a: cohort manifest is committed; parquet stays local
+!/data/processed/rnn_cohort/cohort_manifest.json
+!/figures/rnn_cohort/
+!/figures/rnn_cohort/*.png
+!/figures/rnn_cohort/*.svg
 ```
 
-**Step 3 (user):** Wait ~60-120 min for the array to complete. Monitor:
-```
-squeue -u $USER -j $FIT_JID
-sacct -j $FIT_JID --format=JobID,State,ExitCode,Elapsed
-ls cluster/logs/rnn_cohort_${FIT_JID}_*.out | head -3
-```
-
-**Step 4 (user):** After autopush completes, the local repo will have new commits with `data/processed/rnn_cohort/seed_*/` directories. Pull locally:
-```
-git pull origin main
-ls data/processed/rnn_cohort/
-```
-
-Expected: 20 directories `seed_00/` through `seed_19/`, each with `model.pt` and `training_log.json`.
-
-**Step 5 (Claude, after resume-signal):** Build `data/processed/rnn_cohort/cohort_manifest.json`:
-```python
-import json, glob
-from pathlib import Path
-manifest = {'seeds': []}
-for d in sorted(glob.glob('data/processed/rnn_cohort/seed_*')):
-    seed_idx = int(Path(d).name.split('_')[1])
-    log_path = Path(d) / 'training_log.json'
-    model_path = Path(d) / 'model.pt'
-    if log_path.exists() and model_path.exists():
-        with open(log_path) as f:
-            log = json.load(f)
-        manifest['seeds'].append({
-            'seed_idx': seed_idx,
-            'model_path': str(model_path),
-            'training_log_path': str(log_path),
-            'final_reward': log.get('final_reward'),
-            'n_epochs': log.get('n_epochs'),
-            'status': 'OK',
-        })
-    else:
-        manifest['seeds'].append({'seed_idx': seed_idx, 'status': 'MISSING_FILES'})
-manifest['n_seeds_ok'] = sum(1 for s in manifest['seeds'] if s.get('status') == 'OK')
-with open('data/processed/rnn_cohort/cohort_manifest.json', 'w') as f:
-    json.dump(manifest, f, indent=2)
-print(f'manifest written; {manifest["n_seeds_ok"]}/20 seeds OK')
-```
-  </how-to-verify>
-  <resume-signal>
-Type "pulled" once `git pull` brought down at least 18/20 seed directories (per must_haves "at least 18/20 seeds"). Then Claude builds cohort_manifest.json and validates pass-rate. Type "blocked: <reason>" if cluster job failed entirely (e.g. partition unavailable, env-build error) and the planner will route to a cluster diagnosis follow-up.
-  </resume-signal>
+Do NOT unignore the parquet (it's a cache; regenerable from the script in
+~50 min and large enough that LFS would be more appropriate if we ever need
+it shared).
+  </action>
+  <verify>
+`git check-ignore -v data/processed/rnn_cohort/cohort_manifest.json` reports
+the unignore rule (not the parent ignore).
+  </verify>
+  <done>
+.gitignore allows `cohort_manifest.json` and `figures/rnn_cohort/*` to be
+staged; parquet still ignored.
+  </done>
 </task>
 
 </tasks>
 
 <verification>
-After Task 3 resume:
+After all tasks:
 ```
-# Manifest exists
-ls data/processed/rnn_cohort/cohort_manifest.json
-
-# At least 18/20 seeds OK
+# Manifest exists and validates
 /c/Users/aman0087/AppData/Local/miniforge3/envs/actinf-py-scripts/python.exe -c "
 import json
 with open('data/processed/rnn_cohort/cohort_manifest.json') as f:
-    manifest = json.load(f)
-n_ok = manifest['n_seeds_ok']
-assert n_ok >= 18, f'expected at least 18 seeds OK, got {n_ok}'
-final_rewards = [s['final_reward'] for s in manifest['seeds'] if s.get('final_reward') is not None]
-print(f'n_ok={n_ok}/20; final_reward median={sorted(final_rewards)[len(final_rewards)//2]:.3f}')
-print('PASS')
+    m = json.load(f)
+assert m['schema_version'] == '1.0'
+assert m['n_in_cohort'] + m['n_off_axis_excluded'] == m['n_total_checkpoints']
+for axis in ['gamma', 'preset', 'rollout', 'tdscale']:
+    assert m['axis_counts'].get(axis, 0) >= 50, f'{axis} cohort under 50: {m[\"axis_counts\"]}'
+print(f'manifest OK: n_in_cohort={m[\"n_in_cohort\"]}, axis_counts={m[\"axis_counts\"]}')
 "
 
-# Each OK seed has loadable model.pt
-/c/Users/aman0087/AppData/Local/miniforge3/envs/actinf-py-scripts/python.exe -c "
-import torch
-import json
-with open('data/processed/rnn_cohort/cohort_manifest.json') as f:
-    manifest = json.load(f)
-for entry in manifest['seeds'][:3]:
-    if entry.get('status') == 'OK':
-        ckpt = torch.load(entry['model_path'], map_location='cpu', weights_only=False)
-        assert 'model_state_dict' in ckpt, f'malformed checkpoint: {ckpt.keys()}'
-        print(f'seed {entry[\"seed_idx\"]} loadable')
-print('checkpoints OK')
-"
+# Figure exists, non-empty
+ls -la figures/rnn_cohort/delta_area_by_axis.png
+test $(stat -c %s figures/rnn_cohort/delta_area_by_axis.png 2>/dev/null || stat -f%z figures/rnn_cohort/delta_area_by_axis.png) -gt 50000
 ```
 </verification>
 
 <success_criteria>
-- `cluster/run_rnn_cohort.sh` SLURM array submitted and completed.
-- `cluster/99_push_results.slurm` has 3 `stage_files` calls for rnn_cohort artifacts (M6 fix; no bare `git add` lines).
-- 18+ of 20 seeds have valid `model.pt` and `training_log.json`.
-- `cohort_manifest.json` enumerates all OK seeds.
-- Failed seeds (if any < 2) documented in SUMMARY but do not block 04-04b.
-- Final reward distribution shows learning curves (not flat) per Phase 2 TRAIN-01 acceptance.
+- All 1,884 checkpoints inventoried; ≥99% have status='ok'.
+- cohort_manifest.json contains ≥50 entries per axis (gamma/preset/rollout/tdscale).
+- Sanity figure qualitatively matches Kumar 2025 Fig. 2 (monotonicity directions).
+- 04-04b can iterate `cohort_manifest.json["seeds"]` and fit RBO without further filename parsing.
+- No cluster compute consumed.
 </success_criteria>
 
 <output>
-After completion, create `.planning/phases/04-bayesian-model-fitting/04-04a-SUMMARY.md`:
-- What was built: SLURM array, train script CLI updates, manifest, autopush stage_files extension (M6)
-- Cluster job ID and timing
-- Per-seed final reward distribution
-- Decisions logged: any partition / wall-time tweaks; failed seeds and why
-- Required-by-next-plan: 04-04b iterates over `cohort_manifest.json` seeds[*]['model_path']
-- Open follow-ups: any seeds that need re-training before Phase 5 cohort comparison
+Create `.planning/phases/04-bayesian-model-fitting/04-04a-SUMMARY.md`:
+- What was built: 09b script, parquet, manifest, sanity figure.
+- Total run time and per-checkpoint median.
+- ΔArea distribution by axis_swept (mean ± SD per axis).
+- Any extraction_failed checkpoints + reasons.
+- Decisions logged: epochs=8 default; off-axis exclusion criterion; canonical fix at γ=0.95/p_reset=0/τ=100/β_δ=1.
+- Required-by-next-plan: 04-04b reads `cohort_manifest.json["seeds"]` and replays human Nassar 2021 sequences through each checkpoint, then fits RBO per (checkpoint, condition).
 </output>
