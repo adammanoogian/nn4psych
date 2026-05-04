@@ -52,8 +52,18 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from config import CHECKPOINTS_DIR, FIGURE_DIR, PROCESSED_DATA_DIR
 
 
-# Kumar et al. 2025 canonical (per Fig. 1B top, Fig. 2 axes)
-CANONICAL = {"gamma": 0.95, "preset_memory": 0.0, "rollout_size": 100, "td_scale": 1.0}
+# Kumar et al. 2025 canonical (per Fig. 1B top, Fig. 2 axes).
+# td_penalty is a 5th hyperparameter present in the trained_models cohort but
+# NOT in the Kumar 2025 published 4-axis design — pinning it to 0.0 keeps
+# the canonical cell aligned with the paper, and 'tdpenalty' becomes its own
+# (un-published) axis in the manifest so 04-04b can choose whether to include.
+CANONICAL = {
+    "gamma": 0.95,
+    "preset_memory": 0.0,
+    "rollout_size": 100,
+    "td_scale": 1.0,
+    "td_penalty": 0.0,
+}
 AXIS_LABEL = {
     "gamma": r"$\gamma$ (discount)",
     "preset_memory": r"$p_{reset}$",
@@ -112,14 +122,19 @@ def parse_filename(filename: str) -> dict | None:
 def classify_axis(row: pd.Series) -> str:
     """Tag which axis was swept for this checkpoint.
 
-    Returns 'gamma', 'preset', 'rollout', 'tdscale', 'canonical', or 'off-axis'.
+    Returns 'gamma', 'preset', 'rollout', 'tdscale', 'tdpenalty', 'canonical',
+    or 'off-axis' (≥2 axes off canonical).
     """
     g_off = not np.isclose(row["gamma"], CANONICAL["gamma"])
     p_off = not np.isclose(row["preset_memory"], CANONICAL["preset_memory"])
     r_off = row["rollout_size"] != CANONICAL["rollout_size"]
     s_off = not np.isclose(row["td_scale"], CANONICAL["td_scale"])
+    t_off = (
+        ("td_penalty" in row.index)
+        and not np.isclose(row.get("td_penalty", 0.0), CANONICAL["td_penalty"])
+    )
 
-    n_off = sum([g_off, p_off, r_off, s_off])
+    n_off = sum([g_off, p_off, r_off, s_off, t_off])
     if n_off == 0:
         return "canonical"
     if n_off > 1:
@@ -130,7 +145,9 @@ def classify_axis(row: pd.Series) -> str:
         return "preset"
     if r_off:
         return "rollout"
-    return "tdscale"
+    if s_off:
+        return "tdscale"
+    return "tdpenalty"
 
 
 def axis_value(row: pd.Series) -> float:
@@ -140,10 +157,13 @@ def axis_value(row: pd.Series) -> float:
         "preset": "preset_memory",
         "rollout": "rollout_size",
         "tdscale": "td_scale",
+        "tdpenalty": "td_penalty",
         "canonical": "gamma",
     }
     col = mapping.get(row["axis_swept"])
-    return float(row[col]) if col else float("nan")
+    if not col or col not in row.index:
+        return float("nan")
+    return float(row[col])
 
 
 def build_inventory(checkpoint_dir: Path) -> pd.DataFrame:
@@ -282,7 +302,9 @@ def compute_metrics(
 def write_manifest(metrics: pd.DataFrame, manifest_out: Path) -> None:
     """Write cohort_manifest.json consumed by 04-04b."""
     manifest_out.parent.mkdir(parents=True, exist_ok=True)
-    cohort = metrics[metrics["axis_swept"].isin(["gamma", "preset", "rollout", "tdscale", "canonical"])].copy()
+    cohort = metrics[
+        metrics["axis_swept"].isin(["gamma", "preset", "rollout", "tdscale", "tdpenalty", "canonical"])
+    ].copy()
     seeds_records = []
     for r in cohort.itertuples(index=False):
         seeds_records.append(
@@ -295,6 +317,7 @@ def write_manifest(metrics: pd.DataFrame, manifest_out: Path) -> None:
                 "preset_memory": float(r.preset_memory),
                 "rollout_size": int(r.rollout_size),
                 "td_scale": float(r.td_scale),
+                "td_penalty": float(getattr(r, "td_penalty", 0.0)),
                 "seed": int(r.seed),
                 "delta_area": float(r.delta_area),
                 "area_cp": float(r.area_cp),
@@ -318,17 +341,24 @@ def write_manifest(metrics: pd.DataFrame, manifest_out: Path) -> None:
 
 
 def plot_axis_sanity(metrics: pd.DataFrame, fig_out: Path) -> None:
-    """Replicate Kumar Fig. 2: ΔArea vs each axis (95% CI across seeds)."""
+    """Replicate Kumar Fig. 2: ΔArea vs each axis (95% CI across seeds).
+
+    2x3 grid: 4 published axes (γ, p_reset, τ, β_δ) plus tdpenalty as a
+    supplementary panel (not in Kumar 2025) plus a summary panel showing the
+    cohort distribution of ΔArea overall.
+    """
     fig_out.parent.mkdir(parents=True, exist_ok=True)
 
     axes_to_plot = [
-        ("gamma", "gamma"),
-        ("preset", "preset_memory"),
-        ("rollout", "rollout_size"),
-        ("tdscale", "td_scale"),
+        ("gamma", "gamma", False),
+        ("preset", "preset_memory", False),
+        ("rollout", "rollout_size", True),
+        ("tdscale", "td_scale", False),
+        ("tdpenalty", "td_penalty", True),
     ]
-    fig, axarr = plt.subplots(2, 2, figsize=(10, 8))
-    for (axis_swept, col), ax in zip(axes_to_plot, axarr.ravel()):
+    fig, axarr = plt.subplots(2, 3, figsize=(14, 8))
+    flat = axarr.ravel()
+    for (axis_swept, col, log_x), ax in zip(axes_to_plot, flat):
         sub = metrics[(metrics["axis_swept"] == axis_swept) | (metrics["axis_swept"] == "canonical")]
         if len(sub) == 0:
             ax.set_title(f"(no data: {axis_swept})")
@@ -340,12 +370,27 @@ def plot_axis_sanity(metrics: pd.DataFrame, fig_out: Path) -> None:
         ax.errorbar(grouped[col], grouped["mean"], yerr=ci95, marker="o", capsize=3, linewidth=2, color="black")
         ax.fill_between(grouped[col], grouped["mean"] - ci95, grouped["mean"] + ci95, alpha=0.2, color="gray")
         ax.axhline(0, color="gray", linestyle=":", alpha=0.6)
-        ax.set_xlabel(AXIS_LABEL[col])
+        label = AXIS_LABEL.get(col, col)
+        suffix = "  (supplementary; not in Kumar 2025)" if axis_swept == "tdpenalty" else ""
+        ax.set_xlabel(label)
         ax.set_ylabel(r"$\Delta$Area (CP - OB)")
-        ax.set_title(f"{axis_swept}  (n_seeds≈{int(grouped['count'].median())} per cell)")
-        if axis_swept == "rollout":
+        ax.set_title(f"{axis_swept}  (n_seeds≈{int(grouped['count'].median())} per cell){suffix}")
+        if log_x:
             ax.set_xscale("log")
-    fig.suptitle("RNN cohort: ΔArea by hyperparameter axis (Kumar et al. 2025 Fig. 2 replication)")
+
+    # 6th panel: overall cohort ΔArea histogram (schizophrenia spectrum view)
+    ax = flat[5]
+    cohort = metrics[metrics["axis_swept"].isin(["gamma", "preset", "rollout", "tdscale", "tdpenalty", "canonical"])]
+    ax.hist(cohort["delta_area"].dropna(), bins=40, edgecolor="black", alpha=0.7, color="steelblue")
+    ax.axvline(0, color="gray", linestyle=":", alpha=0.6)
+    canonical_mean = metrics[metrics["axis_swept"] == "canonical"]["delta_area"].mean()
+    ax.axvline(canonical_mean, color="red", linestyle="--", label=f"canonical mean = {canonical_mean:.1f}")
+    ax.set_xlabel(r"$\Delta$Area")
+    ax.set_ylabel("# checkpoints")
+    ax.set_title(f"Cohort distribution (n={len(cohort)})")
+    ax.legend(fontsize=9)
+
+    fig.suptitle("RNN cohort: ΔArea by hyperparameter axis (Kumar et al. 2025 Fig. 2)", fontsize=12)
     plt.tight_layout()
     plt.savefig(fig_out, dpi=150)
     plt.savefig(fig_out.with_suffix(".svg"))
@@ -376,6 +421,11 @@ def main() -> int:
     )
     parser.add_argument("--max_models", type=int, default=None, help="Cap (for smoke); default None = all")
     parser.add_argument("--no_resume", action="store_true", help="Force full recomputation")
+    parser.add_argument(
+        "--reclassify_only",
+        action="store_true",
+        help="Skip behavior extraction; reload parquet, re-apply axis classification, rewrite manifest + figure.",
+    )
     args = parser.parse_args()
 
     torch.set_num_threads(1)  # 16GB RAM machine; avoid thrashing
@@ -393,10 +443,21 @@ def main() -> int:
     for axis, n in inventory["axis_swept"].value_counts().items():
         print(f"     {axis}: {n}")
 
-    print("\n2. Compute ΔArea per checkpoint (resumable)...")
     parquet_out = args.output_dir / "checkpoint_metrics.parquet"
-    metrics = compute_metrics(inventory, args.epochs, parquet_out, resume=not args.no_resume)
-    print(f"   metrics rows: {len(metrics)}")
+    if args.reclassify_only:
+        if not parquet_out.exists():
+            raise FileNotFoundError(f"--reclassify_only requires existing parquet at {parquet_out}")
+        print("\n2. Reload parquet + re-apply axis classification (no behavior extraction)...")
+        metrics = pd.read_parquet(parquet_out)
+        # Re-apply classification using current code; preserve cached ΔArea.
+        metrics["axis_swept"] = metrics.apply(classify_axis, axis=1)
+        metrics["axis_value"] = metrics.apply(axis_value, axis=1)
+        metrics.to_parquet(parquet_out, index=False)
+        print(f"   metrics rows: {len(metrics)} (axis_swept re-applied)")
+    else:
+        print("\n2. Compute ΔArea per checkpoint (resumable)...")
+        metrics = compute_metrics(inventory, args.epochs, parquet_out, resume=not args.no_resume)
+        print(f"   metrics rows: {len(metrics)}")
 
     print("\n3. Write cohort manifest...")
     manifest_out = args.output_dir / "cohort_manifest.json"
