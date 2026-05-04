@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** RNN agent trainable on multiple cognitive tasks with analyzable hidden representations comparable to human data via Bayesian model fitting
-**Current focus:** Phase 4 (Bayesian Model Fitting / Nassar 2021). User pivot 2026-04-29: Phase 3.1 closure paused after Wave 5. 03-05 + 03-06 evidence (both negative deltas — masked Δ=-0.21, per-context Δ_ctx0=-0.12 / Δ_ctx1=-0.14) sufficient to refute padding + structural-separation hypotheses; 03-07 (shorter-T regen) and 03-08 (writeup closure) deferred. Phase 4 may proceed independently per 03-04 decision (Q's role in final pipeline is descriptive, not causal-mechanistic). Phase 3 will return to closure (03-07/08) after Phase 4 ships.
+**Current focus:** Phase 4 (Bayesian Model Fitting / Nassar 2021). User pivot 2026-05-04: 04-04a re-scoped from "K=20 SLURM array re-training" to "axis-all cohort manifest from existing 1,884 checkpoints" (Kumar et al. 2025 CCN per-axis design). 04-04a complete; 04-04b ready to start. 04-03 still blocked on Brain2021Code download. Phase 3.1 closure (03-07/08) still deferred per 2026-04-29 user pivot.
 
 ## Current Position
 
 Phase: 4 of 5 (Bayesian Model Fitting / Nassar 2021) — In progress
-Plan: 04-02 COMPLETE. Next: 04-03 (Human Data Fits) — BLOCKED on full param recovery + Brain2021Code download.
-Status: Phase 4 Wave 2 complete. Full 50-dataset overnight run queued (background_task_id=bcaxsbh0c, started 2026-04-30T07:10:31Z). Phase 3.1 closure (03-07/08) still deferred per 2026-04-29 user pivot.
-Last activity: 2026-04-30 — Completed 04-02-PLAN.md (diagnostics module, smoke recovery, REQUIREMENTS/ROADMAP wording updates, full run queued).
+Plan: 04-04a COMPLETE (axis-all cohort manifest). Next options: (a) 04-04b (replay-and-fit RBO over the 1,884-cohort) — runnable now; (b) 04-03 (Human Data Fits) — still BLOCKED on Brain2021Code download.
+Status: Phase 4 waves 1, 2, 4 complete. Wave 3 (04-03) blocked on external user action. Param-recovery background task (bcaxsbh0c) from 2026-04-30 is gone (no recovery_report.json on disk, .bg-shell/manifest.json empty); BAYES-06 still open.
+Last activity: 2026-05-04 — Pivoted 04-04a away from cluster K=20 to local axis-all manifest. Built 09b_build_rnn_cohort_manifest.py (5-axis classifier, Kumar 2025 Fig. 2A monotonicity reproduced); cohort_manifest.json + delta_area_by_axis.png committed (5 commits: 03ff4ec, 68c4f15, 2b10e0e, f788bc9, 95fe5ca). Stale K=20 SLURM commits dropped via stash+reset; 16 phase-4 commits pushed to origin/main.
 
-Progress: [█████████░] ~90% (04-01/02 done; 04-03..04-04 remaining; 04-03 blocked)
+Progress: [██████████] ~93% (04-01/02/04a done; 04-04b runnable; 04-03 blocked; 04-05 user-gated optional)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: ~10 min
-- Total execution time: ~0.65 hours
+- Total plans completed: 6
+- Average duration: ~14 min
+- Total execution time: ~2.0 hours code + ~2 hours batch compute
 
 **By Phase:**
 
@@ -30,7 +30,7 @@ Progress: [█████████░] ~90% (04-01/02 done; 04-03..04-04 rem
 | 01-infrastructure-and-organization | 3/3 COMPLETE | ~24 min | ~8 min |
 | 02-rnn-training-verification | 3/3 COMPLETE | ~42 min | ~14 min |
 | 03-latent-circuit-inference | 4/4 COMPLETE | ~320 min compute + 5 weeks iteration | ~80 min |
-| 04-bayesian-model-fitting | 2/6 in progress | ~66 min (code) + 33 min smoke | ~33 min (excl smoke) |
+| 04-bayesian-model-fitting | 3/6 in progress | ~147 min (code+behavior extract) + 33 min smoke | ~49 min |
 
 **Recent Trend:**
 - Last 9 plans: 01-01 (9 min), 01-02 (unknown), 01-03 (7 min), 02-01 (12 min), 02-02 (15 min), 02-03 (15 min), 03-01 (75 min), 03-02 (205 min GPU ensemble + ~5 weeks iteration), 03-03 (~?), 03-04 (39 min)
@@ -112,6 +112,13 @@ Recent decisions affecting current work:
 - [04-02]: Smoke N=4 r values are not formal BAYES-06 evidence; full 50-dataset run (bcaxsbh0c) is the gate
 - [04-02]: Smoke MCMC settings (200 warmup) cause all fits to fail convergence gates + retry; full run (2000/4000 warmup) required for proper convergence
 - [04-02]: nn4psych.bayesian scripts need both src/ AND project root on sys.path — src/ for package discovery, project root for envs.PIE_CP_OB_v2 in nn4psych.__init__
+- [04-04a 2026-05-04]: PIVOT — discarded original K=20 SLURM-array re-training. Re-training homogeneous seeds collapses the schizophrenia-spectrum comparison; the existing 1,884 trained checkpoints in trained_models/checkpoints/model_params_101000/ already span the Kumar et al. 2025 CCN per-axis design (γ, p_reset, τ, β_δ × 50 seeds), making them the right cohort for 04-04b's RBO fitting. No cluster compute used.
+- [04-04a]: 5-hyperparameter design in trained_models — paper publishes 4 axes (γ, β_δ, p_reset, τ) but the data has a 5th `td_penalty` axis swept around 0.0. Empirically td_penalty has no detectable effect on ΔArea; included in cohort tagged `tdpenalty` (supplementary).
+- [04-04a]: Canonical config (γ=0.95, p_reset=0, τ=100, β_δ=1, td_penalty=0) has 50 unique seeds (0–49) — this is the "control"-region for the schizophrenia-spectrum projection in 04-04b/05.
+- [04-04a]: ΔArea-by-γ replicates Kumar Fig. 2A almost exactly (monotonic 0.1→0.9, peak γ∈[0.8, 0.9], dip at γ=0.99). p_reset panel deviates qualitatively (paper: monotonic decrease; ours: roughly flat with high noise) — flagged for follow-up if 04-04b's RBO-vs-p_reset projection looks weird; not blocking.
+- [04-04a]: --reclassify_only flag rebuilds manifest+figure from cached parquet without re-extracting behavior; saves ~80 min on classifier-logic iterations.
+- [04-04a]: cohort_manifest.json schema_version 1.0 is the consumer schema for 04-04b. Per-checkpoint POSIX paths; checkpoint_metrics.parquet stays gitignored (regenerable cache).
+- [04-04a]: Stale K=20 SLURM commits (ec02730, 25b481f) dropped via `git stash → reset --hard HEAD~2 → stash pop`; 16 legitimate phase-4 commits pushed to origin/main on 2026-05-04 (origin had been 16 behind; cluster's git-up-to-date claim implied a pre-Phase 4 state).
 
 ### Pending Todos
 
@@ -138,12 +145,17 @@ Recent decisions affecting current work:
 - [Phase 3.1 OPEN — confound]: LatentNet stochastic eval — sigma_rec noise always active; cluster/local metric discrepancy is a pre-existing limitation; should fix or pin a single eval seed before quantitative comparisons between runs (Gap 4 candidate?).
 - [Phase 3.1 OPEN — diagnostic]: Perturbation strengths [-0.5, 0.5] are modest relative to max |w_rec_ij|=4.17; if Q quality is fixed, re-running with stronger strengths may give cleaner SC-4 evidence.
 - [Phase 4 planning]: Nassar 2021 .mat file nested indexing not directly inspected — must run describe_mat_structure() before writing data loading code (research flag)
-- [OPEN — 04-02]: Full 50-dataset param recovery run in progress (background_task_id=bcaxsbh0c, started 2026-04-30T07:10:31Z, ~17h worst case). BAYES-06 NOT YET CLOSED. 04-03 Task 2 gates on recovery_report.json with all r >= 0.85.
-- [OPEN — 04-02]: Smoke convergence behavior — all 8 smoke fits triggered retry, suggesting 200 warmup is insufficient for Nassar posterior geometry. First diagnostic if full-run r < 0.85: check tau update equation (RESEARCH.md Pitfall 1).
+- [OPEN — 04-02]: Full 50-dataset param recovery run from 2026-04-30 (background_task_id=bcaxsbh0c) appears to have failed silently or run elsewhere — no recovery_report.json on disk, .bg-shell/manifest.json empty, only smoke synth_000-003 fits present (~7 of 8). BAYES-06 NOT YET CLOSED. 04-03 Task 2 gates on recovery_report.json with all r >= 0.85; will need to re-queue (likely on cluster given 16GB RAM constraint here).
+- [OPEN — 04-02]: Smoke convergence behavior — all 8 smoke fits triggered retry, suggesting 200 warmup is insufficient for Nassar posterior geometry. First diagnostic if re-run r < 0.85: check tau update equation (RESEARCH.md Pitfall 1).
+- [OPEN — 04-03]: Brain2021Code raw data NOT downloaded. Manual user action required (sites.brown.edu/mattlab/resources/). Blocks 04-03 Task 1.
+- [RESOLVED 2026-05-04 — 04-04a]: Cohort manifest built. 1,884 PIE_CP_OB_v2 checkpoints inventoried, ΔArea computed, manifest written. Kumar Fig. 2A replicated. cohort_manifest.json + figure committed (95fe5ca).
+- [OPEN — 04-04a deviations]: p_reset panel doesn't match Kumar Fig. 2C monotonic decrease (we see flat noise). Possible env-param drift or RNG-seed difference; non-blocking but flag for 04-04b verification.
 
 ## Session Continuity
 
-Last session: 2026-04-30T07:11:03Z
-Stopped at: Completed 04-02-PLAN.md — diagnostics.py + test_diagnostics.py (5 tests passing) + 09a_param_recovery.py + smoke recovery (4 datasets, 33 min) + REQUIREMENTS.md/ROADMAP.md updates. Full 50-dataset run queued (background_task_id=bcaxsbh0c). 04-02-SUMMARY.md written. STATE.md updated.
-Resume: Continue Phase 4 with 04-03 (Human Data Fits) AFTER: (1) full param recovery completes with all r >= 0.85, (2) Brain2021Code downloaded from sites.brown.edu/mattlab/resources/. Both gate 04-03.
+Last session: 2026-05-04T18:30Z
+Stopped at: Completed 04-04a-PLAN.md (pivoted from K=20 SLURM array → axis-all local). Built scripts/data_pipeline/09b_build_rnn_cohort_manifest.py; ran 81-min behavior extraction on 1,884 checkpoints; wrote cohort_manifest.json (n_in_cohort=1884, axis_counts={canonical:50, gamma:350, preset:349, rollout:385, tdscale:400, tdpenalty:350}); reproduced Kumar 2025 Fig. 2A. 5 commits on main (03ff4ec → 95fe5ca), 16 commits pushed to origin (clearing local backlog).
+Resume options:
+1. **04-04b** (replay-and-fit RBO over the 1,884-cohort) — runnable now; consumes cohort_manifest.json + needs Nassar 2021 bag-position sequences from data/raw/nassar2021/.
+2. **04-03 unblock** — manual download of Brain2021Code; THEN 04-03 Task 1 + re-queue param recovery (BAYES-06 gate).
 Resume file: None
