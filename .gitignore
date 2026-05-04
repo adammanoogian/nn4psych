@@ -53,6 +53,11 @@ figs*
 # Keep raw and processed data READMEs
 !/data/*/README.md
 
+# 04-03: Brain2021Code raw data (Nassar/Waltz/Albrecht/Gold/Frank, Brain 2021).
+# 158 MB unzipped; lives at data/raw/Brain2021Code/. Not committed — re-extract
+# from the upstream zip if needed. Source URL noted in 04-RESEARCH.md.
+/data/raw/Brain2021Code/
+
 # Output directories
 /output/*
 !/output/.gitkeep
