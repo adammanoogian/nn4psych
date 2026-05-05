@@ -75,6 +75,14 @@ conda activate nn4psych || {
 export PYTHONPATH="${PROJECT_ROOT}/src:${PROJECT_ROOT}:${PYTHONPATH:-}"
 mkdir -p cluster/logs data/processed/bayesian/human_validation/per_fit
 
+# Pre-stamp arviz daily-warning cache. arviz._warn_once_per_day() does an
+# atomic tmp->final rename on import; when multiple array tasks land on the
+# same node and import simultaneously, the race kills tasks whose tmp file
+# gets replaced first (FileNotFoundError on the rename target).
+# Writing today's date here makes arviz skip its own write entirely.
+mkdir -p "$HOME/.cache/arviz"
+date -I > "$HOME/.cache/arviz/daily_warning" 2>/dev/null || true
+
 # =============================================================================
 # Run per-subject fit (full BAYES-06 settings)
 # =============================================================================
