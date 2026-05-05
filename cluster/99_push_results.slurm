@@ -250,6 +250,18 @@ stage_files "data/processed/rnn_behav/model_context_dm_dual.pth" "trained RNN ch
 stage_files "data/processed/rnn_behav/circuit_data_metadata.json" "circuit data metadata"
 stage_files "data/processed/rnn_behav/metadata.json" "rnn_behav metadata"
 
+# Phase 4 Stage 09a/b/c — Bayesian fits (Plan 04-03)
+# Smoke recovery (cluster bigger smoke v3)
+stage_files "data/processed/bayesian/param_recovery_smoke_v3/recovery_report.json" "bayesian smoke v3 report"
+stage_files "data/processed/bayesian/param_recovery_smoke_v3/figures/*.png" "bayesian smoke v3 plots"
+# Per-subject human fits (268 JSONs + 268 NPZs after array completion)
+stage_files "data/processed/bayesian/human_validation/per_fit/*.json" "human fit summaries"
+stage_files "data/processed/bayesian/human_validation/per_fit/*.npz" "human fit posteriors"
+# Aggregator outputs
+stage_files "data/processed/bayesian/human_validation/summary.csv" "human fits summary csv"
+stage_files "data/processed/bayesian/human_validation/summary.md" "human fits summary md"
+stage_files "figures/bayesian/human_validation/*.png" "human fits diagnostic figures"
+
 echo ""
 
 # Check if there's anything to commit

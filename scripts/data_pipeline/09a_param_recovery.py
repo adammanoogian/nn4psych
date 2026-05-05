@@ -94,7 +94,12 @@ from nn4psych.bayesian import (  # noqa: E402
 # Constants
 # ---------------------------------------------------------------------------
 
-PARAM_NAMES = ["H", "LW", "UU", "sigma_motor", "sigma_LR"]
+# Recovery is reported on log_UU (the actual MCMC sample site) rather
+# than the deterministic UU = exp(log_UU).  log_UU has a Gaussian-shaped
+# posterior, while UU is exponential of that — identifiability is much
+# more interpretable on log_UU.  See Nassar 2021 fitFrugFunSchiz.m:42,
+# 130 for the matching reparameterization.
+PARAM_NAMES = ["H", "LW", "log_UU", "sigma_motor", "sigma_LR"]
 CONDITIONS = ["changepoint", "oddball"]
 RECOVERY_GATE_R = 0.85
 
@@ -194,16 +199,19 @@ def fit_single_dataset(
     num_chains: int,
     seed: int,
     output_dir: Path,
-) -> dict[str, float]:
-    """Fit MCMC to one prior-sampled synthetic dataset (both conditions).
+) -> dict[str, dict[str, float]]:
+    """Fit MCMC to one prior-sampled synthetic dataset, separately per condition.
 
-    Generates CP and OB sequences, runs fit_with_retry on each, averages
-    posterior means across both condition fits.
+    Generates CP and OB sequences and runs fit_with_retry on each.
+    Returns per-condition recovered posterior means rather than averaging,
+    so identifiability evidence can be evaluated separately for each task
+    condition (matches Nassar 2021 fit-per-block design).
 
     Parameters
     ----------
     params_i : dict[str, float]
-        True (prior-sampled) parameter values.
+        True (prior-sampled) parameter values; must include both
+        ``log_UU`` (sample site) and ``UU`` (deterministic divisor).
     dataset_idx : int
         Index of this dataset in the recovery sweep (0-indexed).
     n_trials : int
@@ -221,14 +229,15 @@ def fit_single_dataset(
 
     Returns
     -------
-    dict[str, float]
-        Recovered parameter values (posterior mean averaged across CP+OB fits).
-        Keys are PARAM_NAMES. Returns NaN for any param if both fits fail.
+    dict[str, dict[str, float]]
+        ``{condition: {param: posterior_mean}}`` with one entry per
+        ``CONDITIONS`` and one inner entry per ``PARAM_NAMES``.  Returns
+        NaN for any param missing from posterior samples.
     """
     per_fit_dir = output_dir / "per_fit"
     per_fit_dir.mkdir(parents=True, exist_ok=True)
 
-    recovered_means: dict[str, list[float]] = {p: [] for p in PARAM_NAMES}
+    per_condition: dict[str, dict[str, float]] = {}
     dataset_seed = seed + dataset_idx * 10
 
     for cond_idx, condition in enumerate(CONDITIONS):
@@ -280,18 +289,17 @@ def fit_single_dataset(
 
         # Collect posterior means from this condition fit
         posterior_samples = mcmc.get_samples()
+        cond_recovered: dict[str, float] = {}
         for param in PARAM_NAMES:
             if param in posterior_samples:
-                mean_val = float(np.mean(np.asarray(posterior_samples[param])))
-                recovered_means[param].append(mean_val)
+                cond_recovered[param] = float(
+                    np.mean(np.asarray(posterior_samples[param]))
+                )
+            else:
+                cond_recovered[param] = float("nan")
+        per_condition[condition] = cond_recovered
 
-    # Average posterior means across both conditions
-    final_recovered: dict[str, float] = {}
-    for param in PARAM_NAMES:
-        vals = recovered_means[param]
-        final_recovered[param] = float(np.mean(vals)) if vals else float("nan")
-
-    return final_recovered
+    return per_condition
 
 
 # ---------------------------------------------------------------------------
@@ -391,22 +399,28 @@ def main() -> None:
         rng_key=rng_key,
     )
 
-    # Convert to list of dicts: [{param: float, ...}, ...]
-    dataset_params: list[dict[str, float]] = [
-        {p: float(prior_samples[p][i]) for p in PARAM_NAMES}
-        for i in range(args.n_synthetic)
-    ]
+    # Convert to list of dicts. PARAM_NAMES uses log_UU (sample site).
+    # Also include 'UU' (deterministic = exp(log_UU)) so simulate_synthetic_data
+    # can use the divisor value when running the participant forward model.
+    dataset_params: list[dict[str, float]] = []
+    for i in range(args.n_synthetic):
+        d = {p: float(prior_samples[p][i]) for p in PARAM_NAMES}
+        d["UU"] = float(prior_samples["UU"][i])
+        dataset_params.append(d)
 
-    # 2. Fit each synthetic dataset
+    # 2. Fit each synthetic dataset (per-condition: CP and OB are tracked
+    #    separately so identifiability is reported per condition).
     true_vals: dict[str, list[float]] = {p: [] for p in PARAM_NAMES}
-    recovered_vals: dict[str, list[float]] = {p: [] for p in PARAM_NAMES}
+    recovered_per_cond: dict[str, dict[str, list[float]]] = {
+        cond: {p: [] for p in PARAM_NAMES} for cond in CONDITIONS
+    }
     failed_indices: list[int] = []
 
     for i, params_i in enumerate(dataset_params):
         print(
             f"\n[{i+1}/{args.n_synthetic}] dataset {i:03d} "
             f"| H={params_i['H']:.3f} LW={params_i['LW']:.3f} "
-            f"UU={params_i['UU']:.3f}"
+            f"log_UU={params_i['log_UU']:.3f} (UU={params_i['UU']:.2f})"
         )
         for p in PARAM_NAMES:
             true_vals[p].append(params_i[p])
@@ -423,68 +437,106 @@ def main() -> None:
             output_dir=output_dir,
         )
         fit_elapsed = time.time() - fit_start
-        print(f"  Done in {fit_elapsed:.1f}s | recovered H={recovered_i['H']:.3f}")
+        print(
+            f"  Done in {fit_elapsed:.1f}s | "
+            f"CP H={recovered_i['changepoint']['H']:.3f}  "
+            f"OB H={recovered_i['oddball']['H']:.3f}"
+        )
 
-        # Track failed fits (any NaN in recovered)
-        if any(np.isnan(v) for v in recovered_i.values()):
+        # Track failed fits (any NaN in either condition's recovered)
+        any_nan = False
+        for cond in CONDITIONS:
+            for p in PARAM_NAMES:
+                v = recovered_i[cond][p]
+                recovered_per_cond[cond][p].append(v)
+                if np.isnan(v):
+                    any_nan = True
+        if any_nan:
             failed_indices.append(i)
 
-        for p in PARAM_NAMES:
-            recovered_vals[p].append(recovered_i[p])
+    # 3. Compute Pearson r per (parameter, condition) and build report
+    print(f"\n{'='*68}")
+    print(
+        f"Parameter Recovery Report "
+        f"(N={args.n_synthetic} synthetic datasets, per condition)"
+    )
+    print(f"{'='*68}")
+    print(f"{'param':<14} {'r_CP':>10}  {'r_OB':>10}  status")
+    print(f"{'-'*68}")
 
-    # 3. Compute Pearson r per parameter and build report
-    print(f"\n{'='*60}")
-    print(f"Parameter Recovery Report (N={args.n_synthetic} synthetic datasets)")
-    print(f"{'='*60}")
-
-    per_parameter: dict[str, dict] = {}
+    per_parameter_per_condition: dict[str, dict[str, dict]] = {
+        cond: {} for cond in CONDITIONS
+    }
     for param in PARAM_NAMES:
         t_arr = np.array(true_vals[param])
-        r_arr = np.array(recovered_vals[param])
+        cond_results: dict[str, dict] = {}
+        for cond in CONDITIONS:
+            r_arr = np.array(recovered_per_cond[cond][param])
+            valid_mask = ~(np.isnan(t_arr) | np.isnan(r_arr))
+            n_valid = int(valid_mask.sum())
 
-        # Exclude NaN entries from correlation
-        valid_mask = ~(np.isnan(t_arr) | np.isnan(r_arr))
-        n_valid = int(valid_mask.sum())
+            if n_valid >= 2:
+                r_val, _p = pearsonr(t_arr[valid_mask], r_arr[valid_mask])
+                r2_val = float(r_val ** 2)
+            else:
+                r_val = float("nan")
+                r2_val = float("nan")
 
-        if n_valid >= 2:
-            r_val, _p = pearsonr(t_arr[valid_mask], r_arr[valid_mask])
-            r2_val = float(r_val ** 2)
+            passes = (not np.isnan(r_val)) and (r_val >= RECOVERY_GATE_R)
+            cond_results[cond] = {
+                "r": float(r_val),
+                "r2": r2_val,
+                "passes_gate": bool(passes),
+                "n_valid": n_valid,
+                "true": [float(v) for v in t_arr.tolist()],
+                "recovered": [float(v) for v in r_arr.tolist()],
+            }
+            per_parameter_per_condition[cond][param] = cond_results[cond]
+
+            # Save per-condition scatter plot
+            save_scatter(
+                param_name=f"{param}_{cond}",
+                true_vals=t_arr[valid_mask].tolist(),
+                recovered_vals=r_arr[valid_mask].tolist(),
+                r_val=r_val,
+                passes_gate=bool(passes),
+                output_dir=output_dir,
+            )
+
+        # Print row
+        cp_r = cond_results["changepoint"]["r"]
+        ob_r = cond_results["oddball"]["r"]
+        cp_pass = cond_results["changepoint"]["passes_gate"]
+        ob_pass = cond_results["oddball"]["passes_gate"]
+        if cp_pass and ob_pass:
+            status_str = "PASS (both)"
+        elif cp_pass or ob_pass:
+            which = "CP" if cp_pass else "OB"
+            status_str = f"PASS ({which} only)"
         else:
-            r_val = float("nan")
-            r2_val = float("nan")
-
-        passes = (not np.isnan(r_val)) and (r_val >= RECOVERY_GATE_R)
-        flag = "PASS" if passes else f"FAIL  <-- below {RECOVERY_GATE_R:.2f} gate"
-        print(f"{param:<14} r={r_val:.3f}  {flag}")
-
-        per_parameter[param] = {
-            "r": float(r_val),
-            "r2": r2_val,
-            "passes_gate": bool(passes),
-            "n_valid": n_valid,
-            "true": [float(v) for v in t_arr.tolist()],
-            "recovered": [float(v) for v in r_arr.tolist()],
-        }
-
-        # Save scatter plot
-        save_scatter(
-            param_name=param,
-            true_vals=t_arr[valid_mask].tolist(),
-            recovered_vals=r_arr[valid_mask].tolist(),
-            r_val=r_val,
-            passes_gate=bool(passes),
-            output_dir=output_dir,
+            status_str = f"FAIL  <-- both below {RECOVERY_GATE_R:.2f}"
+        print(
+            f"{param:<14} {cp_r:>10.3f}  {ob_r:>10.3f}  {status_str}"
         )
 
     overall_passes = all(
-        per_parameter[p]["passes_gate"]
+        per_parameter_per_condition[cond][p]["passes_gate"]
+        for cond in CONDITIONS
         for p in PARAM_NAMES
-        if not np.isnan(per_parameter[p]["r"])
+        if not np.isnan(per_parameter_per_condition[cond][p]["r"])
     )
     n_failed = len(failed_indices)
-
-    n_pass = sum(1 for p in PARAM_NAMES if per_parameter[p]["passes_gate"])
-    print(f"\nOverall: {n_pass}/{len(PARAM_NAMES)} parameters pass gate")
+    n_pass_cells = sum(
+        1
+        for cond in CONDITIONS
+        for p in PARAM_NAMES
+        if per_parameter_per_condition[cond][p]["passes_gate"]
+    )
+    n_total_cells = len(PARAM_NAMES) * len(CONDITIONS)
+    print(
+        f"\nOverall: {n_pass_cells}/{n_total_cells} (param x condition) "
+        f"cells pass gate"
+    )
     print(f"Failed fits: {n_failed}/{args.n_synthetic} (indices: {failed_indices})")
 
     # 4. Write recovery_report.json
@@ -497,7 +549,7 @@ def main() -> None:
             "num_chains": int(args.num_chains),
             "target_accept_prob": 0.95,
         },
-        "per_parameter": per_parameter,
+        "per_parameter_per_condition": per_parameter_per_condition,
         "overall_passes": bool(overall_passes),
         "n_failed_fits": int(n_failed),
         "failed_indices": [int(x) for x in failed_indices],

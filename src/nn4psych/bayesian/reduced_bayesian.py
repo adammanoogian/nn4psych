@@ -64,6 +64,7 @@ def compute_rbo_forward(
     pred_errors: jax.Array,
     context: str,
     sigma_N: float = SIGMA_N,
+    new_block: jax.Array | None = None,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
     """Compute Reduced Bayesian Observer forward pass given parameters.
 
@@ -84,6 +85,14 @@ def compute_rbo_forward(
         ``'changepoint'`` or ``'oddball'``.
     sigma_N : float
         Bag placement SD (fixed constant from paper, default 20.0).
+    new_block : jax.Array or None
+        Boolean array of shape ``(n,)`` marking the first trial of a new
+        block.  When ``new_block[t]`` is True, ``tau`` is reset to
+        ``tau_0=0.5`` before computing trial ``t`` (matches MATLAB
+        ``getTrialVarsFromPEs_cannon.m:117-118``: ``if newBlock(i)
+        errBased_RU(i)=initRU``).  If ``None``, the entire sequence is
+        treated as one continuous run (no resets), suitable for synthetic
+        recovery and within-block analyses.
 
     Returns
     -------
@@ -110,13 +119,23 @@ def compute_rbo_forward(
 
     n_trials = pred_errors.shape[0]
 
-    # Initial relative uncertainty
-    tau_0 = 0.5 / UU
+    # Initial relative uncertainty: matches MATLAB frugFun5.m line 41
+    # (R(1) = 1 → tau_0 = 1/(R+1) = 0.5). UU does NOT enter the init —
+    # using 0.5/UU produces tau_0 > 1 for UU < 0.5, breaking sqrt(1-tau).
+    tau_0 = 0.5
 
     # Compute is_changepoint OUTSIDE step_fn: closed-over, tracer-safe.
     # See Phase 1 lesson 01-03: jnp.bool_(context == 'changepoint') must
     # be evaluated at Python trace time (not inside jax.lax.scan).
     is_changepoint = jnp.bool_(context == "changepoint")
+
+    # Default new_block to all-False if not provided.  This preserves
+    # backward-compatible single-run behavior (used by synthetic recovery
+    # and the matlab parity test).
+    if new_block is None:
+        new_block_arr = jnp.zeros(n_trials, dtype=jnp.bool_)
+    else:
+        new_block_arr = jnp.asarray(new_block, dtype=jnp.bool_)
 
     def step_fn(
         carry: jax.Array, t: jax.Array
@@ -130,7 +149,18 @@ def compute_rbo_forward(
             lr_t      <->  Alph = yInt + pCha*(1-yInt)  [CP]
                             or  yInt + pCha*(-yInt)      [OB]
         """
-        tau_prev = carry
+        tau_prev_raw = carry
+        # MATLAB getTrialVarsFromPEs_cannon.m:117-118 — reset RU at every
+        # newBlock boundary.  Use lax.cond for tracer-safe branching.
+        tau_prev_raw = jax.lax.cond(
+            new_block_arr[t],
+            lambda _: jnp.asarray(tau_0),
+            lambda _: tau_prev_raw,
+            operand=None,
+        )
+        # Clip tau to (eps, 1-eps) for numerical stability of sqrt(1-tau)
+        # and downstream variance terms. Math-required range is (0, 1).
+        tau_prev = jnp.clip(tau_prev_raw, 1e-6, 1.0 - 1e-6)
 
         delta = pred_errors[t]
 
@@ -203,11 +233,15 @@ def compute_rbo_forward(
             lambda _: ss_ob,
             operand=None,
         )
-        # tau[i+1] = ss / (ss + sigmaE^2) = 1 - sigmaE^2/(ss + sigmaE^2)
-        this_tau = ss / (ss + sigma_N_sq + 1e-40)
-
-        # Apply uncertainty underestimation (UU < 1 → shrinks tau faster)
-        tau_next = this_tau / (UU + 1e-10)
+        # MATLAB getTrialVarsFromPEs_cannon.m:184 — divide ss by ud (= UU)
+        # BEFORE computing RU.  UU = exp(log_UU) ≥ 1 by construction, so
+        # ss/UU ≤ ss and the resulting RU = (ss/UU) / (ss/UU + nVar) is
+        # mathematically guaranteed in [0, 1].  This makes the post-hoc
+        # tau_next clip unnecessary and keeps the gradient w.r.t. UU
+        # well-defined across the entire prior support.
+        ss_after_uu = ss / (UU + 1e-40)
+        this_tau = ss_after_uu / (ss_after_uu + sigma_N_sq + 1e-40)
+        tau_next = this_tau
 
         # ---------------------------------------------------------------
         # EQUATIONS 2 & 3: Learning Rate (alpha_t)
@@ -251,6 +285,7 @@ def reduced_bayesian_model(
     bag_positions: jax.Array | None = None,
     context: str = "changepoint",
     sigma_N: float = SIGMA_N,
+    new_block: jax.Array | None = None,
 ) -> None:
     """NumPyro model for the Nassar 2010+2021 Reduced Bayesian Observer.
 
@@ -268,51 +303,45 @@ def reduced_bayesian_model(
         ``'changepoint'`` or ``'oddball'``.
     sigma_N : float
         Bag placement SD (fixed from paper, default 20.0).
+    new_block : jax.Array or None
+        Boolean array marking the first trial of each block; when True,
+        relative uncertainty is reset.  See ``compute_rbo_forward``.
 
     Notes
     -----
-    Prior status annotations:
-    - ``# PAPER_VERIFIED``: prior confirmed from Nassar 2021 supplement.
-    - ``# FALLBACK pending Nassar 2021 supplement``: weakly-informative
-      default used until Plan 04-03 Task 1 downloads Brain2021Code and
-      the supplement prior spec can be extracted.
-
-    All five priors are currently ``FALLBACK`` — see Plan 04-03 Task 1
-    for Brain2021Code data fetch which gates supplement access.
+    Prior choices match Nassar 2021 ``fitFrugFunSchiz.m:127-130`` exactly
+    for the parameters the paper specifies (``H``, ``LW``, ``log_UU``).
+    For ``sigma_motor`` (varInt) and ``sigma_LR`` (varSlope), the paper
+    uses unbounded fmincon with no prior; we substitute weakly-informative
+    HalfNormal priors that NUTS can sample efficiently — these are not
+    constrained by paper specification because the paper used MAP not MCMC.
     """
     # -------------------------------------------------------------------
-    # PRIORS (weakly-informative defaults per RESEARCH.md Section 1)
+    # PRIORS — paper-faithful where the paper specifies them
     # -------------------------------------------------------------------
 
-    H = numpyro.sample(
-        "H",
-        dist.Beta(1.5, 8),
-        # FALLBACK pending Nassar 2021 supplement.
-        # Rationale: Beta(1.5, 8) mean ≈ 0.158, which is close to the
-        # true hazard rate used in the task (0.125). Favors low hazard
-        # rates without being overly rigid. The paper uses "informed prior
-        # derived from MLE fits" (exact form in supplement — not yet
-        # available). Ref: RESEARCH.md Section 1.
-    )
+    # PAPER-VERIFIED: Nassar 2021 fitFrugFunSchiz.m:127.  Beta(1.1, 19)
+    # has mean ≈ 0.055 and concentrates mass at low hazard rates while
+    # leaving a long tail toward high values.  Picks up high-hazard
+    # subjects without overweighting them a priori.
+    H = numpyro.sample("H", dist.Beta(1.1, 19))
 
-    LW = numpyro.sample(
-        "LW",
-        dist.Beta(2, 2),
-        # FALLBACK pending Nassar 2021 supplement.
-        # Rationale: Beta(2, 2) is symmetric, centered at 0.5, weakly
-        # informative. LW exponentiates both U_val and N_val in Eq. 4;
-        # typical fitted values are 0.3-0.9 in McGuire et al. 2014.
-    )
+    # PAPER-VERIFIED: Nassar 2021 fitFrugFunSchiz.m:128.  Beta(2, 1) is
+    # right-skewed, peaking at 1; favors near-Bayes-optimal LW values.
+    LW = numpyro.sample("LW", dist.Beta(2, 1))
 
-    UU = numpyro.sample(
-        "UU",
-        dist.HalfNormal(0.5),
-        # FALLBACK pending Nassar 2021 supplement.
-        # Rationale: HalfNormal(0.5) concentrates near zero but allows
-        # UU up to ~2. UU=1 means no underestimation of uncertainty;
-        # UU<1 means tau shrinks too fast (underestimation). Most subjects
-        # show mild underestimation (UU slightly < 1).
+    # PAPER-VERIFIED prior: Nassar 2021 fitFrugFunSchiz.m:130 uses
+    #   tParams(4) ~ Normal(0, 5) truncated to [0, 10]
+    # where tParams(4) is "the log of the divisor" (line 42).  The actual
+    # divisor used in getTrialVarsFromPEs_cannon.m:184 is exp(tParams(4)),
+    # which is ≥ 1 by construction.  We sample log_UU and expose UU as a
+    # deterministic so downstream code (synthetic data generator, recovery
+    # report) can use the divisor value directly.
+    log_UU = numpyro.sample(
+        "log_UU",
+        dist.TruncatedNormal(0.0, 5.0, low=0.0, high=10.0),
     )
+    UU = numpyro.deterministic("UU", jnp.exp(log_UU))
 
     sigma_motor = numpyro.sample(
         "sigma_motor",
@@ -351,7 +380,7 @@ def reduced_bayesian_model(
         }
 
         learning_rate, normative_update, omega, tau = compute_rbo_forward(
-            params, pred_errors, context, sigma_N=sigma_N
+            params, pred_errors, context, sigma_N=sigma_N, new_block=new_block
         )
 
         # EQUATION 6-7: Observed bucket updates

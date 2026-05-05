@@ -112,12 +112,35 @@ data/processed/rnn_behav/circuit_data.npz.pre_masked_backup
 !/data/processed/rnn_cohort/cohort_manifest.json
 /data/processed/rnn_cohort/*.parquet
 
+# 04-03 Stage 09b/c: per-subject RBO posteriors + summary tables.
+# Per-fit summary JSONs (~10 KB each, 268 files ≈ 3 MB) and the rolled-up
+# summary.csv/summary.md are committed so collaborators can inspect human
+# fit quality without re-running 268 MCMC jobs.  Per-fit NPZ samples
+# (~150 KB each, 268 files ≈ 40 MB) are also committed since they're the
+# raw evidence for downstream behavioral analyses (04-04b RNN comparison).
+!/data/processed/bayesian/
+!/data/processed/bayesian/human_validation/
+!/data/processed/bayesian/human_validation/per_fit/
+!/data/processed/bayesian/human_validation/per_fit/*.json
+!/data/processed/bayesian/human_validation/per_fit/*.npz
+!/data/processed/bayesian/human_validation/summary.csv
+!/data/processed/bayesian/human_validation/summary.md
+# 04-03 Stage 09a: smoke param recovery report (smoke_v3 from cluster).
+!/data/processed/bayesian/param_recovery_smoke_v3/
+!/data/processed/bayesian/param_recovery_smoke_v3/recovery_report.json
+!/data/processed/bayesian/param_recovery_smoke_v3/figures/
+!/data/processed/bayesian/param_recovery_smoke_v3/figures/*.png
+
 /figures/*
 !/figures/.gitkeep
 # 04-04a: rnn_cohort sanity figure (Kumar 2025 Fig. 2 replication)
 !/figures/rnn_cohort/
 !/figures/rnn_cohort/*.png
 !/figures/rnn_cohort/*.svg
+# 04-03 Stage 09c: human-fit aggregator figures (3 PNGs)
+!/figures/bayesian/
+!/figures/bayesian/human_validation/
+!/figures/bayesian/human_validation/*.png
 
 # Cluster log bulk — keep repo lean, logs live on the cluster
 /cluster/logs/*.out
