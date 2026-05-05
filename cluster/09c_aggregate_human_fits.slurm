@@ -5,14 +5,19 @@
 # Reads all 268 per-fit JSONs produced by the 09b array job, builds a flat
 # summary CSV, writes a markdown report, and saves diagnostic plots.
 #
-# Submitted with --dependency=afterok:$ARRAY_JID by the orchestrator so
-# this only runs after every array task completes successfully.
+# Submitted with --dependency=afterany:$ARRAY_JID --kill-on-invalid-dep=yes
+# by the orchestrator. afterany (not afterok) means this still runs when
+# some fit tasks fail, so partial summaries are produced rather than the
+# whole pipeline (and the dependent autopush job) being stranded in PENDING
+# / DependencyNeverSatisfied. The aggregator globs per_fit/*.json, so it
+# tolerates whatever subset of fits actually completed.
 #
 # Wall time:
 #   < 5 min on a single CPU.
 #
 # Usage:
-#   sbatch --dependency=afterok:JOB cluster/09c_aggregate_human_fits.slurm
+#   sbatch --dependency=afterany:JOB --kill-on-invalid-dep=yes \
+#       cluster/09c_aggregate_human_fits.slurm
 # =============================================================================
 
 #SBATCH --job-name=rbo_subj_agg

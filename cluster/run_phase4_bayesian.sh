@@ -7,8 +7,14 @@
 #
 #   (A) 09a_param_recovery_smoke.slurm     ← independent
 #   (B) 09b_fit_human_subjects.slurm       ← independent (--array=0-267)
-#   (C) 09c_aggregate_human_fits.slurm     ← afterok:B
+#   (C) 09c_aggregate_human_fits.slurm     ← afterany:B (tolerates partial failures)
 #   (D) 99_push_results.slurm              ← afterany:A:C (push everything)
+#
+# Why afterany (not afterok) on (C):
+#   afterok requires every array task to exit 0; one failed task parks (C)
+#   in PENDING/DependencyNeverSatisfied forever (Monash M3's default
+#   kill_invalid_depend=no), which then strands the autopush (D). 09c globs
+#   per_fit/*.json and tolerates whatever's there, so afterany is safe.
 #
 # Run from the cluster login node:
 #   bash cluster/run_phase4_bayesian.sh
@@ -60,9 +66,11 @@ if [[ "${SKIP_FITS:-0}" != "1" ]]; then
         cluster/09b_fit_human_subjects.slurm)
     echo "  (B) per-subject fits     JID=$FIT_JID  array=$ARRAY_RANGE"
 
-    AGG_JID=$(sbatch --parsable --dependency=afterok:"$FIT_JID" \
+    AGG_JID=$(sbatch --parsable \
+        --dependency=afterany:"$FIT_JID" \
+        --kill-on-invalid-dep=yes \
         cluster/09c_aggregate_human_fits.slurm)
-    echo "  (C) aggregate            JID=$AGG_JID  (afterok:$FIT_JID)"
+    echo "  (C) aggregate            JID=$AGG_JID  (afterany:$FIT_JID)"
 
     PARENT_JOBS="${PARENT_JOBS:+$PARENT_JOBS:}$AGG_JID"
 else
@@ -86,7 +94,9 @@ if [[ -n "$PARENT_JOBS" ]]; then
     if [[ -n "${NOTIFY_EMAIL:-}" ]]; then
         PUSH_EXPORTS="$PUSH_EXPORTS,NOTIFY_EMAIL=$NOTIFY_EMAIL"
     fi
-    PUSH_JID=$(sbatch --parsable --dependency=afterany:"$PARENT_JOBS" \
+    PUSH_JID=$(sbatch --parsable \
+        --dependency=afterany:"$PARENT_JOBS" \
+        --kill-on-invalid-dep=yes \
         --export="$PUSH_EXPORTS" \
         cluster/99_push_results.slurm)
     echo "  (D) autopush             JID=$PUSH_JID  (afterany:$PARENT_JOBS)"
