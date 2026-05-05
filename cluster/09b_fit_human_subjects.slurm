@@ -18,6 +18,9 @@
 # Usage:
 #   sbatch --array=0-267 cluster/09b_fit_human_subjects.slurm
 #   # Or via orchestrator: bash cluster/run_phase4_bayesian.sh
+#
+# Debug solo run with auto-push (per-job result push on success/crash/timeout):
+#   bash cluster/submit_one.sh <this-script>
 # =============================================================================
 
 #SBATCH --job-name=rbo_subj_fit
@@ -54,6 +57,7 @@ echo "RBO per-subject fit — SLURM Array Task"
 echo "============================================================"
 echo "Job ID:        ${SLURM_ARRAY_JOB_ID:-local}_${SLURM_ARRAY_TASK_ID:-0}"
 echo "Node:          ${SLURMD_NODENAME:-$(hostname)}"
+echo "Commit: $(git rev-parse --short HEAD 2>/dev/null) [$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ') dirty] — $(git log -1 --format=%s 2>/dev/null)"
 echo "Start:         $(date)"
 echo "Array task:    $TASK_ID / 267"
 echo "Subject idx:   $SUBJECT_IDX (0..133)"

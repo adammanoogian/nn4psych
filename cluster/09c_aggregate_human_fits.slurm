@@ -18,6 +18,9 @@
 # Usage:
 #   sbatch --dependency=afterany:JOB --kill-on-invalid-dep=yes \
 #       cluster/09c_aggregate_human_fits.slurm
+#
+# Debug solo run with auto-push (per-job result push on success/crash/timeout):
+#   bash cluster/submit_one.sh <this-script>
 # =============================================================================
 
 #SBATCH --job-name=rbo_subj_agg
@@ -43,6 +46,7 @@ echo "RBO subject-fit aggregation — SLURM Job"
 echo "============================================================"
 echo "Job ID:     ${SLURM_JOB_ID:-local}"
 echo "Node:       ${SLURMD_NODENAME:-$(hostname)}"
+echo "Commit: $(git rev-parse --short HEAD 2>/dev/null) [$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ') dirty] — $(git log -1 --format=%s 2>/dev/null)"
 echo "Start:      $(date)"
 echo "============================================================"
 

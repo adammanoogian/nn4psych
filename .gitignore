@@ -142,11 +142,13 @@ data/processed/rnn_behav/circuit_data.npz.pre_masked_backup
 !/figures/bayesian/human_validation/
 !/figures/bayesian/human_validation/*.png
 
-# Cluster log bulk — keep repo lean, logs live on the cluster
-/cluster/logs/*.out
-/cluster/logs/*.err
+# Cluster job logs — track .err/.out so SLURM job failures surface in the
+# repo via Pattern A push (otherwise stranded on the cluster). Bulk
+# artefacts (gpu_stats csvs) stay ignored.
 /cluster/logs/gpu_stats_*.csv
 !/cluster/logs/.gitkeep
+!/cluster/logs/*.err
+!/cluster/logs/*.out
 
 # Jupyter
 .ipynb_checkpoints/
