@@ -38,3 +38,10 @@ dependencies:
     - gymnasium>=0.29.0
     # NOTE: neurogym installed separately via setup_env.sh with --no-deps
     # to avoid it forcing a numpy source rebuild (Intel compiler conflict on M3)
+    # Phase 4 Bayesian: NumPyro NUTS + JAX (CPU-only on cluster).
+    # jaxlib is the C++/XLA backend; must match jax version.  Pinned ranges
+    # rather than == so conda-forge resolves a compatible triple.
+    - jax>=0.4.20,<0.5
+    - jaxlib>=0.4.20,<0.5
+    - numpyro>=0.13
+    - arviz>=0.16
