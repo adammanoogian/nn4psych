@@ -1,0 +1,103 @@
+{
+  "subject_idx": 55,
+  "subject_id": "SP_051625",
+  "is_patient": true,
+  "condition": "changepoint",
+  "n_trials": 194,
+  "n_blocks": 2,
+  "sub_blocks_avoid_seek": [
+    0,
+    1
+  ],
+  "mcmc_config": {
+    "num_warmup": 2000,
+    "num_samples": 2000,
+    "num_chains": 4
+  },
+  "fit": {
+    "dataset_idx": 55,
+    "condition": "changepoint",
+    "status": "FAILED",
+    "attempts": [
+      {
+        "attempt": 1,
+        "num_warmup": 2000,
+        "target_accept_prob": 0.95,
+        "rhat_max": 1.0160293323242382,
+        "ess_min": 280.8085159910951,
+        "n_divergences": 0,
+        "passes_rhat": false,
+        "passes_ess": false,
+        "passes_gate": false
+      },
+      {
+        "attempt": 2,
+        "num_warmup": 4000,
+        "target_accept_prob": 0.99,
+        "rhat_max": 1.0159297617268566,
+        "ess_min": 287.00279973462807,
+        "n_divergences": 0,
+        "passes_rhat": false,
+        "passes_ess": false,
+        "passes_gate": false
+      }
+    ],
+    "params": {
+      "H": {
+        "mean": 0.010249636135995388,
+        "median": 0.009937317110598087,
+        "sd": 0.003144805785268545,
+        "hdi_2.5": 0.004317267797887325,
+        "hdi_97.5": 0.01630551367998123,
+        "rhat": 1.0024655407262166,
+        "ess_bulk": 2407.107551941912
+      },
+      "LW": {
+        "mean": 0.13829576969146729,
+        "median": 0.1457880139350891,
+        "sd": 0.02855761907994747,
+        "hdi_2.5": 0.07497409731149673,
+        "hdi_97.5": 0.18568755686283112,
+        "rhat": 1.0143006687214575,
+        "ess_bulk": 309.4439560762735
+      },
+      "log_UU": {
+        "mean": 0.820222020149231,
+        "median": 0.81279057264328,
+        "sd": 0.14132237434387207,
+        "hdi_2.5": 0.5522559881210327,
+        "hdi_97.5": 1.102532148361206,
+        "rhat": 1.0008117106446506,
+        "ess_bulk": 3874.3204293154135
+      },
+      "sigma_motor": {
+        "mean": 9.688167572021484,
+        "median": 9.627847671508789,
+        "sd": 0.9619991779327393,
+        "hdi_2.5": 7.924312591552734,
+        "hdi_97.5": 11.579550743103027,
+        "rhat": 1.0013525191524926,
+        "ess_bulk": 3171.8481516877514
+      },
+      "sigma_LR": {
+        "mean": 5.908560752868652,
+        "median": 5.899297714233398,
+        "sd": 0.5220537185668945,
+        "hdi_2.5": 4.931711196899414,
+        "hdi_97.5": 6.9521403312683105,
+        "rhat": 1.001409677847474,
+        "ess_bulk": 3011.8256021762872
+      }
+    },
+    "n_divergences": 0,
+    "n_chains": 4,
+    "n_samples_per_chain": 2000
+  },
+  "behavior": {
+    "r_obs_vs_pred": -0.31247509560511255,
+    "rmse": 65.19461841686758,
+    "mae": 24.09434748306832,
+    "n_trials": 193
+  },
+  "elapsed_seconds": 464.9352219104767
+}
