@@ -46,9 +46,11 @@ echo "Node:       ${SLURMD_NODENAME:-$(hostname)}"
 echo "Start:      $(date)"
 echo "============================================================"
 
-conda activate actinf-py-scripts 2>/dev/null || conda activate nn4psych || {
-    echo "ERROR: No conda env found (tried actinf-py-scripts, nn4psych)"
-    echo "Run: bash cluster/setup_env.sh"
+conda activate nn4psych || {
+    echo "ERROR: nn4psych conda env not found."
+    echo "Phase 4 needs jax/numpyro/arviz — actinf-py-scripts (shared env)"
+    echo "doesn't have them.  Update the project-specific nn4psych env:"
+    echo "  mamba env update -n nn4psych -f cluster/environment_cluster.yml"
     exit 1
 }
 
